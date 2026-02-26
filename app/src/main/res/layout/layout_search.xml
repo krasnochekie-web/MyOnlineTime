@@ -1,37 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
     android:background="@color/backgroundDark"
-    android:scrollbars="none">
+    android:paddingTop="40dp"> <!-- СКОБКА ТУТ ЕСТЬ! -->
 
-    <LinearLayout
+    <!-- Поле поиска -->
+    <EditText
+        android:id="@+id/search_input"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
+        android:hint="@string/hint_search_friends"
+        android:textColorHint="@color/textGray"
+        android:textColor="@color/textWhite"
+        android:background="@drawable/bg_input_field"
         android:paddingLeft="16dp"
         android:paddingRight="16dp"
-        android:paddingTop="40dp">
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp"
+        android:layout_marginLeft="16dp"
+        android:layout_marginRight="16dp"
+        android:drawableLeft="@drawable/ic_nav_search"
+        android:drawablePadding="10dp"
+        android:singleLine="true"/>
 
-        <EditText
-            android:id="@+id/search_input"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="@string/hint_search_friends"
-            android:textColorHint="@color/textGray"
-            android:textColor="@color/textWhite"
-            android:background="@drawable/bg_input_field"
-            android:paddingLeft="16dp"
-            android:paddingRight="16dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
-            android:drawableLeft="@drawable/ic_nav_search"
-            android:drawablePadding="10dp"
-            android:singleLine="true"/>
-
-        <!-- Контейнер для результатов поиска -->
-        <LinearLayout
-    <!-- Наш современный мощный список -->
+    <!-- Наш умный список! -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/search_results_list"
         android:layout_width="match_parent"
@@ -42,5 +36,4 @@
         android:clipToPadding="false"
         android:scrollbars="none"/>
 
-    </LinearLayout>
-</ScrollView>
+</LinearLayout>
