@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Главная тема приложения. Наследуется от современного AppCompat без заголовка -->
+    <style name="Theme.MyNewTime" parent="Theme.AppCompat.DayNight.NoActionBar">
+        
+        <!-- Основной цвет приложения (используется для кнопок, тумблеров по умолчанию) -->
+        <item name="colorPrimary">@color/primaryOrange</item>
+        
+        <!-- Цвет верхней системной панели (где часы и батарея) -->
+        <item name="colorPrimaryDark">@color/backgroundDark</item>
+        
+        <!-- Цвет акцента (ползунки, чекбоксы, курсор в текстовых полях) -->
+        <item name="colorAccent">@color/primaryOrange</item>
+        
+        <!-- Цвет фона окон по умолчанию -->
+        <item name="android:windowBackground">@color/backgroundDark</item>
+
+        <!-- Отключаем системную подсветку при нажатии (так как мы делали свою в ripple) -->
+        <item name="colorControlHighlight">#33FFFFFF</item>
+        
+    </style>
+</resources>
+
