@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="@color/backgroundDark" 
+    android:scrollbars="none"
+    android:padding="30dp">
+
+    <ImageView
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:src="@drawable/ic_nav_time"
+        android:tint="@color/primaryOrange"/> 
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="My New Time" 
+        android:textColor="@color/primaryOrange" 
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:layout_marginTop="16dp"/>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/login_prompt_text"
+        android:textColor="@color/textWhite" 
+        android:textSize="16sp"
+        android:gravity="center"
+        android:layout_marginTop="20dp"
+        android:layout_marginBottom="60dp"/>
+
+    
+    <Button
+        android:id="@+id/btn_login_center"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="@string/btn_sign_in_google"
+        android:background="@drawable/bg_button_gray"
+        android:textColor="@color/primaryOrange" 
+        android:textStyle="bold"
+        android:textSize="16sp"/>
+
+</LinearLayout>

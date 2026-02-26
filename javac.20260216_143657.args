@@ -1,0 +1,13 @@
+-verbose
+-d
+build/obj
+-source
+1.8
+-target
+1.8
+-classpath
+/data/data/com.termux/files/home/MyNewTime/android.jar:libs/androidx-activity.jar:libs/androidx-annotation.jar:libs/androidx-arch-core-common.jar:libs/androidx-arch-core-runtime.jar:libs/androidx-collection.jar:libs/androidx-core.jar:libs/androidx-customview.jar:libs/androidx-fragment.jar:libs/androidx-lifecycle-common.jar:libs/androidx-lifecycle-livedata-core.jar:libs/androidx-lifecycle-runtime.jar:libs/androidx-lifecycle-viewmodel.jar:libs/androidx-loader.jar:libs/androidx-savedstate.jar:libs/androidx-versionedparcelable.jar:libs/androidx-viewpager.jar:libs/play-services-auth-base.jar:libs/play-services-auth.jar:libs/play-services-base.jar:libs/play-services-basement.jar:libs/play-services-tasks.jar
+-bootclasspath
+/data/data/com.termux/files/home/MyNewTime/android.jar
+app/src/main/java/com/mynewtime/app/MainActivity.java
+build/gen/com/mynewtime/app/R.java

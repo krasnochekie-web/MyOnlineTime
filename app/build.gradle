@@ -1,0 +1,36 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.mynewtime.app'
+    compileSdk 33
+
+    defaultConfig {
+        applicationId "com.mynewtime.app"
+        minSdk 23
+        targetSdk 33
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    // Современный AndroidX
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.9.0'
+    
+    // Тот самый RecyclerView! (Ради которого мы всё это затеяли)
+    implementation 'androidx.recyclerview:recyclerview:1.3.1'
+    
+    // Авторизация Google (которая уже есть у тебя)
+    implementation 'com.google.android.gms:play-services-auth:20.7.0'
+}
+

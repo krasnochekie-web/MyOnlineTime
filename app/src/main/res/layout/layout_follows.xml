@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/backgroundDark" 
+    android:scrollbars="none">
+
+    
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:orientation="horizontal">
+
+        
+        <LinearLayout
+            android:id="@+id/tab_followers"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:clickable="true">
+
+            <LinearLayout 
+                android:layout_width="wrap_content" 
+                android:layout_height="wrap_content" 
+                android:orientation="horizontal" 
+                android:gravity="center_vertical">
+                
+                <TextView 
+                    android:id="@+id/tab_txt_followers" 
+                    android:layout_width="wrap_content" 
+                    android:layout_height="wrap_content" 
+                    android:text="Подписчики" 
+                    android:textColor="@color/nav_color" 
+                    android:textStyle="bold" />
+                
+                <TextView 
+                    android:id="@+id/tab_count_followers" 
+                    android:layout_width="wrap_content" 
+                    android:layout_height="wrap_content" 
+                    android:text="0" 
+                    android:textColor="@color/textWhite" 
+                    android:textSize="12sp" 
+                    android:layout_marginStart="8dp" 
+                    android:paddingStart="6dp" 
+                    android:paddingEnd="6dp" 
+                    android:background="@drawable/bg_badge_active" />
+            </LinearLayout>
+
+            <View 
+                android:id="@+id/tab_line_followers" 
+                android:layout_width="match_parent" 
+                android:layout_height="2dp" 
+                android:background="@color/tab_line_color" 
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
+
+        
+        <LinearLayout
+            android:id="@+id/tab_following"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:clickable="true">
+
+            <LinearLayout 
+                android:layout_width="wrap_content" 
+                android:layout_height="wrap_content" 
+                android:orientation="horizontal" 
+                android:gravity="center_vertical">
+                
+                <TextView 
+                    android:id="@+id/tab_txt_following" 
+                    android:layout_width="wrap_content" 
+                    android:layout_height="wrap_content" 
+                    android:text="Подписки" 
+                    android:textColor="@color/nav_color" 
+                    android:textStyle="bold" />
+                
+                <TextView 
+                    android:id="@+id/tab_count_following" 
+                    android:layout_width="wrap_content" 
+                    android:layout_height="wrap_content" 
+                    android:text="0" 
+                    android:textColor="@color/textWhite" 
+                    android:textSize="12sp" 
+                    android:layout_marginStart="8dp" 
+                    android:paddingStart="6dp" 
+                    android:paddingEnd="6dp" 
+                    android:background="@drawable/bg_badge_inactive" />
+            </LinearLayout>
+
+            <View 
+                android:id="@+id/tab_line_following" 
+                android:layout_width="match_parent" 
+                android:layout_height="2dp" 
+                android:background="@color/tab_line_color" 
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    
+    <View 
+        android:layout_width="match_parent" 
+        android:layout_height="1dp" 
+        android:background="#333333" /> 
+    <!-- Контейнер для списка пользователей и статуса загрузки -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- Текст для статусов (Загрузка / Пусто / Ошибка) -->
+            <TextView
+                android:id="@+id/follows_status_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/textGray"
+                android:gravity="center"
+                android:layout_marginTop="20dp"
+                android:visibility="gone"/>
+
+            <!-- Контейнер, куда будут добавляться карточки пользователей -->
+            <LinearLayout
+                android:id="@+id/follows_list_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"/>
+
+        </LinearLayout>
+    </ScrollView>
+
+    
+</LinearLayout>

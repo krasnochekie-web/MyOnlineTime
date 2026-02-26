@@ -1,0 +1,11 @@
+build/
+app/build/
+*.apk
+*.dex
+*.jar
+android.jar
+.gradle/
+local.properties
+mykey.keystore
+
+*.zip

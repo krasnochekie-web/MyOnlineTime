@@ -1,0 +1,128 @@
+package com.mynewtime.app.ui;
+
+import android.app.Fragment;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.os.Bundle;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.Toast;
+
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.mynewtime.app.MainActivity;
+import com.mynewtime.app.R;
+import com.mynewtime.app.VpsApi;
+import com.mynewtime.app.utils.Utils;
+
+public class EditProfileFragment extends Fragment {
+
+    // Правильное создание Фрагмента с передачей параметров
+    public static EditProfileFragment newInstance(String currentName, String currentAbout) {
+        EditProfileFragment fragment = new EditProfileFragment();
+        Bundle args = new Bundle();
+        args.putString("CURRENT_NAME", currentName);
+        args.putString("CURRENT_ABOUT", currentAbout);
+        fragment.setArguments(args);
+        return fragment;
+    }
+
+    public EditProfileFragment() {}
+
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        final MainActivity activity = (MainActivity) getActivity();
+        View view = inflater.inflate(R.layout.layout_edit_profile, container, false);
+
+        if (activity == null) return view;
+
+        activity.mainHeader.setVisibility(View.VISIBLE);
+        activity.headerTitle.setText(activity.getString(R.string.edit_profile_title));
+        activity.headerBackBtn.setVisibility(View.VISIBLE);
+
+        final GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
+        if (acct == null) return view;
+
+        // Достаем параметры из Bundle
+        String currentName = "";
+        String currentAbout = "";
+        if (getArguments() != null) {
+            currentName = getArguments().getString("CURRENT_NAME", "");
+            currentAbout = getArguments().getString("CURRENT_ABOUT", "");
+        }
+
+        final EditText inputName = view.findViewById(R.id.input_nickname);
+        final EditText inputAbout = view.findViewById(R.id.input_about);
+        View btnCancel = view.findViewById(R.id.edit_btn_back_bottom);
+        View btnChangePhoto = view.findViewById(R.id.btn_change_photo);
+        ImageView avatarPreview = view.findViewById(R.id.edit_avatar_preview);
+
+        inputName.setText(currentName);
+        inputAbout.setText(currentAbout);
+
+        Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + acct.getId());
+        if (cachedAvatar != null && avatarPreview != null) {
+            avatarPreview.setImageBitmap(Utils.getCircularBitmap(cachedAvatar));
+        }
+
+        View.OnClickListener photoClickListener = new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(Intent.ACTION_PICK);
+                intent.setType("image/*");
+                activity.startActivityForResult(intent, 9002);
+            }
+        };
+        
+        if (btnChangePhoto != null) btnChangePhoto.setOnClickListener(photoClickListener);
+        if (avatarPreview != null) avatarPreview.setOnClickListener(photoClickListener);
+
+        // Кнопка Отмены использует наш Навигатор!
+        if (btnCancel != null) {
+            btnCancel.setOnClickListener(new View.OnClickListener() { 
+                public void onClick(View v) { 
+                    activity.resetHeader(); 
+                    activity.navigator.switchScreen(4, acct.getId()); // Возврат в профиль
+                }
+            });
+        }
+
+        // Кнопка Сохранения
+        view.findViewById(R.id.btn_save_changes).setOnClickListener(new View.OnClickListener() { 
+            public void onClick(View v) {
+                 final String n = inputName.getText().toString();
+                 final String a = inputAbout.getText().toString();
+                 
+                 VpsApi.authenticateWithGoogle(acct.getIdToken(), new VpsApi.LoginCallback() {
+                     @Override
+                     public void onSuccess(String token) {
+                         activity.vpsToken = token;
+                         VpsApi.saveUser(activity.vpsToken, n, a, null, 0, null, new VpsApi.Callback() {
+                             @Override 
+                             public void onSuccess(String s) {
+                                 if (!isAdded()) return; // Защита
+                                 activity.prefs.edit().putString("my_nickname", n).putString("my_about", a).apply();
+                                 Toast.makeText(activity, activity.getString(R.string.err_saving) + s, Toast.LENGTH_LONG).show();
+                                 activity.resetHeader();
+                                 activity.navigator.switchScreen(4, acct.getId()); // Возврат в профиль
+                             }
+                             @Override 
+                             public void onError(String s) { 
+                                 if (isAdded()) Toast.makeText(activity, activity.getString(R.string.err_saving) + s, Toast.LENGTH_LONG).show(); 
+                             }
+                         });
+                     }
+                     @Override
+                     public void onError(String error) {
+                         if (isAdded()) Toast.makeText(activity, activity.getString(R.string.err_token) + error, Toast.LENGTH_LONG).show();
+                     }
+                 });
+            }
+        });
+
+        return view;
+    }
+}

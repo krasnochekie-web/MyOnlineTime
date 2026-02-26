@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_rounded_card"
+    android:padding="12dp"
+    android:layout_marginBottom="10dp">
+
+    <ImageView
+        android:id="@+id/item_user_avatar"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:src="@android:drawable/sym_def_app_icon"
+        android:background="@drawable/bg_edit_circle"
+        android:padding="0dp"
+        android:scaleType="centerCrop"/>
+
+    <TextView
+        android:id="@+id/item_user_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Nickname"
+        android:textColor="@color/textWhite" 
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:layout_marginLeft="16dp"/>
+    
+</LinearLayout>

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Базовые строки -->
+    <string name="app_name">My New Time</string>
+    <string name="feed">Лента</string>
+    <string name="find">Поиск</string>
+    <string name="time">Время</string>
+    <string name="me">Профиль</string>
+    <string name="total_time">Общее время</string>
+    <string name="achievements">Достижения</string>
+    <string name="permission_required">Требуется разрешение</string>
+    <string name="grant_permission">Чтобы показать статистику, разрешите доступ к истории использования.</string>
+    <string name="top_apps">Топ за неделю</string>
+    <string name="posts">Посты</string>
+    <string name="liked">Понравилось</string>
+    <string name="followers">Подписчики</string>
+    <string name="following">Подписки</string>
+    <string name="last_week">Прошлая неделя</string>
+    <string name="unit_h">ч</string>
+    <string name="unit_m">мин</string>
+    <string-array name="periods_array">
+        <item>За день</item>
+        <item>За неделю</item>
+        <item>За месяц</item>
+        <item>За год</item>
+    </string-array>
+
+    <!-- Интерфейс -->
+    <string name="edit_profile_title">Редактировать</string>
+    <string name="hint_change_photo">Нажмите кнопку ниже, чтобы сменить фото</string>
+    <string name="btn_change_photo">Изменить фото</string>
+    <string name="label_nickname">Никнейм</string>
+    <string name="label_about">О себе</string>
+    <string name="btn_save_changes">Сохранить изменения</string>
+    <string name="btn_cancel">Отмена</string>
+
+    <string name="login_prompt_text">Войдите, чтобы находить друзей, смотреть статистику других и попадать в топы!</string>
+    <string name="btn_sign_in_google">Войти через Google</string>
+    <string name="btn_sign_out">Выйти</string>
+
+    <string name="btn_follow">Подписаться</string>
+    <string name="btn_unfollow">Отписаться</string>
+    
+    <string name="hint_search_friends">Поиск друзей...</string>
+    <string name="loading">Загрузка...</string>
+    <string name="empty_list">Список пуст</string>
+    
+    <string name="no_name">Без имени</string>
+    <string name="new_user">Новый пользователь</string>
+    <string name="guest">Гость</string>
+
+    <!-- Уведомления и Ошибки -->
+    <string name="msg_profile_saved">Профиль сохранен!</string>
+    <string name="msg_avatar_saved">Аватар сохранен на сервере!</string>
+    <string name="err_server">Ошибка сервера: </string>
+    <string name="err_login_failed">Вход не выполнен</string>
+    <string name="err_auth">Ошибка авторизации: </string>
+    <string name="err_token">Ошибка токена: </string>
+    <string name="err_saving">Ошибка сохранения: </string>
+    <string name="err_loading">Ошибка загрузки</string>
+    <string name="err_image_processing">Ошибка обработки картинки</string>
+</resources>

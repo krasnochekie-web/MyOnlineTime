@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Когда нажато или выбрано -> ОРАНЖЕВЫЙ -->
+    <item android:state_selected="true" android:color="#FF6F00"/>
+    <item android:state_pressed="true" android:color="#FF6F00"/>
+    
+    <!-- В обычном состоянии -> СЕРЫЙ (как было в Java) -->
+    <item android:color="#FFFFFF"/>
+</selector>
