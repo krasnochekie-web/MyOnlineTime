@@ -3,8 +3,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/backgroundDark"></LinearLayout>
-    
+    android:background="@color/backgroundDark">
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -18,10 +18,7 @@
             android:padding="20dp"
             android:gravity="center_horizontal">
 
-            
-            
-
-            
+            <!-- Аватар -->
             <ImageView
                 android:id="@+id/edit_avatar_preview"
                 android:layout_width="120dp"
@@ -60,7 +57,7 @@
                     android:textStyle="bold"/>
             </LinearLayout>
 
-            
+            <!-- Поле НИКНЕЙМ -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -86,11 +83,10 @@
                     android:paddingBottom="8dp"
                     android:singleLine="true"/>
 
-                
                 <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#444444"/>
             </LinearLayout>
 
-            
+            <!-- Поле О СЕБЕ -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -116,6 +112,7 @@
                     android:padding="16dp"/>
             </LinearLayout>
 
+            <!-- Кнопка СОХРАНИТЬ -->
             <Button
                 android:id="@+id/btn_save_changes"
                 android:layout_width="match_parent"
@@ -127,7 +124,7 @@
                 android:layout_marginTop="30dp"
                 android:layout_marginBottom="20dp"/>
 
-            
+            <!-- Кнопка ОТМЕНА -->
             <Button
                 android:id="@+id/edit_btn_back_bottom"
                 android:layout_width="match_parent"
