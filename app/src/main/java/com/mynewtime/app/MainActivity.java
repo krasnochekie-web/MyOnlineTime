@@ -1,6 +1,7 @@
 package com.mynewtime.app;
 
-import android.app.Activity;
+import androidx.appcompat.app.AppCompatActivity;
+
 import com.mynewtime.app.utils.StatsHelper;
 import android.app.AppOpsManager;
 import android.content.Context;
@@ -49,7 +50,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.util.*;
 
-public class MainActivity extends Activity {
+public class MainActivity extends AppCompatActivity {
 
     public FrameLayout container;
     public LinearLayout mainHeader;

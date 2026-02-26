@@ -1,6 +1,6 @@
 package com.mynewtime.app.ui;
 
-import android.app.Fragment;
+import androidx.fragment.app.Fragment;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;

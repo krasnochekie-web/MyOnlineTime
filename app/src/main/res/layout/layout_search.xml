@@ -31,11 +31,16 @@
 
         <!-- Контейнер для результатов поиска -->
         <LinearLayout
-            android:id="@+id/search_results_list"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginTop="16dp"/>
+    <!-- Наш современный мощный список -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/search_results_list"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="16dp"
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp"
+        android:clipToPadding="false"
+        android:scrollbars="none"/>
 
     </LinearLayout>
 </ScrollView>

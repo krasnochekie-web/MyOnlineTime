@@ -1,9 +1,9 @@
 package com.mynewtime.app.utils;
 
-import android.app.Activity;
-import android.app.Fragment;
-import android.app.FragmentManager;
-import android.app.FragmentTransaction;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentTransaction;
 
 import com.mynewtime.app.R;
 import com.mynewtime.app.ui.ProfileFragment;
@@ -24,8 +24,8 @@ public class AppNavigator {
     private Fragment currentSubScreen;
 
     // Конструктор: передаем Activity и ID контейнера, где будем рисовать экраны
-    public AppNavigator(Activity activity, int containerId) {
-        this.fm = activity.getFragmentManager();
+    public AppNavigator(AppCompatActivity activity, int containerId) {
+        this.fm = activity.getSupportFragmentManager(); // НОВЫЙ СОВРЕМЕННЫЙ МЕТОД
         this.containerId = containerId;
     }
 

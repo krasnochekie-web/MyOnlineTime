@@ -6,73 +6,81 @@ import android.content.pm.PackageManager;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import java.util.List;
-import java.util.Map;
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.mynewtime.app.R;
 import com.mynewtime.app.utils.Utils;
 
-public class AppsAdapter extends BaseAdapter {
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
+// Наследуемся от мощного RecyclerView
+public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder> {
     private Context context;
-    private List<String> list; // У тебя называется list
+    private List<String> packageNames = new ArrayList<>();
+    private Map<String, Long> exactTimes = new HashMap<>();
     private PackageManager pm;
-    private Map<String, Long> exactTimes;
 
-    public AppsAdapter(Context context, List<String> list, Map<String, Long> exactTimes) {
-        this.context = context; 
-        this.list = list; 
+    public AppsAdapter(Context context) {
+        this.context = context;
         this.pm = context.getPackageManager();
-        this.exactTimes = exactTimes;
     }
 
-    // --- НАШ НОВЫЙ МЕТОД ДЛЯ ПЛАВНОГО ОБНОВЛЕНИЯ ---
-    public void updateData(List<String> newList, Map<String, Long> newExactTimes) {
-        if (this.list != null) {
-            this.list.clear();
-            this.list.addAll(newList);
-        }
-        if (this.exactTimes != null) {
-            this.exactTimes.clear();
-            this.exactTimes.putAll(newExactTimes);
-        }
-        notifyDataSetChanged(); // Говорим списку перерисоваться мягко
+    // Метод для обновления данных (вызывается из StatsFragment)
+    public void updateData(List<String> newPackages, Map<String, Long> newTimes) {
+        this.packageNames = newPackages != null ? newPackages : new ArrayList<String>();
+        this.exactTimes = newTimes != null ? newTimes : new HashMap<String, Long>();
+        notifyDataSetChanged();
     }
-    // ------------------------------------------------
 
-    @Override public int getCount() { return list.size(); }
-
-    @Override public Object getItem(int position) { return list.get(position); }
-
-    @Override public long getItemId(int position) { return position; }
+    @NonNull
+    @Override
+    public AppViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        View view = LayoutInflater.from(context).inflate(R.layout.item_app_usage, parent, false);
+        return new AppViewHolder(view);
+    }
 
     @Override
-    public View getView(int position, View convertView, ViewGroup parent) {
-        if (convertView == null) {
-            convertView = LayoutInflater.from(context).inflate(R.layout.item_app_usage, parent, false);
-        }
+    public void onBindViewHolder(@NonNull AppViewHolder holder, int position) {
+        String pkg = packageNames.get(position);
+        Long exactTime = exactTimes.get(pkg);
         
-        String pkg = list.get(position);
-        
-        ImageView iconView = convertView.findViewById(R.id.app_icon);
-        TextView nameView = convertView.findViewById(R.id.app_name);
-        TextView timeView = convertView.findViewById(R.id.app_time);
-        
+        // Форматируем время (с учетом нашего нового метода с контекстом!)
+        holder.timeView.setText(Utils.formatTime(context, exactTime != null ? exactTime : 0L));
+
+        // Пытаемся получить иконку и нормальное имя приложения
         try {
             ApplicationInfo appInfo = pm.getApplicationInfo(pkg, 0);
-            nameView.setText(pm.getApplicationLabel(appInfo));
-            iconView.setImageDrawable(pm.getApplicationIcon(appInfo));
-        } catch (Exception e) { 
-            nameView.setText(pkg); 
+            holder.nameView.setText(pm.getApplicationLabel(appInfo));
+            holder.iconView.setImageDrawable(pm.getApplicationIcon(appInfo));
+        } catch (Exception e) {
+            holder.nameView.setText(pkg); // Если не вышло, показываем имя пакета
+            holder.iconView.setImageResource(android.R.drawable.sym_def_app_icon);
         }
-        
-        Long exactTime = exactTimes.get(pkg);
-        timeView.setText(Utils.formatTime(timeView.getContext(), exactTime != null ? exactTime : 0L));
-        
-        return convertView;
+    }
+
+    @Override
+    public int getItemCount() {
+        return packageNames.size();
+    }
+
+    // Тот самый холдер ссылок
+    static class AppViewHolder extends RecyclerView.ViewHolder {
+        ImageView iconView;
+        TextView nameView;
+        TextView timeView;
+
+        public AppViewHolder(@NonNull View itemView) {
+            super(itemView);
+            iconView = itemView.findViewById(R.id.app_icon);
+            nameView = itemView.findViewById(R.id.app_name);
+            timeView = itemView.findViewById(R.id.app_time);
+        }
     }
 }

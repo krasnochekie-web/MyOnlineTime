@@ -1,6 +1,6 @@
 package com.mynewtime.app.ui;
 
-import android.app.Fragment;
+import androidx.fragment.app.Fragment;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
@@ -12,7 +12,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.ListView;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
@@ -47,13 +48,16 @@ public class StatsFragment extends Fragment {
             activity.resetHeader();
         }
 
-        final ListView listView = view.findViewById(R.id.apps_list);
+        final RecyclerView recyclerView = view.findViewById(R.id.apps_list);
         Spinner spinner = view.findViewById(R.id.spinner_period);
         final TextView totalTimeText = view.findViewById(R.id.text_total_time_sum);
 
-        // 2. Создаем адаптер ТОЛЬКО ОДИН РАЗ (пустой)
-        final AppsAdapter adapter = new AppsAdapter(activity, new ArrayList<String>(), new HashMap<String, Long>());
-        listView.setAdapter(adapter);
+        // Настраиваем RecyclerView (говорим ему быть списком)
+        recyclerView.setLayoutManager(new LinearLayoutManager(activity));
+
+        // Создаем наш новый мощный адаптер (он теперь принимает только контекст)
+        final AppsAdapter adapter = new AppsAdapter(activity);
+        recyclerView.setAdapter(adapter);
 
         // 3. Настройка спиннера
         String[] periods = getResources().getStringArray(R.array.periods_array);

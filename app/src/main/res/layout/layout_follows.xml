@@ -109,37 +109,25 @@
         android:layout_height="1dp" 
         android:background="#333333" /> 
     <!-- Контейнер для списка пользователей и статуса загрузки -->
-    <ScrollView
+    <!-- Текст для статусов (Загрузка / Пусто / Ошибка) -->
+    <TextView
+        android:id="@+id/follows_status_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/textGray"
+        android:gravity="center"
+        android:layout_marginTop="20dp"
+        android:visibility="gone"/>
+
+    <!-- Наш современный мощный список -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/follows_results_list"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:fillViewport="true"
-        android:scrollbars="none">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp">
-
-            <!-- Текст для статусов (Загрузка / Пусто / Ошибка) -->
-            <TextView
-                android:id="@+id/follows_status_text"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textColor="@color/textGray"
-                android:gravity="center"
-                android:layout_marginTop="20dp"
-                android:visibility="gone"/>
-
-            <!-- Контейнер, куда будут добавляться карточки пользователей -->
-            <LinearLayout
-                android:id="@+id/follows_list_container"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"/>
-
-        </LinearLayout>
-    </ScrollView>
-
+        android:layout_marginTop="10dp"
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp"
+        android:clipToPadding="false"
+        android:scrollbars="none"/>
     
 </LinearLayout>
