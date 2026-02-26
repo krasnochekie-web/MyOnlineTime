@@ -39,7 +39,7 @@ jobs:
         APKSIGNER=$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner
         
         # Подписываем APK твоим ключом!
-        $APKSIGNER sign --ks mykey.keystore --ks-pass pass:$KEY_PASS --out app-release-signed.apk app/build/outputs/apk/release/app-release-unsigned.apk
+        $APKSIGNER sign --ks mykey.keystore --ks-pass "pass:$KEY_PASS" --out app-release-signed.apk app/build/outputs/apk/release/app-release-unsigned.apk
 
     - name: Upload Signed APK
       uses: actions/upload-artifact@v4
