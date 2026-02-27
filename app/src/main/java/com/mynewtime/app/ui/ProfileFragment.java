@@ -313,3 +313,4 @@ if (cachedAvatar != null) {
             btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textWhite));
         }
     }
+}
