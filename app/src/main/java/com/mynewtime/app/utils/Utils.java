@@ -25,24 +25,4 @@ public class Utils {
         if (hours > 0) return hours + " " + strH + " " + mins + " " + strM;
         return mins + " " + strM;
     }
-
-    // --- 3. РИСУЕМ КАРТОЧКУ ПОЛЬЗОВАТЕЛЯ ---
-    public static android.view.View createSearchUserCard(final com.mynewtime.app.MainActivity activity, final com.mynewtime.app.models.User u) {
-        android.view.View card = android.view.LayoutInflater.from(activity).inflate(com.mynewtime.app.R.layout.item_search_user, null, false);
-        android.widget.ImageView img = card.findViewById(com.mynewtime.app.R.id.search_user_avatar);
-        android.widget.TextView name = card.findViewById(com.mynewtime.app.R.id.search_user_name);
-        
-        name.setText(u.nickname != null ? u.nickname : activity.getString(com.mynewtime.app.R.string.new_user));
-        
-        if (u.photo != null && u.photo.length() > 10) {
-            activity.loadBase64ImageAsync(img, u.photo);
-        }
-        card.setOnClickListener(new android.view.View.OnClickListener() { 
-            public void onClick(android.view.View v) { 
-                activity.navigator.switchScreen(4, u.id);
-            }
-        });
-        
-        return card;
-    }
 }
