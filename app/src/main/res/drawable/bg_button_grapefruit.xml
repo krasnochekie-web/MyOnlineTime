@@ -3,5 +3,6 @@
     <gradient
         android:startColor="#FF5E3A"
         android:endColor="#FF2A6D"
-        android:angle="0" /> <!-- Горизонтальный перелив -->
+        android:angle="45" /> <!-- Перелив по диагонали -->
+    <corners android:radius="28dp"/> <!-- Сильное закругление -->
 </shape>

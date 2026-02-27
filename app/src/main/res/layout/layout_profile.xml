@@ -99,7 +99,7 @@
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:text="@string/btn_sign_in_google"
-            android:background="@drawable/bg_button_orange"
+            android:background="@drawable/bg_button_grapefruit"
             android:textColor="@color/textWhite" 
             android:layout_marginTop="16dp"
             android:textStyle="bold"
@@ -112,7 +112,7 @@
             android:text="@string/btn_sign_out"
             android:visibility="gone"
             android:background="@drawable/bg_button_gray"
-            android:textColor="@color/primaryOrange" 
+            android:textColor="@color/primaryGrapefruit" 
             android:layout_marginTop="16dp"
             android:textStyle="bold"/>
 
@@ -190,8 +190,8 @@
             
             
             <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:gravity="center">
-                <TextView android:text="@string/top_apps" android:textColor="@color/primaryOrange" android:textStyle="bold" android:textSize="16sp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center"/> 
-                <View android:layout_width="match_parent" android:layout_height="3dp" android:background="@color/primaryOrange" android:layout_marginTop="8dp"/> 
+                <TextView android:text="@string/top_apps" android:textColor="@color/primaryGrapefruit" android:textStyle="bold" android:textSize="16sp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center"/> 
+                <View android:layout_width="match_parent" android:layout_height="3dp" android:background="@color/primaryGrapefruit" android:layout_marginTop="8dp"/> 
             </LinearLayout>
 
             

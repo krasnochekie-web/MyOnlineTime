@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Фоновый цвет (из Шага 2) -->
-    <background android:drawable="@color/primaryOrange" />
+    <background android:drawable="@color/primaryGrapefruit" />
     <!-- Твоя картинка (из Шага 1) -->
     <foreground android:drawable="@mipmap/ic_launcher_foreground" />
 </adaptive-icon>

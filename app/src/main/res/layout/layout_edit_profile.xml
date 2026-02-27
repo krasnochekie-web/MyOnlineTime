@@ -53,7 +53,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/btn_change_photo"
-                    android:textColor="@color/primaryOrange" 
+                    android:textColor="@color/primaryGrapefruit" 
                     android:textStyle="bold"/>
             </LinearLayout>
 
@@ -118,7 +118,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
                 android:text="@string/btn_save_changes"
-                android:background="@drawable/bg_button_orange"
+                android:background="@drawable/bg_button_grapefruit"
                 android:textColor="@color/textWhite" 
                 android:textStyle="bold"
                 android:layout_marginTop="30dp"

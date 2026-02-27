@@ -308,7 +308,7 @@ if (cachedAvatar != null) {
             btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textGray));
         } else {
             btnFollow.setText("Подписаться");
-            btnFollow.setBackgroundResource(R.drawable.bg_button_orange);
+            btnFollow.setBackgroundResource(R.drawable.bg_button_grapefruit);
             // Берем textWhite из твоей палитры:
             btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textWhite));
         }

@@ -4,9 +4,9 @@
     android:layout_height="wrap_content"
     android:textSize="18sp"
     android:textStyle="bold"
-    android:textColor="@color/primaryOrange"
+    android:textColor="@color/primaryGrapefruit"
     android:gravity="right|center_vertical"
     android:padding="8dp"
     android:background="@android:color/transparent"
-    android:drawableRight="@drawable/ic_arrow_orange"
+    android:drawableRight="@drawable/ic_arrow_grapefruit"
     android:drawablePadding="4dp"/>

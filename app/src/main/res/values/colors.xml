@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primaryOrange">#FF6F00</color>
+    <color name="primaryGrapefruit">#FF6F00</color>
     <color name="backgroundDark">#121212</color>
     <color name="cardDark">#1E1E1E</color>
     <color name="textWhite">#FFFFFF</color>
