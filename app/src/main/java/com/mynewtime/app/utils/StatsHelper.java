@@ -181,26 +181,36 @@ public class StatsHelper {
         if (weekTimeText != null) {
             weekTimeText.setText(hours > 0 ? hours + " ч " + mins + " мин" : mins + " мин");
         }
-
         int limit = 0;
         for (String pkg : finalList) {
-            if (limit++ >= 10) break;
+            if (limit >= 10) break; // Защита от бесконечности
             
             View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, appsContainer, false);
+            
+            // ПРЯЧЕМ ВСЕ ЭЛЕМЕНТЫ ПОСЛЕ ТРЕТЬЕГО
+            if (limit >= 3) {
+                view.setVisibility(View.GONE);
+            }
+
             ImageView iconView = view.findViewById(R.id.app_icon);
             TextView nameView = view.findViewById(R.id.app_name);
             TextView timeView = view.findViewById(R.id.app_time);
             
             try {
-                ApplicationInfo appInfo = pm.getApplicationInfo(pkg, 0);
+                android.content.pm.ApplicationInfo appInfo = pm.getApplicationInfo(pkg, 0);
                 nameView.setText(pm.getApplicationLabel(appInfo));
                 iconView.setImageDrawable(pm.getApplicationIcon(appInfo));
-            } catch (Exception e) { 
-                nameView.setText(pkg); 
-            }
+            } catch (Exception e) { nameView.setText(pkg); }
             
             timeView.setText(Utils.formatTime(activity, exactTimes.get(pkg)));
             appsContainer.addView(view);
+            limit++;
+        }
+        
+        // Показываем кнопку-расширитель, если элементов больше 3
+        View btnExpand = ((View)appsContainer.getParent()).findViewById(R.id.btn_expand_apps);
+        if (btnExpand != null) {
+            btnExpand.setVisibility(limit > 3 ? View.VISIBLE : View.GONE);
         }
     }
 }
