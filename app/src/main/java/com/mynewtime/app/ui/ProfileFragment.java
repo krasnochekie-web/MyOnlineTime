@@ -75,6 +75,25 @@ public class ProfileFragment extends Fragment {
 
         View followersClick = view.findViewById(R.id.container_followers);
         View followingClick = view.findViewById(R.id.container_following);
+                // Зажигаем вкладку
+        TextView tabTopApps = view.findViewById(R.id.tab_top_apps);
+        if (tabTopApps != null) tabTopApps.setSelected(true);
+
+        // Логика нажатия на "3 полоски"
+        final android.widget.ImageView btnExpand = view.findViewById(R.id.btn_expand_apps);
+        final LinearLayout appsContainerLocal = view.findViewById(R.id.profile_apps_container);
+        
+        btnExpand.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // Показываем все скрытые карточки
+                for (int i = 0; i < appsContainerLocal.getChildCount(); i++) {
+                    appsContainerLocal.getChildAt(i).setVisibility(View.VISIBLE);
+                }
+                // Прячем саму кнопку
+                btnExpand.setVisibility(View.GONE);
+            }
+        });
 
         // Внимание: FollowsScreen пока остался старым экраном, мы его не трогали
         followersClick.setOnClickListener(new View.OnClickListener() { 
@@ -282,6 +301,35 @@ if (cachedAvatar != null) {
     }
 
     // Вспомогательные методы
+        int limit = 0;
+        for (Map.Entry<String, Long> entry : topApps.entrySet()) {
+            if (limit >= 10) break;
+            
+            View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, container, false);
+            
+            // ПРЯЧЕМ
+            if (limit >= 3) {
+                view.setVisibility(View.GONE);
+            }
+
+            ImageView iconView = view.findViewById(R.id.app_icon);
+            TextView nameView = view.findViewById(R.id.app_name);
+            TextView timeView = view.findViewById(R.id.app_time);
+            try {
+                android.content.pm.ApplicationInfo appInfo = pm.getApplicationInfo(entry.getKey(), 0);
+                nameView.setText(pm.getApplicationLabel(appInfo));
+                iconView.setImageDrawable(pm.getApplicationIcon(appInfo));
+            } catch (Exception e) { nameView.setText(entry.getKey()); }
+            timeView.setText(Utils.formatTime(activity, entry.getValue()));
+            container.addView(view);
+            limit++;
+        }
+        
+        // Показываем кнопку
+        View btnExpand = ((View)container.getParent()).findViewById(R.id.btn_expand_apps);
+        if (btnExpand != null) {
+            btnExpand.setVisibility(limit > 3 ? View.VISIBLE : View.GONE);
+        }
     private void renderOtherUserStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity) {
         container.removeAllViews();
         if (topApps == null || topApps.isEmpty() || activity == null) return;
