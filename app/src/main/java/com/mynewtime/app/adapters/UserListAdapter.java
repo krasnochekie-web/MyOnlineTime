@@ -4,6 +4,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import com.bumptech.glide.Glide;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
@@ -47,7 +48,16 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
 
         // Пока используем твой старый метод. Потом заменим на Glide!
         if (u.photo != null && u.photo.length() > 10) {
-            activity.loadBase64ImageAsync(holder.avatar, u.photo);
+            if (u.photo.startsWith("http")) {
+                // Если это обычная ссылка с сервера (новое будущее!)
+                Glide.with(activity).load(u.photo).circleCrop().into(holder.avatar);
+            } else {
+                // Если это старый Base64 (обратная совместимость)
+                try {
+                    byte[] imageByteArray = android.util.Base64.decode(u.photo, android.util.Base64.DEFAULT);
+                    Glide.with(activity).asBitmap().load(imageByteArray).circleCrop().into(holder.avatar);
+                } catch (Exception e) {}
+            }
         }
 
         // Клик по карточке

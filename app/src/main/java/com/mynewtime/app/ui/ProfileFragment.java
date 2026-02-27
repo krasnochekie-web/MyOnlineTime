@@ -9,6 +9,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ImageView;
+import com.bumptech.glide.Glide;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -104,8 +105,12 @@ public class ProfileFragment extends Fragment {
                 } catch (Exception e) {}
             }
 
-            if (cachedAvatar != null) avatarView.setImageBitmap(Utils.getCircularBitmap(cachedAvatar));
-            else avatarView.setBackgroundResource(R.drawable.bg_edit_circle);
+            // СТАЛО:
+if (cachedAvatar != null) {
+    Glide.with(activity).load(cachedAvatar).circleCrop().into(avatarView);
+} else {
+    avatarView.setBackgroundResource(R.drawable.bg_edit_circle);
+}
 
             btnEdit.setVisibility(View.VISIBLE);
             btnSignOut.setVisibility(View.VISIBLE);
@@ -171,8 +176,19 @@ public class ProfileFragment extends Fragment {
 
                             if (user.photo != null && user.photo.length() > 10) {
                                 File localAvatar = new File(activity.getFilesDir(), "avatar_" + myUid + ".png");
-                                if (isMe && localAvatar.exists() && user.photo.startsWith("http")) {}
-                                else { activity.loadBase64ImageAsync(avatarView, user.photo); }
+                                if (isMe && localAvatar.exists() && user.photo.startsWith("http")) {
+                                    // Свой аватар уже загружен из кэша выше, ничего не делаем
+                                } else {
+                                    // Загружаем чужой аватар через Glide
+                                    if (user.photo.startsWith("http")) {
+                                        Glide.with(activity).load(user.photo).circleCrop().into(avatarView);
+                                    } else {
+                                        try {
+                                            byte[] imageByteArray = android.util.Base64.decode(user.photo, android.util.Base64.DEFAULT);
+                                            Glide.with(activity).asBitmap().load(imageByteArray).circleCrop().into(avatarView);
+                                        } catch (Exception e) {}
+                                    }
+                                }
                             }
 
                             if (!isMe) {

@@ -22,7 +22,7 @@ import android.os.Bundle;
 import android.provider.MediaStore;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.util.Base64;
+import com.bumptech.glide.Glide;
 import android.util.LruCache;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -246,8 +246,11 @@ public class MainActivity extends AppCompatActivity {
                 
                 mMemoryCache.put("avatar_" + acct.getId(), scaled);
                 
+                // СТАЛО:
                 ImageView preview = (ImageView) findViewById(R.id.edit_avatar_preview);
-                if (preview != null) preview.setImageBitmap(Utils.getCircularBitmap(scaled));
+                if (preview != null) {
+                    Glide.with(MainActivity.this).load(scaled).circleCrop().into(preview);
+                  }
                 
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 scaled.compress(Bitmap.CompressFormat.JPEG, 70, baos);

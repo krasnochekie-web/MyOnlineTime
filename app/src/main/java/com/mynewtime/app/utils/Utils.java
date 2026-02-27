@@ -10,26 +10,6 @@ import android.graphics.Rect;
 public class Utils {
 
     // 1. Делаем картинку круглой
-    public static Bitmap getCircularBitmap(Bitmap bitmap) {
-        if (bitmap == null) return null;
-        int width = bitmap.getWidth();
-        int height = bitmap.getHeight();
-        int minEdge = Math.min(width, height);
-        int dx = (width - minEdge) / 2;
-        int dy = (height - minEdge) / 2;
-        Bitmap output = Bitmap.createBitmap(minEdge, minEdge, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(output);
-        final Paint paint = new Paint();
-        final Rect src = new Rect(dx, dy, dx + minEdge, dy + minEdge);
-        final Rect dst = new Rect(0, 0, minEdge, minEdge);
-        paint.setAntiAlias(true);
-        canvas.drawARGB(0, 0, 0, 0);
-        paint.setColor(0xff424242);
-        canvas.drawCircle(minEdge / 2, minEdge / 2, minEdge / 2, paint);
-        paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
-        canvas.drawBitmap(bitmap, src, dst, paint);
-        return output;
-    }
 
     // 2. Форматируем время (часы и минуты)
     // 2. Форматируем время (передаем context для получения строк локализации)

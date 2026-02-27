@@ -7,6 +7,7 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import com.bumptech.glide.Glide;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.Toast;
@@ -62,11 +63,11 @@ public class EditProfileFragment extends Fragment {
 
         inputName.setText(currentName);
         inputAbout.setText(currentAbout);
-
-        Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + acct.getId());
-        if (cachedAvatar != null && avatarPreview != null) {
-            avatarPreview.setImageBitmap(Utils.getCircularBitmap(cachedAvatar));
-        }
+// СТАЛО:
+Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + acct.getId());
+if (cachedAvatar != null && avatarPreview != null) {
+    Glide.with(activity).load(cachedAvatar).circleCrop().into(avatarPreview);
+}
 
         View.OnClickListener photoClickListener = new View.OnClickListener() {
             @Override
