@@ -298,9 +298,12 @@ if (cachedAvatar != null) {
                 activity.resetHeader();
             }
         }
-    }
-
-    // Вспомогательные методы
+        
+    private void renderOtherUserStats(Map<String, Long> topApps, android.widget.LinearLayout container, MainActivity activity) {
+        container.removeAllViews();
+        if (topApps == null || topApps.isEmpty() || activity == null) return;
+        android.content.pm.PackageManager pm = activity.getPackageManager();
+        
         int limit = 0;
         for (Map.Entry<String, Long> entry : topApps.entrySet()) {
             if (limit >= 10) break;
@@ -312,14 +315,18 @@ if (cachedAvatar != null) {
                 view.setVisibility(View.GONE);
             }
 
-            ImageView iconView = view.findViewById(R.id.app_icon);
-            TextView nameView = view.findViewById(R.id.app_name);
-            TextView timeView = view.findViewById(R.id.app_time);
+            android.widget.ImageView iconView = view.findViewById(R.id.app_icon);
+            android.widget.TextView nameView = view.findViewById(R.id.app_name);
+            android.widget.TextView timeView = view.findViewById(R.id.app_time);
+            
             try {
                 android.content.pm.ApplicationInfo appInfo = pm.getApplicationInfo(entry.getKey(), 0);
                 nameView.setText(pm.getApplicationLabel(appInfo));
                 iconView.setImageDrawable(pm.getApplicationIcon(appInfo));
-            } catch (Exception e) { nameView.setText(entry.getKey()); }
+            } catch (Exception e) { 
+                nameView.setText(entry.getKey()); 
+            }
+            
             timeView.setText(Utils.formatTime(activity, entry.getValue()));
             container.addView(view);
             limit++;
@@ -330,24 +337,8 @@ if (cachedAvatar != null) {
         if (btnExpand != null) {
             btnExpand.setVisibility(limit > 3 ? View.VISIBLE : View.GONE);
         }
-    private void renderOtherUserStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity) {
-        container.removeAllViews();
-        if (topApps == null || topApps.isEmpty() || activity == null) return;
-        android.content.pm.PackageManager pm = activity.getPackageManager();
-        for (Map.Entry<String, Long> entry : topApps.entrySet()) {
-            View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, container, false);
-            ImageView iconView = view.findViewById(R.id.app_icon);
-            TextView nameView = view.findViewById(R.id.app_name);
-            TextView timeView = view.findViewById(R.id.app_time);
-            try {
-                android.content.pm.ApplicationInfo appInfo = pm.getApplicationInfo(entry.getKey(), 0);
-                nameView.setText(pm.getApplicationLabel(appInfo));
-                iconView.setImageDrawable(pm.getApplicationIcon(appInfo));
-            } catch (Exception e) { nameView.setText(entry.getKey()); }
-            timeView.setText(Utils.formatTime(activity, entry.getValue()));
-            container.addView(view);
-        }
     }
+
     private void updateFollowButton(Button btnFollow, boolean isFollowing) {
         if (isFollowing) {
             btnFollow.setText(btnFollow.getContext().getString(R.string.btn_unfollow));
