@@ -287,7 +287,7 @@ if (cachedAvatar != null) {
         // Возвращаем готовую View, MainActivity сам добавит её на экран
         return view;
     }
-
+}
     @Override
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
