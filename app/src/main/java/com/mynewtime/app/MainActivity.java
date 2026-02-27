@@ -24,6 +24,7 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import com.bumptech.glide.Glide;
 import android.util.LruCache;
+import android.util.Base64;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -280,37 +281,13 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void loadBase64ImageAsync(final ImageView imageView, final String photoData) {
-        if (photoData == null || photoData.isEmpty()) return;
-        new AsyncTask<Void, Void, Bitmap>() {
-            @Override
-            protected Bitmap doInBackground(Void... voids) {
-                try {
-                    // Если это аватарка из Google (обычная ссылка)
-                    if (photoData.startsWith("http")) {
-                        InputStream in = new java.net.URL(photoData).openStream();
-                        return Utils.getCircularBitmap(BitmapFactory.decodeStream(in));
-                    } else {
-                        // Если это картинка, которую человек загрузил из галереи (Base64)
-                        byte[] b = Base64.decode(photoData, Base64.DEFAULT);
-                        return Utils.getCircularBitmap(BitmapFactory.decodeByteArray(b, 0, b.length));
-                    }
-                } catch (Exception e) { return null; }
-            }
-            @Override
-            protected void onPostExecute(Bitmap bitmap) {
-                if (bitmap != null) imageView.setImageBitmap(bitmap);
-            }
-        }.execute();
-    }
-
     private void loadCustomAvatar(ImageView imageView, String uid) {
         try {
             File file = new File(getFilesDir(), "avatar_" + uid + ".png");
             if (file.exists()) {
                 Bitmap bmp = BitmapFactory.decodeFile(file.getAbsolutePath());
                 mMemoryCache.put("avatar_" + uid, bmp);
-                imageView.setImageBitmap(Utils.getCircularBitmap(bmp));
+                Glide.with(this).load(bmp).circleCrop().into(imageView);
             }
         } catch (Exception e) {}
     }
