@@ -54,7 +54,7 @@ import java.util.*;
 public class MainActivity extends AppCompatActivity {
 
     public FrameLayout container;
-    public LinearLayout mainHeader;
+    public View mainHeader;
     private View bottomNav;
     public TextView headerTitle;
     public ImageView headerBackBtn;
@@ -97,7 +97,7 @@ public class MainActivity extends AppCompatActivity {
         mGoogleSignInClient = GoogleSignIn.getClient(this, gso);
 
         container = (FrameLayout) findViewById(R.id.fragment_container);
-        mainHeader = (LinearLayout) findViewById(R.id.app_header);
+        mainHeader = findViewById(R.id.app_header);
         headerTitle = (TextView) findViewById(R.id.header_title);
         headerBackBtn = (ImageView) findViewById(R.id.header_back_btn);
         bottomNav = (View) findViewById(R.id.bottom_nav_container);
