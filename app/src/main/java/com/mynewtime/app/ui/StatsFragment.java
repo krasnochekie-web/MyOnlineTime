@@ -163,4 +163,12 @@ public class StatsFragment extends Fragment {
 
         return view; // Возвращаем собранный экран
     }
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Красим заднюю стену в темно-серый
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).setAppBackground("#121212"); 
+        }
+    }
 }

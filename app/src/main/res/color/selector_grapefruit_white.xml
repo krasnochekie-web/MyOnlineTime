@@ -1,12 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <!-- Когда пункт выбран (активен) -> ГРЕЙПФРУТОВЫЙ -->
-    <item android:state_checked="true" android:color="@color/primaryGrapefruit"/>
-    <item android:state_selected="true" android:color="@color/primaryGrapefruit"/>
-    <item android:state_pressed="true" android:color="@color/primaryGrapefruit"/>
+    <!-- Когда пункт выбран (активен) -> БОРДОВО-КРАСНЫЙ -->
+    <item android:state_checked="true" android:color="@color/burgundyRed"/>
+    <item android:state_selected="true" android:color="@color/burgundyRed"/>
+    <item android:state_pressed="true" android:color="@color/burgundyRed"/>
     
     <!-- В обычном состоянии -> БЕЛЫЙ -->
     <item android:color="#FFFFFF"/>
-
 </selector>

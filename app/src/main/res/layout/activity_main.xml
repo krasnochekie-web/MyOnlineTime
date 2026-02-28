@@ -17,7 +17,7 @@
         android:gravity="center_vertical"
         android:paddingLeft="16dp"
         android:paddingRight="20dp"
-        android:paddingBottom="12dp"
+        android:paddingBottom="8dp"
         android:paddingTop="36dp" 
         android:elevation="0dp">
 
@@ -44,10 +44,11 @@
             android:id="@+id/header_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginLeft="10dp"
             android:gravity="center"
             android:background="@drawable/bg_title_border"
             android:text="@string/app_name"
-            android:textSize="14sp"
+            android:textSize="12sp"
             android:textStyle="bold"
             android:textColor="@color/textWhite"/>
 
@@ -72,7 +73,6 @@
         android:id="@+id/fragment_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@+id/app_header"
         android:layout_above="@+id/bottom_nav_container" />
 
     <!-- НИЖНЕЕ МЕНЮ НАВИГАЦИИ -->

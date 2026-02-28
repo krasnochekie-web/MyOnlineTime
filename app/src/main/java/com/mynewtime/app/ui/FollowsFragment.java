@@ -161,4 +161,12 @@ public class FollowsFragment extends Fragment {
         updateTabsUI.run();
         return mainLayout; 
     }
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Красим заднюю стену в темно-серый
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).setAppBackground("#121212"); 
+        }
+    }
 }

@@ -3,7 +3,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/bg_profile_wallpaper"
-    android:paddingTop="10dp" 
+    android:paddingTop="@dimen/header_clearance"
+    android:clipToPadding="false"
     android:scrollbars="none">
 
     <LinearLayout
@@ -22,7 +23,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="40dp"
                 android:layout_marginLeft="16dp"
-                android:layout_marginRight="16dp" 
+                android:layout_marginRight="32dp" 
                 android:background="@drawable/bg_app_card"
                 android:orientation="vertical"
                 android:paddingTop="50dp" 

@@ -6,7 +6,9 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@color/backgroundDark"
-    android:scrollbars="none">
+    android:scrollbars="none"
+    android:paddingTop="@dimen/header_clearance"
+    android:clipToPadding="false">
     
     <!-- Контейнер с вкладками (Подписчики / Подписки) -->
     <LinearLayout
