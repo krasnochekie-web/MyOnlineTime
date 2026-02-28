@@ -1,17 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
+
+<!-- Добавлены paddingTop="86dp" и clipToPadding="false" -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@color/backgroundDark" 
+    android:paddingTop="86dp"
+    android:clipToPadding="false"
     android:scrollbars="none">
-
     
+    <!-- Контейнер с вкладками (Подписчики / Подписки) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="50dp"
         android:orientation="horizontal">
-
         
         <LinearLayout
             android:id="@+id/tab_followers"
@@ -21,7 +24,6 @@
             android:orientation="vertical"
             android:gravity="center"
             android:clickable="true">
-
             <LinearLayout 
                 android:layout_width="wrap_content" 
                 android:layout_height="wrap_content" 
@@ -48,7 +50,6 @@
                     android:paddingEnd="6dp" 
                     android:background="@drawable/bg_badge_active" />
             </LinearLayout>
-
             <View 
                 android:id="@+id/tab_line_followers" 
                 android:layout_width="match_parent" 
@@ -56,7 +57,6 @@
                 android:background="@color/tab_line_color" 
                 android:layout_marginTop="8dp" />
         </LinearLayout>
-
         
         <LinearLayout
             android:id="@+id/tab_following"
@@ -66,7 +66,6 @@
             android:orientation="vertical"
             android:gravity="center"
             android:clickable="true">
-
             <LinearLayout 
                 android:layout_width="wrap_content" 
                 android:layout_height="wrap_content" 
@@ -93,7 +92,6 @@
                     android:paddingEnd="6dp" 
                     android:background="@drawable/bg_badge_inactive" />
             </LinearLayout>
-
             <View 
                 android:id="@+id/tab_line_following" 
                 android:layout_width="match_parent" 
@@ -102,13 +100,14 @@
                 android:layout_marginTop="8dp" />
         </LinearLayout>
     </LinearLayout>
-
     
     <View 
         android:layout_width="match_parent" 
         android:layout_height="1dp" 
         android:background="#333333" /> 
+
     <!-- Контейнер для списка пользователей и статуса загрузки -->
+
     <!-- Текст для статусов (Загрузка / Пусто / Ошибка) -->
     <TextView
         android:id="@+id/follows_status_text"

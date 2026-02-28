@@ -6,7 +6,8 @@
     android:gravity="center"
     android:background="@color/backgroundDark" 
     android:scrollbars="none"
-    android:padding="30dp">
+    android:paddingTop="86dp" 
+    android:clipToPadding="false"> 
 
     <ImageView
         android:layout_width="100dp"

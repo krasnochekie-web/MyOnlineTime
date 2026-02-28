@@ -4,7 +4,8 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@color/backgroundDark"
-    android:paddingTop="40dp"> <!-- СКОБКА ТУТ ЕСТЬ! -->
+    android:paddingTop="86dp" 
+    android:clipToPadding="false"> 
 
     <!-- Поле поиска -->
     <EditText
