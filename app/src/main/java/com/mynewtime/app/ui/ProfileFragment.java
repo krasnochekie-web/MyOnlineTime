@@ -78,21 +78,6 @@ public class ProfileFragment extends Fragment {
         TextView tabTopApps = view.findViewById(R.id.tab_top_apps);
         if (tabTopApps != null) tabTopApps.setSelected(true);
 
-        // Логика нажатия на "3 полоски"
-        final android.widget.ImageView btnExpand = view.findViewById(R.id.btn_expand_apps);
-        final LinearLayout appsContainerLocal = view.findViewById(R.id.profile_apps_container);
-        
-        btnExpand.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                // Показываем все скрытые карточки
-                for (int i = 0; i < appsContainerLocal.getChildCount(); i++) {
-                    appsContainerLocal.getChildAt(i).setVisibility(View.VISIBLE);
-                }
-                // Прячем саму кнопку
-                btnExpand.setVisibility(View.GONE);
-            }
-        });
         // Логика кнопок "развернуть" и "свернуть"
         final android.widget.ImageView btnExpand = view.findViewById(R.id.btn_expand_apps);
         final android.widget.ImageView btnCollapse = view.findViewById(R.id.btn_collapse_apps);
