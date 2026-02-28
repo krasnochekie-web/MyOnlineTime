@@ -9,8 +9,7 @@
     android:background="@color/cardDark"
     android:gravity="center_vertical"
     
-    android:textColor="@color/primaryGrapefruit"
-    android:drawableRight="@drawable/ic_arrow_grapefruit"
+    android:textColor="@color/selector_grapefruit_white"
     
     android:checkMark="@drawable/ic_check"
     android:checkMarkTint="@color/selector_grapefruit_white"/>
