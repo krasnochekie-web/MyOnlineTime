@@ -67,7 +67,6 @@ public class ProfileFragment extends Fragment {
         final ImageView avatarView = view.findViewById(R.id.profile_avatar);
         final View btnEdit = view.findViewById(R.id.btn_edit_profile);
         final Button btnFollow = view.findViewById(R.id.btn_follow);
-        final Button btnSignOut = view.findViewById(R.id.btn_sign_out);
         final ImageView btnBack = view.findViewById(R.id.profile_back_btn);
         final TextView followersCount = view.findViewById(R.id.txt_followers_count);
         final TextView followingCount = view.findViewById(R.id.txt_following_count);
@@ -132,18 +131,7 @@ if (cachedAvatar != null) {
 }
 
             btnEdit.setVisibility(View.VISIBLE);
-            btnSignOut.setVisibility(View.VISIBLE);
             btnFollow.setVisibility(View.GONE);
-
-            btnSignOut.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) {
-                    activity.vpsToken = null;
-                    activity.prefs.edit().clear().apply();
-                    activity.mMemoryCache.evictAll();
-                    activity.mGoogleSignInClient.signOut();
-                    activity.showLoginScreen();
-                }
-            });
 
             btnEdit.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
@@ -166,7 +154,6 @@ if (cachedAvatar != null) {
         } else {
             nameView.setText(activity.getString(R.string.loading));
             btnEdit.setVisibility(View.GONE);
-            btnSignOut.setVisibility(View.GONE);
             btnFollow.setVisibility(View.INVISIBLE);
         }
 
