@@ -16,11 +16,13 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
 
-            <!-- КАРТОЧКА ПРОФИЛЯ (Сдвинута вниз на 40dp, чтобы аватарка выпирала) -->
+            <!-- КАРТОЧКА ПРОФИЛЯ -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="40dp" 
+                android:layout_marginTop="40dp"
+                android:layout_marginLeft="16dp"
+                android:layout_marginRight="16dp" 
                 android:background="@drawable/bg_app_card"
                 android:orientation="vertical"
                 android:paddingTop="50dp" 
@@ -28,6 +30,8 @@
                 android:paddingLeft="16dp"
                 android:paddingRight="16dp"
                 android:elevation="0dp">
+                
+                <!-- Внутренности карточки (никнейм, статистика и т.д.) -->
 
                 <!-- НИКНЕЙМ -->
                 <TextView
@@ -255,11 +259,15 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginLeft="16dp"
+            android:layout_marginRight="16dp"
             android:layout_marginBottom="30dp"
             android:background="@drawable/bg_app_card"
             android:orientation="vertical"
             android:paddingTop="8dp"
             android:paddingBottom="8dp">
+
+            <!-- Внутренности карточки со списком -->
 
             <LinearLayout
                 android:id="@+id/profile_apps_container"

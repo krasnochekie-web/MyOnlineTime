@@ -11,11 +11,15 @@
         android:fillViewport="true"
         android:scrollbars="none">
 
+        <!-- ВОТ ЗДЕСЬ ДОБАВЛЯЕМ PADDING (Он отодвинет всё от краев) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:gravity="center_horizontal">
+            android:gravity="center_horizontal"
+            android:paddingLeft="16dp"   <!-- ДОБАВЛЕНО -->
+            android:paddingRight="16dp"  <!-- ДОБАВЛЕНО -->
+            android:paddingBottom="20dp"> <!-- Добавил отступ снизу, чтобы при скролле не прилипало -->
 
             <!-- Аватар -->
             <ImageView

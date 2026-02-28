@@ -56,6 +56,7 @@ public class MainActivity extends AppCompatActivity {
     public FrameLayout container;
     public View mainHeader;
     private View bottomNav;
+    public View mainRoot;
     public TextView headerTitle;
     public ImageView headerBackBtn;
 
@@ -81,6 +82,8 @@ public class MainActivity extends AppCompatActivity {
         w.setFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
         setContentView(R.layout.activity_main);
     navigator = new com.mynewtime.app.utils.AppNavigator(this, R.id.fragment_container);
+         mainRoot = findViewById(R.id.main_root);
+
         
         prefs = getSharedPreferences("UserProfile", MODE_PRIVATE);
 
@@ -308,16 +311,29 @@ public class MainActivity extends AppCompatActivity {
         mainHeader.setVisibility(View.VISIBLE);
         bottomNav.setVisibility(View.VISIBLE);
 
-        // Этот код автоматически применяет нужный цвет из твоего XML файла
+        // --- УПРАВЛЕНИЕ МОНОЛИТНЫМ ФОНОМ ---
+        if (index == 4) {
+            // Если открыт профиль (индекс 4), красим заднюю стену в светло-желтый.
+            // (Замените #FFFFE0 на свой точный код желтого цвета, если нужно)
+            setAppBackground("#FFF9C4"); 
+        } else {
+            // Для всех остальных экранов (Лента, Поиск, Время) возвращаем темно-серый
+            setAppBackground("#121212"); 
+        }
+
+        // --- УПРАВЛЕНИЕ ИКОНКАМИ НИЖНЕГО МЕНЮ ---
+        // Этот код автоматически применяет ваш цвет Primary Grapefruit активной вкладке
         iconFeed.setSelected(index == 0);
         textFeed.setSelected(index == 0);
-
+        
         iconSearch.setSelected(index == 1);
         textSearch.setSelected(index == 1);
-
+        
+        // Индекс 2 - это центральная кнопка "Плюс", она всегда одинаковая, поэтому ее тут нет
+        
         iconUsage.setSelected(index == 3);
         textUsage.setSelected(index == 3);
-
+        
         iconProfile.setSelected(index == 4);
         textProfile.setSelected(index == 4);
     }
@@ -346,5 +362,15 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         return cleanList;
+    }
+    // Этот метод будет красить фон приложения в любой нужный цвет
+    public void setAppBackground(String hexColor) {
+        if (mainRoot != null) {
+            try {
+                mainRoot.setBackgroundColor(android.graphics.Color.parseColor(hexColor));
+            } catch (Exception e) {
+                mainRoot.setBackgroundColor(android.graphics.Color.parseColor("#121212")); // Цвет по умолчанию при ошибке
+            }
+        }
     }
 } 
