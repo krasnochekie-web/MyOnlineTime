@@ -199,5 +199,4 @@
         android:layout_height="match_parent"
         android:layout_below="@+id/app_header"
         android:layout_above="@+id/bottom_nav_container" />
-
 </RelativeLayout>
