@@ -87,7 +87,7 @@
                 android:layout_width="24dp" 
                 android:layout_height="24dp" 
                 android:src="@drawable/ic_nav_feed"
-                android:tint="@color/selector_grapefruit_white"/> <!-- ИЗМЕНЕНО НА НОВЫЙ ЦВЕТ -->
+                android:tint="@color/selector_grapefruit_white"/>
             <TextView 
                 android:id="@+id/text_feed" 
                 android:layout_width="wrap_content" 
