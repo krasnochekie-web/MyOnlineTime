@@ -56,7 +56,6 @@ public class MainActivity extends AppCompatActivity {
     public FrameLayout container;
     public View mainHeader;
     private View bottomNav;
-    public View mainRoot;
     public TextView headerTitle;
     public ImageView headerBackBtn;
 
@@ -82,7 +81,6 @@ public class MainActivity extends AppCompatActivity {
         w.setFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
         setContentView(R.layout.activity_main);
     navigator = new com.mynewtime.app.utils.AppNavigator(this, R.id.fragment_container);
-         mainRoot = findViewById(R.id.main_root);
         
         prefs = getSharedPreferences("UserProfile", MODE_PRIVATE);
 
@@ -310,26 +308,16 @@ public class MainActivity extends AppCompatActivity {
         mainHeader.setVisibility(View.VISIBLE);
         bottomNav.setVisibility(View.VISIBLE);
 
-        // --- НАЧАЛО НОВОГО КОДА ---
-        if (mainRoot != null) {
-            if (index == 4) {
-                // Если открыт Профиль (index 4), ставим ваш светло-желтый цвет.
-                // ВАЖНО: Замените #FFFFE0 на тот код желтого цвета, который используется у вас в профиле!
-                mainRoot.setBackgroundColor(android.graphics.Color.parseColor("#FFFFE0")); 
-            } else {
-                // Для всех остальных экранов (Лента, Поиск, Время) возвращаем стандартный темный фон
-                mainRoot.setBackgroundColor(android.graphics.Color.parseColor("#121212"));
-            }
-        }
-        // --- КОНЕЦ НОВОГО КОДА ---
-
         // Этот код автоматически применяет нужный цвет из твоего XML файла
         iconFeed.setSelected(index == 0);
         textFeed.setSelected(index == 0);
+
         iconSearch.setSelected(index == 1);
         textSearch.setSelected(index == 1);
+
         iconUsage.setSelected(index == 3);
         textUsage.setSelected(index == 3);
+
         iconProfile.setSelected(index == 4);
         textProfile.setSelected(index == 4);
     }
