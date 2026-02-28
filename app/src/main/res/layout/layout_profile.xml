@@ -3,6 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/bg_profile_wallpaper"
+
     android:scrollbars="none">
 
     <LinearLayout
@@ -11,100 +12,205 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <!-- КНОПКА НАЗАД (Для чужих профилей) -->
-        <ImageView
-            android:id="@+id/profile_back_btn"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_math_arrow"
-            android:tint="@color/textWhite"
-            android:visibility="gone" 
-            android:layout_marginBottom="12dp"/>
-
-        <!-- СТРОКА: АВАТАР И СТАТИСТИКА -->
-        <LinearLayout
-            android:orientation="horizontal"
+        <!-- ВЕРХНИЙ БЛОК: Наложение аватарки на карточку -->
+        <RelativeLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical">
+            android:layout_height="wrap_content">
 
-            <!-- Аватарка слева -->
-            <ImageView
-                android:id="@+id/profile_avatar"
-                android:layout_width="86dp"
-                android:layout_height="86dp"
-                android:background="@drawable/bg_edit_circle"
-                android:scaleType="centerCrop"/> 
-
-            <!-- Блок Статистики справа -->
+            <!-- КАРТОЧКА ПРОФИЛЯ (Сдвинута вниз на 40dp, чтобы аватарка выпирала) -->
             <LinearLayout
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="horizontal"
-                android:layout_marginLeft="16dp"
-                android:gravity="center">
+                android:layout_marginTop="40dp" 
+                android:background="@drawable/bg_app_card"
+                android:orientation="vertical"
+                android:paddingTop="50dp" 
+                android:paddingBottom="20dp"
+                android:paddingLeft="16dp"
+                android:paddingRight="16dp"
+                android:elevation="0dp">
 
-                <!-- Время -->
-                <LinearLayout android:layout_weight="1" android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:gravity="center">
-                    <TextView android:id="@+id/profile_week_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="..." android:textSize="18sp" android:textColor="@color/textWhite" android:textStyle="bold"/>
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="За неделю" android:textColor="@color/textGray" android:textSize="12sp" android:layout_marginTop="2dp"/>
-                </LinearLayout>
+                <!-- НИКНЕЙМ -->
+                <TextView
+                    android:id="@+id/profile_name"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:text="@string/guest"
+                    android:textColor="@color/textWhite"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
 
-                <!-- Подписчики -->
-                <LinearLayout android:id="@+id/container_followers" android:layout_weight="1" android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:clickable="true" android:gravity="center">
-                    <TextView android:id="@+id/txt_followers_count" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textSize="18sp" android:textColor="@color/textWhite" android:textStyle="bold"/>
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/followers" android:textColor="@color/textGray" android:textSize="12sp" android:layout_marginTop="2dp"/>
-                </LinearLayout>
+                <!-- О СЕБЕ (Не вылезает за 3 строки) -->
+                <TextView
+                    android:id="@+id/profile_about"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:gravity="center"
+                    android:textColor="@color/textGray"
+                    android:textSize="14sp"
+                    android:maxLines="3"
+                    android:ellipsize="end" />
 
-                <!-- Подписки -->
-                <LinearLayout android:id="@+id/container_following" android:layout_weight="1" android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:clickable="true" android:gravity="center">
-                    <TextView android:id="@+id/txt_following_count" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textSize="18sp" android:textColor="@color/textWhite" android:textStyle="bold"/>
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/following" android:textColor="@color/textGray" android:textSize="12sp" android:layout_marginTop="2dp"/>
+                <!-- ТОНКАЯ ПОЛОСКА -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="16dp"
+                    android:layout_marginBottom="16dp"
+                    android:background="#33FFFFFF" />
+
+                <!-- СТАТИСТИКА В ОДИН РЯД -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:baselineAligned="false">
+
+                    <!-- ВРЕМЯ (Идеально ровно друг под другом) -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:text="За неделю"
+                            android:textColor="@color/textGray"
+                            android:textSize="12sp" />
+                        <TextView
+                            android:id="@+id/profile_week_time"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:layout_marginTop="4dp"
+                            android:text="..."
+                            android:textColor="@color/textWhite"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <!-- ПОДПИСЧИКИ -->
+                    <LinearLayout
+                        android:id="@+id/container_followers"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:clickable="true"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:text="@string/followers"
+                            android:textColor="@color/textGray"
+                            android:textSize="12sp" />
+                        <TextView
+                            android:id="@+id/txt_followers_count"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:layout_marginTop="4dp"
+                            android:text="0"
+                            android:textColor="@color/textWhite"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <!-- ПОДПИСКИ -->
+                    <LinearLayout
+                        android:id="@+id/container_following"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:clickable="true"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:text="@string/following"
+                            android:textColor="@color/textGray"
+                            android:textSize="12sp" />
+                        <TextView
+                            android:id="@+id/txt_following_count"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:layout_marginTop="4dp"
+                            android:text="0"
+                            android:textColor="@color/textWhite"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
-        </LinearLayout>
 
-        <!-- ИМЯ И О СЕБЕ -->
-        <TextView
-            android:id="@+id/profile_name"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/guest"
-            android:textSize="18sp"
-            android:textColor="@color/textWhite"
-            android:textStyle="bold"
-            android:layout_marginTop="16dp"/>
+            <!-- АВАТАРКА (По центру, выпирает наверх) -->
+            <ImageView
+                android:id="@+id/profile_avatar"
+                android:layout_width="80dp"
+                android:layout_height="80dp"
+                android:layout_centerHorizontal="true"
+                android:layout_alignParentTop="true"
+                android:background="@drawable/bg_edit_circle"
+                android:scaleType="centerCrop" />
 
-        <TextView
-            android:id="@+id/profile_about"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="@color/textWhite"
-            android:textSize="14sp"
-            android:layout_marginTop="4dp"
-            android:maxLines="3"
-            android:ellipsize="end"/>
+            <!-- КАРАНДАШИК (В правом верхнем углу карточки) -->
+            <ImageView
+                android:id="@+id/btn_edit_profile"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_alignParentRight="true"
+                android:layout_marginTop="56dp"
+                android:layout_marginRight="16dp"
+                android:background="@drawable/bg_edit_circle"
+                android:clickable="true"
+                android:padding="6dp"
+                android:src="@drawable/ic_edit"
+                android:tint="@color/textWhite" />
+            
+            <!-- КНОПКА НАЗАД (Слева, для чужих профилей) -->
+             <ImageView
+                android:id="@+id/profile_back_btn"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_alignParentLeft="true"
+                android:layout_marginTop="56dp"
+                android:layout_marginLeft="16dp"
+                android:src="@drawable/ic_math_arrow"
+                android:tint="@color/textWhite"
+                android:visibility="gone" />
 
-        <!-- ШИРОКАЯ КНОПКА РЕДАКТИРОВАНИЯ (С карандашом) -->
-        <LinearLayout
-            android:id="@+id/btn_edit_profile"
+        </RelativeLayout>
+
+        <!-- КНОПКИ ДЕЙСТВИЙ (Осталась только подписка и гугл вход) -->
+        <Button
+            android:id="@+id/btn_follow"
             android:layout_width="match_parent"
-            android:layout_height="36dp"
-            android:background="@drawable/bg_button_gray"
-            android:gravity="center"
+            android:layout_height="48dp"
             android:layout_marginTop="16dp"
-            android:clickable="true">
-            <ImageView android:layout_width="16dp" android:layout_height="16dp" android:src="@drawable/ic_edit" android:tint="@color/textWhite" android:layout_marginRight="8dp"/>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/edit_profile_title" android:textColor="@color/textWhite" android:textStyle="bold" android:textSize="14sp"/>
-        </LinearLayout>
+            android:background="@drawable/bg_button_gray"
+            android:text="@string/btn_follow"
+            android:textColor="@color/primaryGrapefruit"
+            android:textStyle="bold"
+            android:visibility="gone" />
 
-        <!-- ДРУГИЕ КНОПКИ (Чужой профиль / Выход) -->
-        <Button android:id="@+id/btn_follow" android:layout_width="match_parent" android:layout_height="36dp" android:text="@string/btn_follow" android:background="@drawable/bg_button_gray" android:textColor="@color/primaryGrapefruit" android:layout_marginTop="8dp" android:textStyle="bold" android:textSize="14sp" android:visibility="gone"/>
-        <Button android:id="@+id/btn_google_sign_in" android:layout_width="match_parent" android:layout_height="48dp" android:text="@string/btn_sign_in_google" android:background="@drawable/bg_button_gray" android:textColor="@color/primaryGrapefruit" android:layout_marginTop="16dp" android:textStyle="bold" android:visibility="gone"/>
-        <Button android:id="@+id/btn_sign_out" android:layout_width="match_parent" android:layout_height="48dp" android:text="@string/btn_sign_out" android:visibility="gone" android:background="@drawable/bg_button_gray" android:textColor="@color/primaryGrapefruit" android:layout_marginTop="16dp" android:textStyle="bold"/>
+        <Button
+            android:id="@+id/btn_google_sign_in"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_button_gray"
+            android:text="@string/btn_sign_in_google"
+            android:textColor="@color/primaryGrapefruit"
+            android:textStyle="bold"
+            android:visibility="gone" />
 
-        <!-- ВКЛАДКИ -->
+        <!-- ВКЛАДКИ (Без линий, цвет подтягивается из твоего грейпфрутового селектора) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -122,7 +228,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/top_apps"
-                    android:textColor="@color/selector_grapefruit_dark"
+                    android:textColor="@color/selector_grapefruit_white"
                     android:textSize="16sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -137,7 +243,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/posts"
-                    android:textColor="@color/selector_grapefruit_dark"
+                    android:textColor="@color/selector_grapefruit_white"
                     android:textSize="16sp"
                     android:textStyle="bold" />
             </LinearLayout>
