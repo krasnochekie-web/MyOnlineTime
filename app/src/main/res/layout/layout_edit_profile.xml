@@ -17,9 +17,9 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:gravity="center_horizontal"
-            android:paddingLeft="16dp"   <!-- ДОБАВЛЕНО -->
-            android:paddingRight="16dp"  <!-- ДОБАВЛЕНО -->
-            android:paddingBottom="20dp"> <!-- Добавил отступ снизу, чтобы при скролле не прилипало -->
+            android:paddingLeft="16dp"  
+            android:paddingRight="16dp" 
+            android:paddingBottom="20dp"> 
 
             <!-- Аватар -->
             <ImageView
