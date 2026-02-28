@@ -5,29 +5,19 @@
     android:fitsSystemWindows="false"
     android:background="#121212">
 
-    <!-- 1. КОНТЕЙНЕР ДЛЯ ЭКРАНОВ (Теперь он первый, на заднем фоне) -->
-    <!-- Убран layout_below, теперь он на весь экран -->
-    <FrameLayout
-        android:id="@+id/fragment_container"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_above="@+id/bottom_nav_container" />
-
-    <!-- 2. ШАПКА ПРИЛОЖЕНИЯ (Теперь рисуется поверх контейнера) -->
-    <LinearLayout
+    <!-- ШАПКА ПРИЛОЖЕНИЯ (Теперь RelativeLayout для идеального центрирования) -->
+    <RelativeLayout
         android:id="@+id/app_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_gradient_header"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
         android:paddingLeft="16dp"
         android:paddingRight="20dp"
         android:paddingBottom="12dp"
         android:paddingTop="36dp" 
         android:elevation="0dp">
 
-        <!-- Кнопка НАЗАД (Скрыта по умолчанию) -->
+        <!-- Кнопка НАЗАД -->
         <ImageView
             android:id="@+id/header_back_btn"
             android:layout_width="24dp"
@@ -37,43 +27,40 @@
             android:visibility="gone"
             android:clickable="true"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:layout_marginRight="16dp"/>
+            android:layout_alignParentLeft="true"
+            android:layout_centerVertical="true"/>
 
-        <!-- РАСПОРКА 1: Толкает заголовок к центру -->
-        <View
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
-
-        <!-- ЗАГОЛОВОК (По центру, сужен) -->
+        <!-- ЗАГОЛОВОК (Сделан узким и ровно по центру) -->
         <TextView
             android:id="@+id/header_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:gravity="center"
             android:background="@drawable/bg_title_border"
             android:text="@string/app_name"
             android:textSize="14sp"
             android:textStyle="bold"
-            android:textColor="@color/textWhite"/>
+            android:textColor="@color/textWhite"
+            android:layout_centerInParent="true"/>
 
-        <!-- РАСПОРКА 2: Толкает настройки вправо -->
-        <View
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
-
-        <!-- Иконка Настройки (В правом углу) -->
+        <!-- Иконка Настройки (Прижата в правый угол) -->
         <ImageView
             android:layout_width="28dp"
             android:layout_height="28dp"
             android:src="@drawable/ic_settings"
             android:tint="@color/textWhite"
-            android:layout_marginLeft="16dp"/>
+            android:layout_alignParentRight="true"
+            android:layout_centerVertical="true"/>
+    </RelativeLayout>
 
-    </LinearLayout>
+    <!-- КОНТЕЙНЕР ДЛЯ ЭКРАНОВ (Оставлен строго как было у вас) -->
+    <FrameLayout
+        android:id="@+id/fragment_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@+id/app_header"
+        android:layout_above="@+id/bottom_nav_container" />
 
-    <!-- 3. НИЖНЕЕ МЕНЮ НАВИГАЦИИ (Надписи убраны) -->
+    <!-- НИЖНЕЕ МЕНЮ НАВИГАЦИИ (Тексты убраны) -->
     <LinearLayout
         android:id="@+id/bottom_nav_container"
         android:layout_width="match_parent"
@@ -95,22 +82,17 @@
             android:gravity="center" 
             android:clickable="true" 
             android:background="@drawable/bg_ripple_dark_theme">
-
             <ImageView 
                 android:id="@+id/icon_feed" 
                 android:layout_width="24dp" 
                 android:layout_height="24dp" 
                 android:src="@drawable/ic_nav_feed"
                 android:tint="@color/selector_grapefruit_white"/>
-
             <TextView 
                 android:id="@+id/text_feed" 
                 android:layout_width="wrap_content" 
                 android:layout_height="wrap_content" 
                 android:text="@string/feed" 
-                android:textSize="12sp" 
-                android:textColor="@color/selector_grapefruit_white" 
-                android:layout_marginTop="2dp"
                 android:visibility="gone"/>
         </LinearLayout>
 
@@ -124,22 +106,17 @@
             android:gravity="center" 
             android:clickable="true" 
             android:background="@drawable/bg_ripple_dark_theme">
-
             <ImageView 
                 android:id="@+id/icon_search" 
                 android:layout_width="24dp" 
                 android:layout_height="24dp" 
                 android:src="@drawable/ic_nav_search"
                 android:tint="@color/selector_grapefruit_white"/>
-
             <TextView 
                 android:id="@+id/text_search" 
                 android:layout_width="wrap_content" 
                 android:layout_height="wrap_content" 
                 android:text="@string/find" 
-                android:textSize="12sp" 
-                android:textColor="@color/selector_grapefruit_white" 
-                android:layout_marginTop="2dp"
                 android:visibility="gone"/>
         </LinearLayout>
 
@@ -149,14 +126,13 @@
             android:layout_height="56dp" 
             android:layout_weight="1" 
             android:gravity="center">
-
             <LinearLayout 
                 android:id="@+id/nav_add" 
                 android:layout_width="48dp" 
                 android:layout_height="36dp" 
+                android:background="@drawable/bg_button_grapefruit" 
                 android:gravity="center" 
                 android:clickable="true">
-
                 <ImageView 
                     android:layout_width="24dp" 
                     android:layout_height="24dp" 
@@ -175,22 +151,17 @@
             android:gravity="center" 
             android:clickable="true" 
             android:background="@drawable/bg_ripple_dark_theme">
-
             <ImageView 
                 android:id="@+id/icon_usage" 
                 android:layout_width="24dp" 
                 android:layout_height="24dp" 
                 android:src="@drawable/ic_nav_time"
                 android:tint="@color/selector_grapefruit_white"/>
-
             <TextView 
                 android:id="@+id/text_usage" 
                 android:layout_width="wrap_content" 
                 android:layout_height="wrap_content" 
                 android:text="@string/time" 
-                android:textSize="12sp" 
-                android:textColor="@color/selector_grapefruit_white" 
-                android:layout_marginTop="2dp"
                 android:visibility="gone"/>
         </LinearLayout>
 
@@ -204,25 +175,19 @@
             android:gravity="center" 
             android:clickable="true" 
             android:background="@drawable/bg_ripple_dark_theme">
-
             <ImageView 
                 android:id="@+id/icon_profile" 
                 android:layout_width="24dp" 
                 android:layout_height="24dp" 
                 android:src="@drawable/ic_nav_profile"
                 android:tint="@color/selector_grapefruit_white"/>
-
             <TextView 
                 android:id="@+id/text_profile" 
                 android:layout_width="wrap_content" 
                 android:layout_height="wrap_content" 
                 android:text="@string/me" 
-                android:textSize="12sp" 
-                android:textColor="@color/selector_grapefruit_white" 
-                android:layout_marginTop="2dp"
                 android:visibility="gone"/>
         </LinearLayout>
-
     </LinearLayout>
 
 </RelativeLayout>
