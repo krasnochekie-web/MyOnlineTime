@@ -94,7 +94,7 @@
                 android:layout_height="wrap_content" 
                 android:text="@string/feed" 
                 android:textSize="12sp" 
-                android:textColor="@color/selector_grapefruit_white" <!-- ИЗМЕНЕНО НА НОВЫЙ ЦВЕТ -->
+                android:textColor="@color/selector_grapefruit_white"
                 android:layout_marginTop="2dp"/>
         </LinearLayout>
 
