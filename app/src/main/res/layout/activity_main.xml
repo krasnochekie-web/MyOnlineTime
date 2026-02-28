@@ -5,7 +5,6 @@
     android:fitsSystemWindows="false"
     android:background="#121212">
 
-    
     <!-- ШАПКА ПРИЛОЖЕНИЯ -->
     <RelativeLayout
         android:id="@+id/app_header"
@@ -52,10 +51,18 @@
             android:layout_alignParentBottom="true"
             android:src="@drawable/ic_settings"
             android:tint="@color/textWhite"/>
-            
     </RelativeLayout>
-    </LinearLayout>
 
+    <!-- КОНТЕЙНЕР ДЛЯ ЭКРАНОВ -->
+    <FrameLayout
+        android:id="@+id/fragment_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@+id/app_header"
+        android:layout_above="@+id/bottom_nav_container" />
+
+    <!-- НИЖНЕЕ МЕНЮ НАВИГАЦИИ -->
+    <LinearLayout
         android:id="@+id/bottom_nav_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -66,7 +73,6 @@
         android:paddingBottom="40dp" 
         android:baselineAligned="false">
 
-        
         <LinearLayout 
             android:id="@+id/nav_feed" 
             android:layout_width="0dp" 
@@ -81,18 +87,17 @@
                 android:layout_width="24dp" 
                 android:layout_height="24dp" 
                 android:src="@drawable/ic_nav_feed"
-                android:tint="@color/nav_color"/>
+                android:tint="@color/selector_grapefruit_white"/> <!-- ИЗМЕНЕНО НА НОВЫЙ ЦВЕТ -->
             <TextView 
                 android:id="@+id/text_feed" 
                 android:layout_width="wrap_content" 
                 android:layout_height="wrap_content" 
                 android:text="@string/feed" 
                 android:textSize="12sp" 
-                android:textColor="@color/nav_color" 
+                android:textColor="@color/selector_grapefruit_white" <!-- ИЗМЕНЕНО НА НОВЫЙ ЦВЕТ -->
                 android:layout_marginTop="2dp"/>
         </LinearLayout>
 
-        
         <LinearLayout 
             android:id="@+id/nav_search" 
             android:layout_width="0dp" 
@@ -107,18 +112,17 @@
                 android:layout_width="24dp" 
                 android:layout_height="24dp" 
                 android:src="@drawable/ic_nav_search"
-                android:tint="@color/nav_color"/>
+                android:tint="@color/selector_grapefruit_white"/>
             <TextView 
                 android:id="@+id/text_search" 
                 android:layout_width="wrap_content" 
                 android:layout_height="wrap_content" 
                 android:text="@string/find" 
                 android:textSize="12sp" 
-                android:textColor="@color/nav_color" 
+                android:textColor="@color/selector_grapefruit_white" 
                 android:layout_marginTop="2dp"/>
         </LinearLayout>
 
-        
         <LinearLayout 
             android:layout_width="0dp" 
             android:layout_height="56dp" 
@@ -128,18 +132,17 @@
                 android:id="@+id/nav_add" 
                 android:layout_width="48dp" 
                 android:layout_height="36dp" 
-                android:background="@drawable/bg_nav_center" 
+                android:background="@drawable/bg_button_grapefruit" 
                 android:gravity="center" 
                 android:clickable="true">
                 <ImageView 
                     android:layout_width="24dp" 
                     android:layout_height="24dp" 
                     android:src="@drawable/ic_nav_plus"
-                    android:tint="@color/nav_color"/>
+                    android:tint="@color/textWhite"/>
             </LinearLayout>
         </LinearLayout>
 
-        
         <LinearLayout 
             android:id="@+id/nav_usage" 
             android:layout_width="0dp" 
@@ -154,18 +157,17 @@
                 android:layout_width="24dp" 
                 android:layout_height="24dp" 
                 android:src="@drawable/ic_nav_time"
-                android:tint="@color/nav_color"/>
+                android:tint="@color/selector_grapefruit_white"/>
             <TextView 
                 android:id="@+id/text_usage" 
                 android:layout_width="wrap_content" 
                 android:layout_height="wrap_content" 
                 android:text="@string/time" 
                 android:textSize="12sp" 
-                android:textColor="@color/nav_color" 
+                android:textColor="@color/selector_grapefruit_white" 
                 android:layout_marginTop="2dp"/>
         </LinearLayout>
 
-        
         <LinearLayout 
             android:id="@+id/nav_profile" 
             android:layout_width="0dp" 
@@ -180,23 +182,16 @@
                 android:layout_width="24dp" 
                 android:layout_height="24dp" 
                 android:src="@drawable/ic_nav_profile"
-                android:tint="@color/nav_color"/>
+                android:tint="@color/selector_grapefruit_white"/>
             <TextView 
                 android:id="@+id/text_profile" 
                 android:layout_width="wrap_content" 
                 android:layout_height="wrap_content" 
                 android:text="@string/me" 
                 android:textSize="12sp" 
-                android:textColor="@color/nav_color" 
+                android:textColor="@color/selector_grapefruit_white" 
                 android:layout_marginTop="2dp"/>
         </LinearLayout>
     </LinearLayout>
 
-    
-    <FrameLayout
-        android:id="@+id/fragment_container"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_below="@+id/app_header"
-        android:layout_above="@+id/bottom_nav_container" />
 </RelativeLayout>
