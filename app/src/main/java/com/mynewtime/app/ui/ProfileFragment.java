@@ -286,8 +286,8 @@ if (cachedAvatar != null) {
 
         // Возвращаем готовую View, MainActivity сам добавит её на экран
         return view;
-    }
-}
+    } // Конец метода onCreateView
+
     @Override
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
@@ -298,7 +298,8 @@ if (cachedAvatar != null) {
                 activity.resetHeader();
             }
         }
-        
+    } // Конец метода onHiddenChanged
+
     private void renderOtherUserStats(Map<String, Long> topApps, android.widget.LinearLayout container, MainActivity activity) {
         container.removeAllViews();
         if (topApps == null || topApps.isEmpty() || activity == null) return;
@@ -314,7 +315,6 @@ if (cachedAvatar != null) {
             if (limit >= 3) {
                 view.setVisibility(View.GONE);
             }
-
             android.widget.ImageView iconView = view.findViewById(R.id.app_icon);
             android.widget.TextView nameView = view.findViewById(R.id.app_name);
             android.widget.TextView timeView = view.findViewById(R.id.app_time);
@@ -337,19 +337,18 @@ if (cachedAvatar != null) {
         if (btnExpand != null) {
             btnExpand.setVisibility(limit > 3 ? View.VISIBLE : View.GONE);
         }
-    }
+    } // Конец метода renderOtherUserStats
 
-    private void updateFollowButton(Button btnFollow, boolean isFollowing) {
+    private void updateFollowButton(android.widget.Button btnFollow, boolean isFollowing) {
         if (isFollowing) {
             btnFollow.setText(btnFollow.getContext().getString(R.string.btn_unfollow));
             btnFollow.setBackgroundResource(R.drawable.bg_button_gray);
-            // Берем textGray из твоей палитры:
             btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textGray));
         } else {
             btnFollow.setText("Подписаться");
             btnFollow.setBackgroundResource(R.drawable.bg_button_grapefruit);
-            // Берем textWhite из твоей палитры:
             btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textWhite));
         }
-    }
-}
+    } // Конец метода updateFollowButton
+
+} // Конец всего класса ProfileFragment
