@@ -6,8 +6,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@color/backgroundDark" 
-    android:paddingTop="86dp" 
-    android:clipToPadding="false"> 
+    android:paddingTop="10dp"> 
     
     <!-- Выпадающий список (Spinner) -->
     <LinearLayout

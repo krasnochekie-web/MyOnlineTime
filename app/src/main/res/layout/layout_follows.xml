@@ -5,9 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/backgroundDark" 
-    android:paddingTop="86dp"
-    android:clipToPadding="false"
+    android:background="@color/backgroundDark"
     android:scrollbars="none">
     
     <!-- Контейнер с вкладками (Подписчики / Подписки) -->
