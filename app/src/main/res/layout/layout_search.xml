@@ -5,10 +5,8 @@
     android:orientation="vertical"
     android:background="@color/backgroundDark"
     android:paddingTop="@dimen/header_clearance"
-    android:clipToPadding="false"
+    android:clipToPadding="false">
 
-
-    <!-- Поле поиска -->
     <EditText
         android:id="@+id/search_input"
         android:layout_width="match_parent"
