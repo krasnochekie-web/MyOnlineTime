@@ -93,6 +93,36 @@ public class ProfileFragment extends Fragment {
                 btnExpand.setVisibility(View.GONE);
             }
         });
+        // Логика кнопок "развернуть" и "свернуть"
+        final android.widget.ImageView btnExpand = view.findViewById(R.id.btn_expand_apps);
+        final android.widget.ImageView btnCollapse = view.findViewById(R.id.btn_collapse_apps);
+        final android.widget.LinearLayout appsContainerLocal = view.findViewById(R.id.profile_apps_container);
+        
+        // Нажали "развернуть"
+        btnExpand.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // Показываем все
+                for (int i = 0; i < appsContainerLocal.getChildCount(); i++) {
+                    appsContainerLocal.getChildAt(i).setVisibility(View.VISIBLE);
+                }
+                btnExpand.setVisibility(View.GONE);
+                btnCollapse.setVisibility(View.VISIBLE); // Показываем минус
+            }
+        });
+
+        // Нажали "свернуть"
+        btnCollapse.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // Прячем всё после третьего
+                for (int i = 3; i < appsContainerLocal.getChildCount(); i++) {
+                    appsContainerLocal.getChildAt(i).setVisibility(View.GONE);
+                }
+                btnCollapse.setVisibility(View.GONE);
+                btnExpand.setVisibility(View.VISIBLE); // Возвращаем 3 полоски
+            }
+        });
 
         // Внимание: FollowsScreen пока остался старым экраном, мы его не трогали
         followersClick.setOnClickListener(new View.OnClickListener() { 

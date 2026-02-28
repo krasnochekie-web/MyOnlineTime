@@ -210,17 +210,20 @@
             android:textStyle="bold"
             android:visibility="gone" />
 
-        <!-- ВКЛАДКИ (Без линий, цвет подтягивается из твоего грейпфрутового селектора) -->
+        <!-- ВКЛАДКИ (На серой подложке-таблетке) -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="48dp"
             android:layout_marginTop="24dp"
             android:layout_marginBottom="16dp"
+            android:layout_marginLeft="16dp"
+            android:layout_marginRight="16dp"
+            android:background="@drawable/bg_tabs_container"
             android:orientation="horizontal">
 
             <LinearLayout
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:gravity="center">
                 <TextView
@@ -235,7 +238,7 @@
 
             <LinearLayout
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:gravity="center">
                 <TextView
@@ -265,6 +268,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical" />
 
+            <!-- КНОПКА "РАЗВЕРНУТЬ" (3 полоски) -->
             <ImageView
                 android:id="@+id/btn_expand_apps"
                 android:layout_width="match_parent"
@@ -274,6 +278,18 @@
                 android:src="@android:drawable/ic_menu_sort_by_size"
                 android:tint="@color/textGray"
                 android:visibility="gone" />
+
+            <!-- КНОПКА "СВЕРНУТЬ" (1 полоска / минус) -->
+            <ImageView
+                android:id="@+id/btn_collapse_apps"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:background="?android:attr/selectableItemBackground"
+                android:padding="16dp"
+                android:src="@android:drawable/btn_minus"
+                android:tint="@color/textGray"
+                android:visibility="gone" />
+
         </LinearLayout>
 
     </LinearLayout>
