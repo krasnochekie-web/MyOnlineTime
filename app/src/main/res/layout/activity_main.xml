@@ -15,7 +15,7 @@
         android:paddingLeft="16dp"
         android:paddingRight="16dp"
         android:paddingBottom="12dp"
-        android:paddingTop="36dp" <!-- ВОТ ОН! Огромный отступ сверху для статус-бара -->
+        android:paddingTop="36dp"
         android:elevation="0dp">
 
         <!-- Кнопка НАЗАД (Слева, прижата к низу) -->
