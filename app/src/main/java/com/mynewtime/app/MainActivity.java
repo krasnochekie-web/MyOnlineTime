@@ -75,12 +75,21 @@ public class MainActivity extends AppCompatActivity {
     public String vpsToken = null;
     public com.mynewtime.app.utils.AppNavigator navigator;
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        Window w = getWindow();
-        w.setFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
-        setContentView(R.layout.activity_main);
+@Override
+protected void onCreate(Bundle savedInstanceState) {
+    super.onCreate(savedInstanceState);
+
+    // --- ПРАВИЛЬНЫЙ СПОСОБ ЗАЛЕЗТЬ ПОД СТАТУС-БАР ---
+    Window window = getWindow();
+    // Говорим окну рисоваться под системными панелями
+    window.getDecorView().setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE 
+            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+    // Делаем сам статус-бар полностью прозрачным
+    window.setStatusBarColor(android.graphics.Color.TRANSPARENT);
+    // ------------------------------------------------
+
+    setContentView(R.layout.activity_main);
     navigator = new com.mynewtime.app.utils.AppNavigator(this, R.id.fragment_container);
          mainRoot = findViewById(R.id.main_root);
 

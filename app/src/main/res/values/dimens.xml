@@ -1,4 +1,4 @@
 <resources>
     <!-- Глобальный отступ под шапку для всех экранов -->
-    <dimen name="header_clearance">58dp</dimen> 
+    <dimen name="header_clearance">16dp</dimen> 
 </resources>
