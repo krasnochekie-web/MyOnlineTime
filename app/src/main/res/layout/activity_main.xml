@@ -21,8 +21,8 @@
         fitsSystemWindows="true"
         android:paddingLeft="32dp"
         android:paddingRight="24dp"
-        android:paddingBottom="12dp"
-        android:paddingTop="28dp" 
+        android:paddingBottom="20dp"
+        android:paddingTop="20dp" 
         android:elevation="0dp">
 
         <!-- Кнопка НАЗАД (Строго у левого края шапки) -->
@@ -32,6 +32,7 @@
             android:layout_height="24dp"
             android:layout_alignParentLeft="true"
             android:layout_centerVertical="true"
+            android:translationY="8dp"
             android:src="@drawable/ic_math_arrow"
             android:tint="@color/textWhite"
             android:visibility="gone"
@@ -44,6 +45,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_centerInParent="true" 
+            android:translationY="8dp" 
             android:gravity="center"
             android:background="@drawable/bg_title_border"
             android:text="@string/app_name"
@@ -57,6 +59,7 @@
             android:layout_height="28dp"
             android:layout_alignParentRight="true"
             android:layout_centerVertical="true"
+            android:translationY="8dp" 
             android:src="@drawable/ic_settings"
             android:tint="@color/textWhite"/>
 
