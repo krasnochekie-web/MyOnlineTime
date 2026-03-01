@@ -21,8 +21,8 @@
         fitsSystemWindows="true"
         android:paddingLeft="32dp"
         android:paddingRight="24dp"
-        android:paddingBottom="20dp"
-        android:paddingTop="20dp" 
+        android:paddingBottom="12dp"
+        android:paddingTop="28dp" 
         android:elevation="0dp">
 
         <!-- Кнопка НАЗАД (Строго у левого края шапки) -->
