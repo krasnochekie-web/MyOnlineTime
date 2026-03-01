@@ -24,7 +24,7 @@
         <!-- Внутренняя "чистая" зона (Здесь нет системных часов, высота фиксирована) -->
         <RelativeLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"  <!-- Классическая высота красивой шапки -->
+            android:layout_height="56dp"
             android:paddingLeft="32dp"
             android:paddingRight="24dp">
 
@@ -64,7 +64,7 @@
                 android:tint="@color/textWhite"/>
 
         </RelativeLayout>
-
+</LinearLayout>
     <!-- НИЖНЕЕ МЕНЮ НАВИГАЦИИ -->
     <LinearLayout
         android:id="@+id/bottom_nav_container"
