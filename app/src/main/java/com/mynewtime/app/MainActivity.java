@@ -264,12 +264,6 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
         });
         container.addView(view);
     }
-public void hideLoginScreen() {
-    // Находим экран по нашему тегу
-    View loginView = container.findViewWithTag("login_screen_overlay");
-    if (loginView != null) {
-        container.removeView(loginView); // Удаляем его!
-    }
 }
 
     @Override
