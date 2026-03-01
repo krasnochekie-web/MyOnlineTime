@@ -8,6 +8,9 @@
     android:background="@color/backgroundDark" 
     android:paddingTop="@dimen/header_clearance"
     android:clipToPadding="false"
+    android:paddingBottom="30dp">
+    android:clipToPadding="false"
+
 > 
     
     <!-- Выпадающий список (Spinner) -->

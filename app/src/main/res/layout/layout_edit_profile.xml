@@ -133,7 +133,7 @@
             <Button
                 android:id="@+id/edit_btn_back_bottom"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="24dp"
                 android:text="@string/btn_cancel"
                 android:background="@null"
                 android:textColor="@color/textGray" 

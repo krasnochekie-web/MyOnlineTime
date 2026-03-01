@@ -11,46 +11,39 @@
         android:id="@+id/fragment_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
-    <!-- ШАПКА ПРИЛОЖЕНИЯ (Стабильный LinearLayout) -->
-    <LinearLayout
+    <!-- ШАПКА ПРИЛОЖЕНИЯ (Идеально отцентрированная) -->
+    <RelativeLayout
         android:id="@+id/app_header"
         android:clipToOutline="true"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_gradient_header"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
         fitsSystemWindows="true"
         android:paddingLeft="32dp"
-        android:paddingRight="20dp"
-        android:paddingBottom="10dp"
+        android:paddingRight="24dp"
+        android:paddingBottom="8dp"
         android:paddingTop="22dp" 
         android:elevation="0dp">
 
-        <!-- Кнопка НАЗАД (Скрыта по умолчанию) -->
+        <!-- Кнопка НАЗАД (Строго у левого края шапки) -->
         <ImageView
             android:id="@+id/header_back_btn"
             android:layout_width="24dp"
             android:layout_height="24dp"
+            android:layout_alignParentLeft="true"
+            android:layout_centerVertical="true"
             android:src="@drawable/ic_math_arrow"
             android:tint="@color/textWhite"
             android:visibility="gone"
             android:clickable="true"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:layout_marginRight="32dp"/>
+            android:background="?android:attr/selectableItemBackgroundBorderless"/>
 
-        <!-- БЕЗОПАСНАЯ РАСПОРКА 1 (Толкает текст в центр) -->
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1" />
-
-        <!-- ЗАГОЛОВОК (По центру, узкий) -->
+        <!-- ЗАГОЛОВОК (Железно по центру) -->
         <TextView
             android:id="@+id/header_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginLeft="10dp"
+            android:layout_centerInParent="true" 
             android:gravity="center"
             android:background="@drawable/bg_title_border"
             android:text="@string/app_name"
@@ -58,21 +51,16 @@
             android:textStyle="bold"
             android:textColor="@color/textWhite"/>
 
-        <!-- БЕЗОПАСНАЯ РАСПОРКА 2 (Толкает настройки вправо) -->
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1" />
-
-        <!-- Иконка Настройки (В правом углу) -->
+        <!-- Иконка Настройки (Строго у правого края шапки) -->
         <ImageView
             android:layout_width="28dp"
             android:layout_height="28dp"
+            android:layout_alignParentRight="true"
+            android:layout_centerVertical="true"
             android:src="@drawable/ic_settings"
-            android:tint="@color/textWhite"
-            android:layout_marginLeft="16dp"/>
+            android:tint="@color/textWhite"/>
 
-    </LinearLayout>
+    </RelativeLayout>
 
     <!-- НИЖНЕЕ МЕНЮ НАВИГАЦИИ -->
     <LinearLayout
@@ -92,7 +80,7 @@
         <LinearLayout 
             android:id="@+id/nav_feed" 
             android:layout_width="0dp" 
-            android:layout_height="36dp" 
+            android:layout_height="56dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
@@ -121,7 +109,7 @@
         <LinearLayout 
             android:id="@+id/nav_search" 
             android:layout_width="0dp" 
-            android:layout_height="36dp" 
+            android:layout_height="56dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
@@ -149,7 +137,7 @@
         <!-- Вкладка 3: Центральная кнопка (+) -->
         <LinearLayout 
             android:layout_width="0dp" 
-            android:layout_height="36dp" 
+            android:layout_height="56dp" 
             android:layout_weight="1" 
             android:gravity="center">
 
@@ -172,7 +160,7 @@
         <LinearLayout 
             android:id="@+id/nav_usage" 
             android:layout_width="0dp" 
-            android:layout_height="36dp" 
+            android:layout_height="56dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
@@ -201,7 +189,7 @@
         <LinearLayout 
             android:id="@+id/nav_profile" 
             android:layout_width="0dp" 
-            android:layout_height="36dp" 
+            android:layout_height="56dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
