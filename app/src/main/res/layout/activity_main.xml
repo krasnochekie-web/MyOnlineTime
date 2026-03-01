@@ -40,8 +40,6 @@
                 android:visibility="gone"
                 android:clickable="true"
                 android:background="?android:attr/selectableItemBackgroundBorderless"/>
-
-            <!-- ЗАГОЛОВОК (Слева, без рамки,             <!-- ЗАГОЛОВОК (Умное позиционирование) -->
             <TextView
                 android:id="@+id/header_title"
                 android:layout_width="wrap_content"
@@ -50,7 +48,6 @@
                 android:layout_alignParentLeft="true"
                 android:layout_toRightOf="@+id/header_back_btn" 
                 android:layout_marginLeft="4dp"
-                
                 android:text="@string/app_name"
                 android:textSize="12sp"
                 android:textStyle="bold"
