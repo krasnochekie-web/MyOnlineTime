@@ -23,8 +23,8 @@
         fitsSystemWindows="true"
         android:paddingLeft="32dp"
         android:paddingRight="20dp"
-        android:paddingBottom="24dp"
-        android:paddingTop="12dp" 
+        android:paddingBottom="16dp"
+        android:paddingTop="16dp" 
         android:elevation="0dp">
 
         <!-- Кнопка НАЗАД (Скрыта по умолчанию) -->
@@ -37,7 +37,7 @@
             android:visibility="gone"
             android:clickable="true"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:layout_marginRight="16dp"/>
+            android:layout_marginRight="32dp"/>
 
         <!-- БЕЗОПАСНАЯ РАСПОРКА 1 (Толкает текст в центр) -->
         <Space
@@ -83,15 +83,15 @@
         android:background="#1E1E1E"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingBottom="24dp" 
+        android:paddingBottom="5dp" 
         android:baselineAligned="false"
-        android:elevation="0dp">
+        android:elevation="16dp">
 
         <!-- Вкладка 1: Лента -->
         <LinearLayout 
             android:id="@+id/nav_feed" 
             android:layout_width="0dp" 
-            android:layout_height="24dp" 
+            android:layout_height="36dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
@@ -120,7 +120,7 @@
         <LinearLayout 
             android:id="@+id/nav_search" 
             android:layout_width="0dp" 
-            android:layout_height="24dp" 
+            android:layout_height="36dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
@@ -148,7 +148,7 @@
         <!-- Вкладка 3: Центральная кнопка (+) -->
         <LinearLayout 
             android:layout_width="0dp" 
-            android:layout_height="24dp" 
+            android:layout_height="36dp" 
             android:layout_weight="1" 
             android:gravity="center">
 
@@ -171,7 +171,7 @@
         <LinearLayout 
             android:id="@+id/nav_usage" 
             android:layout_width="0dp" 
-            android:layout_height="24dp" 
+            android:layout_height="36dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
@@ -200,7 +200,7 @@
         <LinearLayout 
             android:id="@+id/nav_profile" 
             android:layout_width="0dp" 
-            android:layout_height="24dp" 
+            android:layout_height="36dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
