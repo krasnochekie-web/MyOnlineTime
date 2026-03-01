@@ -64,7 +64,6 @@
                 android:tint="@color/textWhite"/>
 
         </RelativeLayout>
-    </LinearLayout>
 
     <!-- НИЖНЕЕ МЕНЮ НАВИГАЦИИ -->
     <LinearLayout
