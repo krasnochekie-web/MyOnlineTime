@@ -264,7 +264,6 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
         });
         container.addView(view);
     }
-}
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
