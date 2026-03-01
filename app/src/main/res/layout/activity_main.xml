@@ -11,59 +11,60 @@
         android:id="@+id/fragment_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
-    <!-- ШАПКА ПРИЛОЖЕНИЯ (Идеально отцентрированная) -->
-    <RelativeLayout
+    <LinearLayout
         android:id="@+id/app_header"
         android:clipToOutline="true"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_gradient_header"
+        android:orientation="vertical"
         fitsSystemWindows="true"
-        android:paddingLeft="32dp"
-        android:paddingRight="24dp"
-        android:paddingBottom="14dp"
-        android:paddingTop="4dp" 
         android:elevation="0dp">
 
-        <!-- Кнопка НАЗАД (Строго у левого края шапки) -->
-        <ImageView
-            android:id="@+id/header_back_btn"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_alignParentLeft="true"
-            android:layout_centerVertical="true"
-            android:translationY="8dp"
-            android:src="@drawable/ic_math_arrow"
-            android:tint="@color/textWhite"
-            android:visibility="gone"
-            android:clickable="true"
-            android:background="?android:attr/selectableItemBackgroundBorderless"/>
+        <!-- Внутренняя "чистая" зона (Здесь нет системных часов, высота фиксирована) -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"  <!-- Классическая высота красивой шапки -->
+            android:paddingLeft="32dp"
+            android:paddingRight="24dp">
 
-        <!-- ЗАГОЛОВОК (Железно по центру) -->
-        <TextView
-            android:id="@+id/header_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_centerInParent="true" 
-            android:translationY="8dp" 
-            android:gravity="center"
-            android:background="@drawable/bg_title_border"
-            android:text="@string/app_name"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:textColor="@color/textWhite"/>
+            <!-- Кнопка НАЗАД -->
+            <ImageView
+                android:id="@+id/header_back_btn"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_alignParentLeft="true"
+                android:layout_centerVertical="true"
+                android:src="@drawable/ic_math_arrow"
+                android:tint="@color/textWhite"
+                android:visibility="gone"
+                android:clickable="true"
+                android:background="?android:attr/selectableItemBackgroundBorderless"/>
 
-        <!-- Иконка Настройки (Строго у правого края шапки) -->
-        <ImageView
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:layout_alignParentRight="true"
-            android:layout_centerVertical="true"
-            android:translationY="8dp" 
-            android:src="@drawable/ic_settings"
-            android:tint="@color/textWhite"/>
+            <!-- ЗАГОЛОВОК (Никогда не обрежется!) -->
+            <TextView
+                android:id="@+id/header_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true" 
+                android:gravity="center"
+                android:background="@drawable/bg_title_border"
+                android:text="@string/app_name"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/textWhite"/>
 
-    </RelativeLayout>
+            <!-- Иконка Настройки -->
+            <ImageView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_alignParentRight="true"
+                android:layout_centerVertical="true"
+                android:src="@drawable/ic_settings"
+                android:tint="@color/textWhite"/>
+
+        </RelativeLayout>
+    </LinearLayout>
 
     <!-- НИЖНЕЕ МЕНЮ НАВИГАЦИИ -->
     <LinearLayout
