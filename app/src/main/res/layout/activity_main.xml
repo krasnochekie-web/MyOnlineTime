@@ -21,8 +21,8 @@
         fitsSystemWindows="true"
         android:paddingLeft="32dp"
         android:paddingRight="24dp"
-        android:paddingBottom="8dp"
-        android:paddingTop="22dp" 
+        android:paddingBottom="4dp"
+        android:paddingTop="30dp" 
         android:elevation="0dp">
 
         <!-- Кнопка НАЗАД (Строго у левого края шапки) -->
@@ -80,7 +80,7 @@
         <LinearLayout 
             android:id="@+id/nav_feed" 
             android:layout_width="0dp" 
-            android:layout_height="56dp" 
+            android:layout_height="46dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
@@ -109,7 +109,7 @@
         <LinearLayout 
             android:id="@+id/nav_search" 
             android:layout_width="0dp" 
-            android:layout_height="56dp" 
+            android:layout_height="46dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
@@ -137,7 +137,7 @@
         <!-- Вкладка 3: Центральная кнопка (+) -->
         <LinearLayout 
             android:layout_width="0dp" 
-            android:layout_height="56dp" 
+            android:layout_height="46dp" 
             android:layout_weight="1" 
             android:gravity="center">
 
@@ -160,7 +160,7 @@
         <LinearLayout 
             android:id="@+id/nav_usage" 
             android:layout_width="0dp" 
-            android:layout_height="56dp" 
+            android:layout_height="46dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
@@ -189,7 +189,7 @@
         <LinearLayout 
             android:id="@+id/nav_profile" 
             android:layout_width="0dp" 
-            android:layout_height="56dp" 
+            android:layout_height="46dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
