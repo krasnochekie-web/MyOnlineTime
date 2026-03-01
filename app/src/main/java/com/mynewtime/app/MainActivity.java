@@ -219,41 +219,51 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
         headerTitle.setTextSize(22);
         headerBackBtn.setVisibility(View.GONE);
     }
-private void checkAuthAndLoad(int tabIndex) {
-    GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
-    if (account == null) {
-        showLoginScreen(); // Показываем
-    } else {
-        hideLoginScreen(); // СКРЫВАЕМ ЗАГЛУШКУ, если авторизован!
-        if (tabIndex == 1) navigator.switchScreen(1, null); 
-        if (tabIndex == 4) {
-            resetHeader();
-            StatsHelper.syncUserProfile(MainActivity.this);
-            navigator.switchScreen(4, account.getId()); 
+
+    private void checkAuthAndLoad(int tabIndex) {
+        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+        if (account == null) {
+            showLoginScreen(); // Показываем
+        } else {
+            hideLoginScreen(); // СКРЫВАЕМ ЗАГЛУШКУ, если авторизован!
+            if (tabIndex == 1) navigator.switchScreen(1, null); 
+            if (tabIndex == 4) {
+                resetHeader();
+                StatsHelper.syncUserProfile(MainActivity.this);
+                navigator.switchScreen(4, account.getId()); 
+            }
+        }
+    } // <--- ВОТ ЭТА СКОБКА БЫЛА ПОТЕРЯНА! ОНА ЗАКРЫВАЕТ checkAuthAndLoad
+
+    // НОВЫЙ МЕТОД (Чтобы заглушка не зависала)
+    public void hideLoginScreen() {
+        View loginView = container.findViewWithTag("login_screen_overlay");
+        if (loginView != null) {
+            container.removeView(loginView); 
         }
     }
 
+    // ВАШ МЕТОД (С добавленным тегом)
+    public void showLoginScreen() {
+        mainHeader.setVisibility(View.VISIBLE);
+        resetHeader();
+        
+        // Проверяем по тегу, нет ли уже заглушки на экране
+        if (container.findViewWithTag("login_screen_overlay") != null) return; 
 
-public void showLoginScreen() {
-    mainHeader.setVisibility(View.VISIBLE);
-    resetHeader();
-    
-    // Ищем, нет ли уже такого экрана (по тегу)
-    if (container.findViewWithTag("login_screen_overlay") != null) return; 
+        View view = getLayoutInflater().inflate(R.layout.layout_login_required, container, false);
+        view.setBackgroundColor(0xCC000000);
+        view.setClickable(true);
+        view.setTag("login_screen_overlay"); // ДОБАВИЛИ ТЕГ
 
-    View view = getLayoutInflater().inflate(R.layout.layout_login_required, container, false);
-    view.setBackgroundColor(0xCC000000);
-    view.setClickable(true);
-    view.setTag("login_screen_overlay"); // ДОБАВЛЯЕМ ТЕГ!
-
-    Button btn = (Button) view.findViewById(R.id.btn_login_center);
-    btn.setOnClickListener(new View.OnClickListener() {
-        public void onClick(View v) {
-            startActivityForResult(mGoogleSignInClient.getSignInIntent(), RC_SIGN_IN);
-        }
-    });
-    container.addView(view);
-}
+        Button btn = (Button) view.findViewById(R.id.btn_login_center);
+        btn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                startActivityForResult(mGoogleSignInClient.getSignInIntent(), RC_SIGN_IN);
+            }
+        });
+        container.addView(view);
+    }
 public void hideLoginScreen() {
     // Находим экран по нашему тегу
     View loginView = container.findViewWithTag("login_screen_overlay");
