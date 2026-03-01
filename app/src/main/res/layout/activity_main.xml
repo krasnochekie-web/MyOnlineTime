@@ -24,7 +24,7 @@
         <!-- Внутренняя "чистая" зона (Здесь нет системных часов, высота фиксирована) -->
         <RelativeLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"
+            android:layout_height="70dp"
             android:paddingLeft="32dp"
             android:paddingRight="24dp">
 
