@@ -9,6 +9,7 @@
     <!-- ШАПКА ПРИЛОЖЕНИЯ (Стабильный LinearLayout) -->
     <LinearLayout
         android:id="@+id/app_header"
+        android:clipToOutline="true"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_gradient_header"

@@ -126,12 +126,4 @@ if (cachedAvatar != null && avatarPreview != null) {
 
         return view;
     }
-    @Override
-    public void onResume() {
-        super.onResume();
-        // Красим заднюю стену в темно-серый
-        if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).setAppBackground("#121212"); 
-        }
-    }
 }

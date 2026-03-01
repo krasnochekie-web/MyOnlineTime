@@ -352,13 +352,5 @@ if (cachedAvatar != null) {
             btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textWhite));
         }
     } // Конец метода updateFollowButton
-    @Override
-    public void onResume() {
-        super.onResume();
-        // Красим заднюю стену обратно в желтый
-        if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).setAppBackground("#FFFFE0"); // Вставьте ваш желтый код!
-        }
-    }
 
 } // Конец всего класса ProfileFragment

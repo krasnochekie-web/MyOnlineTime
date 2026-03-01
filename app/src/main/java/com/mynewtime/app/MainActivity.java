@@ -109,7 +109,29 @@ protected void onCreate(Bundle savedInstanceState) {
         mGoogleSignInClient = GoogleSignIn.getClient(this, gso);
 
         container = (FrameLayout) findViewById(R.id.fragment_container);
-        mainHeader = findViewById(R.id.app_header);
+// Находим шапку (у вас это уже есть)
+mainHeader = findViewById(R.id.app_header);
+
+// --- ДОБАВЛЯЕМ КОД ДЛЯ СКРУГЛЕНИЯ ШАПКИ ---
+// Переводим 24dp (радиус скругления) в пиксели для экрана пользователя
+final float cornerRadius = 24f * getResources().getDisplayMetrics().density;
+
+// Назначаем провайдер контура
+mainHeader.setOutlineProvider(new android.view.ViewOutlineProvider() {
+    @Override
+    public void getOutline(View view, android.graphics.Outline outline) {
+        // Создаем прямоугольник со скругленными углами.
+        // Хитрость: мы увеличиваем высоту на размер радиуса, 
+        // чтобы скруглились только нижние углы, а верхние остались прямыми.
+        outline.setRoundRect(
+            0, 
+            0, 
+            view.getWidth(), 
+            (int) (view.getHeight() + cornerRadius), 
+            cornerRadius
+        );
+    }
+});
         headerTitle = (TextView) findViewById(R.id.header_title);
         headerBackBtn = (ImageView) findViewById(R.id.header_back_btn);
         bottomNav = (View) findViewById(R.id.bottom_nav_container);
@@ -318,31 +340,19 @@ protected void onCreate(Bundle savedInstanceState) {
     private void updateNavState(int index) {
         currentTab = index;
         mainHeader.setVisibility(View.VISIBLE);
+        mainHeader.bringToFront(); 
         bottomNav.setVisibility(View.VISIBLE);
 
-        // --- УПРАВЛЕНИЕ МОНОЛИТНЫМ ФОНОМ ---
-        if (index == 4) {
-            // Если открыт профиль (индекс 4), красим заднюю стену в светло-желтый.
-            // (Замените #FFFFE0 на свой точный код желтого цвета, если нужно)
-            setAppBackground("#FFF9C4"); 
-        } else {
-            // Для всех остальных экранов (Лента, Поиск, Время) возвращаем темно-серый
-            setAppBackground("#121212"); 
-        }
-
-        // --- УПРАВЛЕНИЕ ИКОНКАМИ НИЖНЕГО МЕНЮ ---
-        // Этот код автоматически применяет ваш цвет Primary Grapefruit активной вкладке
+        // Этот код автоматически применяет нужный цвет из твоего XML файла
         iconFeed.setSelected(index == 0);
         textFeed.setSelected(index == 0);
-        
+
         iconSearch.setSelected(index == 1);
         textSearch.setSelected(index == 1);
-        
-        // Индекс 2 - это центральная кнопка "Плюс", она всегда одинаковая, поэтому ее тут нет
-        
+
         iconUsage.setSelected(index == 3);
         textUsage.setSelected(index == 3);
-        
+
         iconProfile.setSelected(index == 4);
         textProfile.setSelected(index == 4);
     }
@@ -371,15 +381,5 @@ protected void onCreate(Bundle savedInstanceState) {
             }
         });
         return cleanList;
-    }
-    // Этот метод будет красить фон приложения в любой нужный цвет
-    public void setAppBackground(String hexColor) {
-        if (mainRoot != null) {
-            try {
-                mainRoot.setBackgroundColor(android.graphics.Color.parseColor(hexColor));
-            } catch (Exception e) {
-                mainRoot.setBackgroundColor(android.graphics.Color.parseColor("#121212")); // Цвет по умолчанию при ошибке
-            }
-        }
     }
 } 
