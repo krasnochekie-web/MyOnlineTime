@@ -5,5 +5,5 @@
     <color name="cardDark">#1E1E1E</color>
     <color name="textWhite">#FFFFFF</color>
     <color name="textGray">#AAAAAA</color>
-    <color name="burgundyRed">#800020</color> <!-- Пример красивого бордового, можете вписать свой HEX -->
+    <color name="burgundyRed">#FA8072</color> <!-- Пример красивого бордового, можете вписать свой HEX -->
 </resources>
