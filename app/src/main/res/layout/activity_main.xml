@@ -22,7 +22,7 @@
         android:paddingLeft="32dp"
         android:paddingRight="24dp"
         android:paddingBottom="0dp"
-        android:paddingTop="32dp" 
+        android:paddingTop="16dp" 
         android:elevation="0dp">
 
         <!-- Кнопка НАЗАД (Строго у левого края шапки) -->
