@@ -167,10 +167,10 @@
             <ImageView
                 android:id="@+id/btn_edit_profile"
                 android:layout_width="32dp"
-                android:layout_height="8dp"
+                android:layout_height="32dp"
                 android:layout_alignParentRight="true"
                 android:layout_marginTop="56dp"
-                android:layout_marginRight="16dp"
+                android:layout_marginRight="8dp"
                 android:background="@drawable/bg_edit_circle"
                 android:clickable="true"
                 android:padding="6dp"
