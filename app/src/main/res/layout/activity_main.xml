@@ -73,7 +73,8 @@
         android:id="@+id/fragment_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_above="@+id/bottom_nav_container" />
+        android:layout_above="@+id/bottom_nav_container" 
+        android:layout_below="@+id/app_header"/>
 
     <!-- НИЖНЕЕ МЕНЮ НАВИГАЦИИ -->
     <LinearLayout
