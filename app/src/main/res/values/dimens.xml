@@ -3,5 +3,5 @@
     <dimen name="header_clearance">86dp</dimen> 
 
     <!-- ДОБАВЬТЕ ЭТУ СТРОЧКУ ДЛЯ НИЖНЕГО МЕНЮ: -->
-    <dimen name="bottom_nav_clearance">80dp</dimen> 
+    <dimen name="bottom_nav_clearance">70dp</dimen> 
 </resources>
