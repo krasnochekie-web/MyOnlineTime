@@ -265,39 +265,42 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
         container.addView(view);
     }
 }
-
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        
+        // --- 1. ОБРАБОТКА ВХОДА ЧЕРЕЗ GOOGLE ---
         if (requestCode == RC_SIGN_IN) {
             Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
-            try { 
+            try {
                 final GoogleSignInAccount acct = task.getResult(ApiException.class);
                 VpsApi.authenticateWithGoogle(acct.getIdToken(), new VpsApi.LoginCallback() {
                     @Override
                     public void onSuccess(String ourServerToken) {
                         vpsToken = ourServerToken;
-                        updateNavState(4); 
+                        updateNavState(4);
                         StatsHelper.syncUserProfile(MainActivity.this);
-                        navigator.switchScreen(4, acct.getId()); // Вот эта строчка поменялась!
+                        navigator.switchScreen(4, acct.getId()); 
                     }
-                    @Override public void onError(String error) { 
-                        Toast.makeText(MainActivity.this, getString(R.string.err_server) + error, Toast.LENGTH_SHORT).show(); 
+                    @Override
+                    public void onError(String error) {
+                        Toast.makeText(MainActivity.this, getString(R.string.err_server) + error, Toast.LENGTH_SHORT).show();
                     }
                 });
-            } catch (ApiException e) { 
-                Toast.makeText(this, getString(R.string.err_login_failed), Toast.LENGTH_SHORT).show(); 
+            } catch (ApiException e) {
+                Toast.makeText(this, getString(R.string.err_login_failed), Toast.LENGTH_SHORT).show();
             }
         }
 
+        // --- 2. ОБРАБОТКА ВЫБОРА АВАТАРКИ ---
         if (requestCode == RC_PICK_IMAGE && resultCode == RESULT_OK && data != null) {
             try {
                 InputStream inputStream = getContentResolver().openInputStream(data.getData());
                 Bitmap bitmap = BitmapFactory.decodeStream(inputStream);
-                Bitmap scaled = Bitmap.createScaledBitmap(bitmap, 256, 256, true); 
-                
+                Bitmap scaled = Bitmap.createScaledBitmap(bitmap, 256, 256, true);
                 final GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
                 if (acct == null) return;
+                
                 String filename = "avatar_" + acct.getId() + ".png";
                 FileOutputStream outputStream = openFileOutput(filename, MODE_PRIVATE);
                 scaled.compress(Bitmap.CompressFormat.JPEG, 70, outputStream);
@@ -306,11 +309,10 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
                 
                 mMemoryCache.put("avatar_" + acct.getId(), scaled);
                 
-                // СТАЛО:
                 ImageView preview = (ImageView) findViewById(R.id.edit_avatar_preview);
                 if (preview != null) {
                     Glide.with(MainActivity.this).load(scaled).circleCrop().into(preview);
-                  }
+                }
                 
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 scaled.compress(Bitmap.CompressFormat.JPEG, 70, baos);
@@ -321,24 +323,29 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
                     public void onSuccess(String token) {
                         vpsToken = token;
                         VpsApi.saveUser(vpsToken, null, null, base64, 0, null, new VpsApi.Callback() {
-                            @Override public void onSuccess(String s) {
+                            @Override
+                            public void onSuccess(String s) {
                                 Toast.makeText(MainActivity.this, getString(R.string.msg_avatar_saved), Toast.LENGTH_SHORT).show();
                             }
-                            @Override public void onError(String s) {
+                            @Override
+                            public void onError(String s) {
                                 Toast.makeText(MainActivity.this, getString(R.string.err_server) + s, Toast.LENGTH_LONG).show();
                             }
                         });
                     }
-                    @Override public void onError(String e) {
+                    @Override
+                    public void onError(String e) {
                         Toast.makeText(MainActivity.this, getString(R.string.err_auth) + e, Toast.LENGTH_LONG).show();
                     }
                 });
-            } catch (Exception e) { 
-                e.printStackTrace(); 
+            } catch (Exception e) {
+                e.printStackTrace();
                 Toast.makeText(MainActivity.this, getString(R.string.err_image_processing), Toast.LENGTH_SHORT).show();
             }
         }
-    }
+    } // <-- Конец метода onActivityResult
+
+    // Дальше должен идти ваш следующий метод, например loadCustomAvatar...
 
     private void loadCustomAvatar(ImageView imageView, String uid) {
         try {
