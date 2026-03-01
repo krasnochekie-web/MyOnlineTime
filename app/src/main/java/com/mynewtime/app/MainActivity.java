@@ -146,15 +146,26 @@ mainHeader.setOutlineProvider(new android.view.ViewOutlineProvider() {
         textUsage = (TextView) findViewById(R.id.text_usage); 
         textProfile = (TextView) findViewById(R.id.text_profile);
 
-        findViewById(R.id.nav_feed).setOnClickListener(new View.OnClickListener() { 
-            public void onClick(View v) { updateNavState(0); navigator.switchScreen(0, null); resetHeader(); }
-        });
+findViewById(R.id.nav_feed).setOnClickListener(new View.OnClickListener() {
+    public void onClick(View v) {
+        hideLoginScreen(); // СКРЫВАЕМ ЗАГЛУШКУ
+        updateNavState(0);
+        navigator.switchScreen(0, null);
+        resetHeader();
+    }
+});
+
         findViewById(R.id.nav_search).setOnClickListener(new View.OnClickListener() { 
             public void onClick(View v) { updateNavState(1); checkAuthAndLoad(1); }
         });
-        findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() { 
-            public void onClick(View v) { updateNavState(3); navigator.switchScreen(3, null); resetHeader(); }
-        });
+findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
+    public void onClick(View v) {
+        hideLoginScreen(); // СКРЫВАЕМ ЗАГЛУШКУ
+        updateNavState(3);
+        navigator.switchScreen(3, null);
+        resetHeader();
+    }
+});
         findViewById(R.id.nav_profile).setOnClickListener(new View.OnClickListener() { 
             public void onClick(View v) { updateNavState(4); checkAuthAndLoad(4); }
         });
@@ -208,38 +219,48 @@ mainHeader.setOutlineProvider(new android.view.ViewOutlineProvider() {
         headerTitle.setTextSize(22);
         headerBackBtn.setVisibility(View.GONE);
     }
-    private void checkAuthAndLoad(int tabIndex) {
-        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
-        if (account == null) {
-            showLoginScreen();
-        } else {
-            if (tabIndex == 1) navigator.switchScreen(1, null); // Изменили тут
-            if (tabIndex == 4) {
-                resetHeader();
-                StatsHelper.syncUserProfile(MainActivity.this); 
-                navigator.switchScreen(4, account.getId()); // И тут
-            }
+private void checkAuthAndLoad(int tabIndex) {
+    GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+    if (account == null) {
+        showLoginScreen(); // Показываем
+    } else {
+        hideLoginScreen(); // СКРЫВАЕМ ЗАГЛУШКУ, если авторизован!
+        if (tabIndex == 1) navigator.switchScreen(1, null); 
+        if (tabIndex == 4) {
+            resetHeader();
+            StatsHelper.syncUserProfile(MainActivity.this);
+            navigator.switchScreen(4, account.getId()); 
         }
     }
 
-    public void showLoginScreen() {
-        mainHeader.setVisibility(View.VISIBLE);
-        resetHeader();
-        
-        if (container.findViewById(R.id.btn_login_center) != null) return;
-        
-        View view = getLayoutInflater().inflate(R.layout.layout_login_required, container, false);
-        view.setBackgroundColor(0xCC000000); 
-        view.setClickable(true); 
-        
-        Button btn = (Button) view.findViewById(R.id.btn_login_center);
-        btn.setOnClickListener(new View.OnClickListener() { 
-            public void onClick(View v) { 
-                startActivityForResult(mGoogleSignInClient.getSignInIntent(), RC_SIGN_IN); 
-            }
-        });
-        container.addView(view);
+
+public void showLoginScreen() {
+    mainHeader.setVisibility(View.VISIBLE);
+    resetHeader();
+    
+    // Ищем, нет ли уже такого экрана (по тегу)
+    if (container.findViewWithTag("login_screen_overlay") != null) return; 
+
+    View view = getLayoutInflater().inflate(R.layout.layout_login_required, container, false);
+    view.setBackgroundColor(0xCC000000);
+    view.setClickable(true);
+    view.setTag("login_screen_overlay"); // ДОБАВЛЯЕМ ТЕГ!
+
+    Button btn = (Button) view.findViewById(R.id.btn_login_center);
+    btn.setOnClickListener(new View.OnClickListener() {
+        public void onClick(View v) {
+            startActivityForResult(mGoogleSignInClient.getSignInIntent(), RC_SIGN_IN);
+        }
+    });
+    container.addView(view);
+}
+public void hideLoginScreen() {
+    // Находим экран по нашему тегу
+    View loginView = container.findViewWithTag("login_screen_overlay");
+    if (loginView != null) {
+        container.removeView(loginView); // Удаляем его!
     }
+}
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {

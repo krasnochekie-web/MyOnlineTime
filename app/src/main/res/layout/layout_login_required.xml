@@ -12,14 +12,14 @@
     <ImageView
         android:layout_width="100dp"
         android:layout_height="100dp"
-        android:src="@drawable/ic_nav_time"
-        android:tint="@color/primaryGrapefruit"/> 
+        android:src="@drawable/ic_nav_time_h"
+        android:tint="@color/burgundyRed"/> 
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="My Online Time" 
-        android:textColor="@color/primaryGrapefruit" 
+        android:textColor="@color/burgundyRed" 
         android:textSize="24sp"
         android:textStyle="bold"
         android:layout_marginTop="16dp"/>
@@ -41,7 +41,7 @@
         android:layout_height="56dp"
         android:text="@string/btn_sign_in_google"
         android:background="@drawable/bg_button_gray"
-        android:textColor="@color/primaryGrapefruit" 
+        android:textColor="@color/burgundyRed" 
         android:textStyle="bold"
         android:textSize="16sp"/>
 

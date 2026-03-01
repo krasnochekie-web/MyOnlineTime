@@ -200,7 +200,7 @@
             android:layout_marginTop="16dp"
             android:background="@drawable/bg_button_gray"
             android:text="@string/btn_follow"
-            android:textColor="@color/primaryGrapefruit"
+            android:textColor="@color/burgundyRed"
             android:textStyle="bold"
             android:visibility="gone" />
 
@@ -211,7 +211,7 @@
             android:layout_marginTop="16dp"
             android:background="@drawable/bg_button_gray"
             android:text="@string/btn_sign_in_google"
-            android:textColor="@color/primaryGrapefruit"
+            android:textColor="@color/burgundyRed"
             android:textStyle="bold"
             android:visibility="gone" />
 

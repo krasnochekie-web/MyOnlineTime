@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-
 <!-- Добавлены paddingTop="86dp" и clipToPadding="false" -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -10,7 +9,7 @@
     android:paddingTop="@dimen/header_clearance"
     android:clipToPadding="false">
     
-    <!-- Контейнер с вкладками (Подписчики / Подписки) -->
+    <!-- Контейнер с вкладками (Подписчики / Подписки) ОСТАЛСЯ БЕЗ ИЗМЕНЕНИЙ -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="50dp"
@@ -29,7 +28,6 @@
                 android:layout_height="wrap_content" 
                 android:orientation="horizontal" 
                 android:gravity="center_vertical">
-                
                 <TextView 
                     android:id="@+id/tab_txt_followers" 
                     android:layout_width="wrap_content" 
@@ -37,7 +35,6 @@
                     android:text="Подписчики" 
                     android:textColor="@color/nav_color" 
                     android:textStyle="bold" />
-                
                 <TextView 
                     android:id="@+id/tab_count_followers" 
                     android:layout_width="wrap_content" 
@@ -71,7 +68,6 @@
                 android:layout_height="wrap_content" 
                 android:orientation="horizontal" 
                 android:gravity="center_vertical">
-                
                 <TextView 
                     android:id="@+id/tab_txt_following" 
                     android:layout_width="wrap_content" 
@@ -79,7 +75,6 @@
                     android:text="Подписки" 
                     android:textColor="@color/nav_color" 
                     android:textStyle="bold" />
-                
                 <TextView 
                     android:id="@+id/tab_count_following" 
                     android:layout_width="wrap_content" 
@@ -106,27 +101,10 @@
         android:layout_height="1dp" 
         android:background="#333333" /> 
 
-    <!-- Контейнер для списка пользователей и статуса загрузки -->
-
-    <!-- Текст для статусов (Загрузка / Пусто / Ошибка) -->
-    <TextView
-        android:id="@+id/follows_status_text"
+    <!-- А ВОТ ТУТ ТЕПЕРЬ VIEWPAGER ВМЕСТО СПИСКА -->
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/follows_view_pager"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="@color/textGray"
-        android:gravity="center"
-        android:layout_marginTop="20dp"
-        android:visibility="gone"/>
-
-    <!-- Наш современный мощный список -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/follows_results_list"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_marginTop="10dp"
-        android:paddingLeft="16dp"
-        android:paddingRight="16dp"
-        android:clipToPadding="false"
-        android:scrollbars="none"/>
+        android:layout_height="match_parent" />
     
 </LinearLayout>
