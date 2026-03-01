@@ -1,4 +1,7 @@
 <resources>
-    <!-- Глобальный отступ под шапку для всех экранов -->
+    <!-- Ваш старый отступ для шапки -->
     <dimen name="header_clearance">86dp</dimen> 
+
+    <!-- ДОБАВЬТЕ ЭТУ СТРОЧКУ ДЛЯ НИЖНЕГО МЕНЮ: -->
+    <dimen name="bottom_nav_clearance">80dp</dimen> 
 </resources>
