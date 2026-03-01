@@ -6,6 +6,11 @@
     android:layout_height="match_parent"
     android:background="#121212">
 
+    <!-- КОНТЕЙНЕР ДЛЯ ЭКРАНОВ -->
+    <FrameLayout
+        android:id="@+id/fragment_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
     <!-- ШАПКА ПРИЛОЖЕНИЯ (Стабильный LinearLayout) -->
     <LinearLayout
         android:id="@+id/app_header"
@@ -69,14 +74,6 @@
 
     </LinearLayout>
 
-    <!-- КОНТЕЙНЕР ДЛЯ ЭКРАНОВ -->
-    <FrameLayout
-        android:id="@+id/fragment_container"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_above="@+id/bottom_nav_container" 
-        android:layout_below="@+id/app_header"/>
-
     <!-- НИЖНЕЕ МЕНЮ НАВИГАЦИИ -->
     <LinearLayout
         android:id="@+id/bottom_nav_container"
@@ -94,7 +91,7 @@
         <LinearLayout 
             android:id="@+id/nav_feed" 
             android:layout_width="0dp" 
-            android:layout_height="56dp" 
+            android:layout_height="24dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
@@ -123,7 +120,7 @@
         <LinearLayout 
             android:id="@+id/nav_search" 
             android:layout_width="0dp" 
-            android:layout_height="56dp" 
+            android:layout_height="24dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
@@ -151,7 +148,7 @@
         <!-- Вкладка 3: Центральная кнопка (+) -->
         <LinearLayout 
             android:layout_width="0dp" 
-            android:layout_height="56dp" 
+            android:layout_height="24dp" 
             android:layout_weight="1" 
             android:gravity="center">
 
@@ -174,7 +171,7 @@
         <LinearLayout 
             android:id="@+id/nav_usage" 
             android:layout_width="0dp" 
-            android:layout_height="56dp" 
+            android:layout_height="24dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
@@ -203,7 +200,7 @@
         <LinearLayout 
             android:id="@+id/nav_profile" 
             android:layout_width="0dp" 
-            android:layout_height="56dp" 
+            android:layout_height="24dp" 
             android:layout_weight="1" 
             android:orientation="vertical" 
             android:gravity="center" 
