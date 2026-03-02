@@ -3,15 +3,15 @@ plugins {
 }
 
 android {
-    namespace 'com.mynewtime.app'
+    namespace 'com.myonlinetime.app'
     compileSdk 33
 
     defaultConfig {
-        applicationId "com.mynewtime.app"
+        applicationId "com.myonlinetime.app"
         minSdk 23
         targetSdk 33
-        versionCode 1
-        versionName "1.0"
+        versionCode 19
+        versionName "0.1.2"
     }
 
     buildTypes {
