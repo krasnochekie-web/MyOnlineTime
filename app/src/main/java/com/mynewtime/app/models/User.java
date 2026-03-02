@@ -1,4 +1,4 @@
-package com.mynewtime.app.models;
+package com.myonlinetime.app.models;
 
 import com.google.gson.annotations.SerializedName;
 import java.util.Map;

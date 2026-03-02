@@ -1,8 +1,8 @@
-package com.mynewtime.app;
+package com.myonlinetime.app;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.mynewtime.app.utils.StatsHelper;
+import com.myonlinetime.app.utils.StatsHelper;
 import android.app.AppOpsManager;
 import android.content.Context;
 import android.content.Intent;
@@ -35,9 +35,9 @@ import android.widget.*;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.app.usage.UsageEvents;
-import com.mynewtime.app.models.User;
-import com.mynewtime.app.utils.Utils;
-import com.mynewtime.app.adapters.AppsAdapter;
+import com.myonlinetime.app.models.User;
+import com.myonlinetime.app.utils.Utils;
+import com.myonlinetime.app.adapters.AppsAdapter;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
@@ -73,7 +73,7 @@ public class MainActivity extends AppCompatActivity {
     
     private String lastSearchQuery = "";
     public String vpsToken = null;
-    public com.mynewtime.app.utils.AppNavigator navigator;
+    public com.myonlinetime.app.utils.AppNavigator navigator;
 
 @Override
 protected void onCreate(Bundle savedInstanceState) {
@@ -90,7 +90,7 @@ protected void onCreate(Bundle savedInstanceState) {
     // ------------------------------------------------
 
     setContentView(R.layout.activity_main);
-    navigator = new com.mynewtime.app.utils.AppNavigator(this, R.id.fragment_container);
+    navigator = new com.myonlinetime.app.utils.AppNavigator(this, R.id.fragment_container);
          mainRoot = findViewById(R.id.main_root);
 
         

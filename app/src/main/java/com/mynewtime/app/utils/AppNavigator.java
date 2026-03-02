@@ -1,14 +1,14 @@
-package com.mynewtime.app.utils;
+package com.myonlinetime.app.utils;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
-import com.mynewtime.app.R;
-import com.mynewtime.app.ui.ProfileFragment;
-import com.mynewtime.app.ui.SearchFragment;
-import com.mynewtime.app.ui.StatsFragment;
+import com.myonlinetime.app.R;
+import com.myonlinetime.app.ui.ProfileFragment;
+import com.myonlinetime.app.ui.SearchFragment;
+import com.myonlinetime.app.ui.StatsFragment;
 
 public class AppNavigator {
 

@@ -1,4 +1,4 @@
-package com.mynewtime.app.ui;
+package com.myonlinetime.app.ui;
 
 import androidx.fragment.app.Fragment;
 import android.content.Intent;
@@ -14,10 +14,10 @@ import android.widget.Toast;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
-import com.mynewtime.app.MainActivity;
-import com.mynewtime.app.R;
-import com.mynewtime.app.VpsApi;
-import com.mynewtime.app.utils.Utils;
+import com.myonlinetime.app.MainActivity;
+import com.myonlinetime.app.R;
+import com.myonlinetime.app.VpsApi;
+import com.myonlinetime.app.utils.Utils;
 
 public class EditProfileFragment extends Fragment {
 

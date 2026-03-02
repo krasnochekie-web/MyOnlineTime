@@ -1,4 +1,4 @@
-package com.mynewtime.app.ui;
+package com.myonlinetime.app.ui;
 
 import androidx.fragment.app.Fragment;
 import android.os.Bundle;
@@ -15,11 +15,11 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
-import com.mynewtime.app.MainActivity;
-import com.mynewtime.app.R;
-import com.mynewtime.app.VpsApi;
-import com.mynewtime.app.models.User;
-import com.mynewtime.app.adapters.UserListAdapter; // Наш новый адаптер
+import com.myonlinetime.app.MainActivity;
+import com.myonlinetime.app.R;
+import com.myonlinetime.app.VpsApi;
+import com.myonlinetime.app.models.User;
+import com.myonlinetime.app.adapters.UserListAdapter; // Наш новый адаптер
 
 import java.util.List;
 

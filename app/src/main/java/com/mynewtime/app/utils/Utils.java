@@ -1,4 +1,4 @@
-package com.mynewtime.app.utils;
+package com.myonlinetime.app.utils;
 
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -14,8 +14,8 @@ public class Utils {
     // 2. Форматируем время (часы и минуты)
     // 2. Форматируем время (передаем context для получения строк локализации)
     public static String formatTime(android.content.Context context, long millis) {
-        String strM = context.getString(com.mynewtime.app.R.string.unit_m);
-        String strH = context.getString(com.mynewtime.app.R.string.unit_h);
+        String strM = context.getString(com.myonlinetime.app.R.string.unit_m);
+        String strH = context.getString(com.myonlinetime.app.R.string.unit_h);
         
         if (millis <= 0) return "0 " + strM;
         long minutes = millis / 1000 / 60;

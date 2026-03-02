@@ -6,7 +6,7 @@ set -e
 # --- 1. НАСТРОЙКИ ---
 ANDROID_JAR="$PWD/android.jar" 
 KEYSTORE="mykey.keystore"
-PACKAGE_NAME="com/mynewtime/app"
+PACKAGE_NAME="com/myonlinetime/app"
 
 echo "🧹 Очистка..."
 chmod -R 777 build 2>/dev/null || true

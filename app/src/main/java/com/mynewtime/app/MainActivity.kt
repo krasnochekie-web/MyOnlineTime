@@ -1,4 +1,4 @@
-package com.mynewtime.app
+package com.myonlinetime.app
 
 import android.app.Activity
 import android.os.Bundle

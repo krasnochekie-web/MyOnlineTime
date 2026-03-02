@@ -1,4 +1,4 @@
-package com.mynewtime.app.ui;
+package com.myonlinetime.app.ui;
 
 import androidx.fragment.app.Fragment;
 import android.app.usage.UsageStats;
@@ -17,10 +17,10 @@ import androidx.recyclerview.widget.RecyclerView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
-import com.mynewtime.app.MainActivity;
-import com.mynewtime.app.R;
-import com.mynewtime.app.adapters.AppsAdapter;
-import com.mynewtime.app.utils.Utils;
+import com.myonlinetime.app.MainActivity;
+import com.myonlinetime.app.R;
+import com.myonlinetime.app.adapters.AppsAdapter;
+import com.myonlinetime.app.utils.Utils;
 
 import java.util.ArrayList;
 import java.util.Calendar;

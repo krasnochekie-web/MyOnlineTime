@@ -1,4 +1,4 @@
-package com.mynewtime.app.adapters;
+package com.myonlinetime.app.adapters;
 
 import android.view.LayoutInflater;
 import android.view.View;
@@ -9,9 +9,9 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.mynewtime.app.MainActivity;
-import com.mynewtime.app.R;
-import com.mynewtime.app.models.User;
+import com.myonlinetime.app.MainActivity;
+import com.myonlinetime.app.R;
+import com.myonlinetime.app.models.User;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -1,4 +1,4 @@
-package com.mynewtime.app.ui;
+package com.myonlinetime.app.ui;
 
 import androidx.fragment.app.Fragment;
 import android.graphics.Bitmap;
@@ -16,12 +16,12 @@ import android.widget.Toast;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
-import com.mynewtime.app.MainActivity;
-import com.mynewtime.app.R;
-import com.mynewtime.app.VpsApi;
-import com.mynewtime.app.models.User;
-import com.mynewtime.app.utils.StatsHelper;
-import com.mynewtime.app.utils.Utils;
+import com.myonlinetime.app.MainActivity;
+import com.myonlinetime.app.R;
+import com.myonlinetime.app.VpsApi;
+import com.myonlinetime.app.models.User;
+import com.myonlinetime.app.utils.StatsHelper;
+import com.myonlinetime.app.utils.Utils;
 
 import java.io.File;
 import java.util.Map;

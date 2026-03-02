@@ -1,4 +1,4 @@
-package com.mynewtime.app.utils;
+package com.myonlinetime.app.utils;
 
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
@@ -14,9 +14,9 @@ import android.widget.TextView;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
-import com.mynewtime.app.MainActivity;
-import com.mynewtime.app.R;
-import com.mynewtime.app.VpsApi;
+import com.myonlinetime.app.MainActivity;
+import com.myonlinetime.app.R;
+import com.myonlinetime.app.VpsApi;
 
 import java.util.ArrayList;
 import java.util.Calendar;

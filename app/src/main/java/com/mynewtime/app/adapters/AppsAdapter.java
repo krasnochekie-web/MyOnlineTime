@@ -1,4 +1,4 @@
-package com.mynewtime.app.adapters;
+package com.myonlinetime.app.adapters;
 
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
@@ -12,8 +12,8 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.mynewtime.app.R;
-import com.mynewtime.app.utils.Utils;
+import com.myonlinetime.app.R;
+import com.myonlinetime.app.utils.Utils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
