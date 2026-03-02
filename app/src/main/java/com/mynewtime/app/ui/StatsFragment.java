@@ -56,7 +56,7 @@ public class StatsFragment extends Fragment {
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
 
         // Создаем наш новый мощный адаптер (он теперь принимает только контекст)
-        final AppsAdapter adapter = new AppsAdapter(activity);
+        final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
         recyclerView.setAdapter(adapter);
 
         // 3. Настройка спиннера

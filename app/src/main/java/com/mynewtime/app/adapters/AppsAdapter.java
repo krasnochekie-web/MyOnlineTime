@@ -26,10 +26,14 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     private List<String> packageNames = new ArrayList<>();
     private Map<String, Long> exactTimes = new HashMap<>();
     private PackageManager pm;
+    
+    private int itemLayoutId; // НОВАЯ ПЕРЕМЕННАЯ ДЛЯ ДИЗАЙНА
 
-    public AppsAdapter(Context context) {
+    // Теперь адаптер требует передать ему файл дизайна при создании
+    public AppsAdapter(Context context, int itemLayoutId) {
         this.context = context;
         this.pm = context.getPackageManager();
+        this.itemLayoutId = itemLayoutId; 
     }
 
     // Метод для обновления данных (вызывается из StatsFragment)
@@ -42,7 +46,8 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     @NonNull
     @Override
     public AppViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(context).inflate(R.layout.item_app_usage, parent, false);
+        // Заменили R.layout.item_app_usage на нашу переменную itemLayoutId
+        View view = LayoutInflater.from(context).inflate(itemLayoutId, parent, false);
         return new AppViewHolder(view);
     }
 

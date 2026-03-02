@@ -4,13 +4,13 @@
     <style name="Theme.MyNewTime" parent="Theme.AppCompat.DayNight.NoActionBar">
         
         <!-- Основной цвет приложения (используется для кнопок, тумблеров по умолчанию) -->
-        <item name="colorPrimary">@color/primaryGrapefruit</item>
+        <item name="colorPrimary">@color/burgundyRed</item>
         
         <!-- Цвет верхней системной панели (где часы и батарея) -->
         <item name="colorPrimaryDark">@color/backgroundDark</item>
         
         <!-- Цвет акцента (ползунки, чекбоксы, курсор в текстовых полях) -->
-        <item name="colorAccent">@color/primaryGrapefruit</item>
+        <item name="colorAccent">@color/burgundyRed</item>
         
         <!-- Цвет фона окон по умолчанию -->
         <item name="android:windowBackground">@color/backgroundDark</item>

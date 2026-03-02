@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    
+    <!-- Это цвет фона вашего выпадающего списка (cardDark) -->
+    <solid android:color="@color/cardDark" /> 
+    
+    <!-- Радиус скругления всех углов окна -->
+    <corners android:radius="16dp" /> 
+    
+</shape>
