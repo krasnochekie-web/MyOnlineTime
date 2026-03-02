@@ -47,4 +47,5 @@
                 android:textColor="@color/textGray" 
                 android:layout_marginTop="4dp"/>
         </LinearLayout>
+   </LinearLayout>
 </LinearLayout>
