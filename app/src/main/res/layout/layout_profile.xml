@@ -43,7 +43,7 @@
                     android:gravity="center"
                     android:text="@string/guest"
                     android:textColor="@color/textWhite"
-                    android:textSize="15sp"
+                    android:textSize="20sp"
                     android:textStyle="bold" />
 
                 <!-- О СЕБЕ (Не вылезает за 3 строки) -->
@@ -54,7 +54,7 @@
                     android:layout_marginTop="6dp"
                     android:gravity="center"
                     android:textColor="@color/textGray"
-                    android:textSize="7sp"
+                    android:textSize="10sp"
                     android:maxLines="3"
                     android:ellipsize="end" />
 
@@ -85,7 +85,7 @@
                             android:gravity="center"
                             android:text="За неделю"
                             android:textColor="@color/textGray"
-                            android:textSize="6sp" />
+                            android:textSize="10sp" />
                         <TextView
                             android:id="@+id/profile_week_time"
                             android:layout_width="match_parent"
@@ -112,7 +112,7 @@
                             android:gravity="center"
                             android:text="@string/followers"
                             android:textColor="@color/textGray"
-                            android:textSize="7sp" />
+                            android:textSize="10sp" />
                         <TextView
                             android:id="@+id/txt_followers_count"
                             android:layout_width="match_parent"
@@ -139,7 +139,7 @@
                             android:gravity="center"
                             android:text="@string/following"
                             android:textColor="@color/textGray"
-                            android:textSize="7sp" />
+                            android:textSize="10sp" />
                         <TextView
                             android:id="@+id/txt_following_count"
                             android:layout_width="match_parent"
@@ -171,7 +171,7 @@
                 android:layout_height="32dp"
                 android:layout_alignParentRight="true"
                 android:layout_marginTop="56dp"
-                android:layout_marginRight="40dp"
+                android:layout_marginRight="45dp"
                 android:background="@drawable/bg_edit_circle"
                 android:clickable="true"
                 android:padding="6dp"
@@ -237,7 +237,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/top_apps"
                     android:textColor="@color/selector_grapefruit_white"
-                    android:textSize="9sp"
+                    android:textSize="12sp"
                     android:textStyle="bold" />
             </LinearLayout>
 

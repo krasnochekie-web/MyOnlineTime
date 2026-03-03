@@ -35,8 +35,8 @@
             <!-- Кнопка НАЗАД -->
             <ImageView
                 android:id="@+id/header_back_btn"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
                 android:layout_marginRight="12dp"
                 android:src="@drawable/ic_math_arrow"
                 android:tint="@color/textWhite"
@@ -57,8 +57,9 @@
 
             <!-- Иконка Настройки -->
             <ImageView
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_marginRight="42dp"
                 android:src="@drawable/ic_settings"
                 android:tint="@color/textWhite"/>
 
