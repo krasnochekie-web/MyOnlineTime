@@ -20,7 +20,7 @@
         android:layout_height="wrap_content"
         android:text="My Online Time" 
         android:textColor="@color/burgundyRed" 
-        android:textSize="24sp"
+        android:textSize="17sp"
         android:textStyle="bold"
         android:layout_marginTop="16dp"/>
 
@@ -29,7 +29,7 @@
         android:layout_height="wrap_content"
         android:text="@string/login_prompt_text"
         android:textColor="@color/textWhite" 
-        android:textSize="16sp"
+        android:textSize="12sp"
         android:gravity="center"
         android:layout_marginTop="20dp"
         android:layout_marginBottom="60dp"/>
@@ -43,6 +43,6 @@
         android:background="@drawable/bg_button_gray"
         android:textColor="@color/burgundyRed" 
         android:textStyle="bold"
-        android:textSize="16sp"/>
+        android:textSize="12sp"/>
 
 </LinearLayout>

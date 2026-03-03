@@ -216,7 +216,7 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
 
     public void resetHeader() {
         headerTitle.setText(R.string.app_name);
-        headerTitle.setTextSize(22);
+        headerTitle.setTextSize(16);
         headerBackBtn.setVisibility(View.GONE);
     }
 

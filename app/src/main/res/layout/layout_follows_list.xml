@@ -10,7 +10,7 @@
         android:layout_height="wrap_content"
         android:layout_centerInParent="true"
         android:textColor="@color/textGray"
-        android:textSize="16sp"
+        android:textSize="12sp"
         android:visibility="gone" />
 
     <androidx.recyclerview.widget.RecyclerView

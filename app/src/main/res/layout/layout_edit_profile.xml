@@ -40,7 +40,7 @@
                 android:text="@string/hint_change_photo"
                 android:textColor="@color/textWhite" 
                 android:alpha="0.6"
-                android:textSize="12sp"
+                android:textSize="9sp"
                 android:layout_marginTop="12dp"/>
 
             <LinearLayout
@@ -74,7 +74,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/label_nickname"
                     android:textColor="@color/textGray" 
-                    android:textSize="14sp"/>
+                    android:textSize="11sp"/>
 
                 <EditText
                     android:id="@+id/input_nickname"
@@ -82,7 +82,7 @@
                     android:layout_height="wrap_content"
                     android:background="@null"
                     android:textColor="@color/textWhite" 
-                    android:textSize="20sp"
+                    android:textSize="15sp"
                     android:textStyle="bold"
                     android:paddingTop="8dp"
                     android:paddingBottom="8dp"
@@ -103,7 +103,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/label_about"
                     android:textColor="@color/textGray" 
-                    android:textSize="14sp"
+                    android:textSize="11sp"
                     android:layout_marginBottom="8dp"/>
 
                 <EditText
@@ -112,7 +112,7 @@
                     android:layout_height="150dp"
                     android:background="@drawable/bg_input_field"
                     android:textColor="@color/textWhite" 
-                    android:textSize="16sp"
+                    android:textSize="12sp"
                     android:gravity="top|left"
                     android:padding="16dp"/>
             </LinearLayout>

@@ -51,7 +51,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1" 
                 android:text="@string/app_name"
-                android:textSize="12sp"
+                android:textSize="9sp"
                 android:textStyle="bold"
                 android:textColor="@color/textWhite"/>
 
