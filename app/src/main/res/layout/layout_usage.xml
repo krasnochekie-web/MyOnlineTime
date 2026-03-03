@@ -17,7 +17,6 @@
         android:orientation="horizontal"
         android:gravity="right"
         android:paddingRight="16dp"
-        android:paddingBottom="10dp"
         android:paddingTop="0dp"> 
 
         <Spinner
