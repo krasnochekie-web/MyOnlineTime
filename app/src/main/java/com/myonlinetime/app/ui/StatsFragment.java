@@ -165,6 +165,11 @@ public class StatsFragment extends Fragment {
                             @Override
                             public void run() {
                                 if (isAdded()) {
+                        // 3. СОХРАНЯЕМ В КЭШ И ОБНОВЛЯЕМ ЭКРАН
+                        handler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (isAdded()) {
                                     // Сохраняем в наш кэш
                                     statsCache.put(position, new CachedStats(finalList, exactTimes, finalTotalMillis));
                                     
@@ -172,15 +177,17 @@ public class StatsFragment extends Fragment {
                                     adapter.updateData(finalList, exactTimes);
                                 }
                             }
-                        });
+                        }); // Конец handler.post
                     }
-                });
-            }
+                }); // Конец executor.execute
+            } // Конец метода onItemSelected
 
             @Override
-            public void onNothingSelected(AdapterView<?> parent) {}
-          }
-        });
+            public void onNothingSelected(AdapterView<?> parent) {
+            } 
+        }); // Конец setOnItemSelectedListener
+
         return view; 
-    } 
-}
+    } // Конец метода onCreateView
+
+} // Конец класса StatsFragment

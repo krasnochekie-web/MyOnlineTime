@@ -92,7 +92,7 @@ if (cachedAvatar != null && avatarPreview != null) {
                 }
             }
         });
-
+     }
         // Кнопка Сохранения
         view.findViewById(R.id.btn_save_changes).setOnClickListener(new View.OnClickListener() { 
             public void onClick(View v) {
