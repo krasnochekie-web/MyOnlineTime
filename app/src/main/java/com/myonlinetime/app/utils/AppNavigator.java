@@ -14,6 +14,7 @@ public class AppNavigator {
 
     private FragmentManager fm;
     private int containerId;
+    private int currentTabIndex = -1;
 
     // Наши Фрагменты теперь живут здесь, а не в MainActivity
     private Fragment feedFragment;
@@ -61,55 +62,51 @@ public class AppNavigator {
 
     public void switchScreen(int tabIndex, String uid) {
         FragmentTransaction ft = fm.beginTransaction();
-        
-        // Для возврата из редактора (sub-screen) на главные вкладки,
-        // мы тоже применяем анимацию, чтобы редактор КРАСИВО УЕХАЛ ВНИЗ
+
+        // 1. Анимация ухода Саб-Скрина (Редактора) вниз, если он открыт
         if (currentSubScreen != null) {
-            // Ставим анимацию только на удаление (уход вниз)
             ft.setCustomAnimations(0, R.anim.slide_out_down);
             ft.remove(currentSubScreen);
             currentSubScreen = null;
-        } else {
-            // Для переключения между самими нижними вкладками
-            // используем стандартное, едва заметное растворение (Fade)
-            // Это сделает переход мягким, но не будет "мотать" экраны туда-сюда
-            ft.setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out);
         }
 
-        // 1. Прячем все текущие экраны
-        if (feedFragment != null) ft.hide(feedFragment);
-        if (searchFragment != null) ft.hide(searchFragment);
-        if (statsFragment != null) ft.hide(statsFragment);
-        if (profileFragment != null) ft.hide(profileFragment);
+        // 2. Определяем направление анимации для главных вкладок
+        if (currentTabIndex != -1 && currentTabIndex != tabIndex) {
+            if (tabIndex > currentTabIndex) {
+                // Идем ВПРАВО (например, с Ленты на Поиск) -> Выезжает справа
+                ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left);
+            } else {
+                // Идем ВЛЕВО (например, с Профиля на Время) -> Выезжает слева
+                ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
+            }
+        }
+        currentTabIndex = tabIndex;
 
-        // 2. Показываем нужный Фрагмент
+        // 3. Выполняем переключение с помощью REPLACE
+        // (Для анимации перелистывания лучше использовать replace, иначе старые экраны могут мерцать)
+        Fragment targetFragment = null;
+        String tag = "";
+
         if (tabIndex == 0) {
-            if (feedFragment == null) {
-                feedFragment = new Fragment(); // Заглушка для ленты
-                ft.add(containerId, feedFragment, "FEED");
-            }
-            ft.show(feedFragment);
-            
+            if (feedFragment == null) feedFragment = new Fragment();
+            targetFragment = feedFragment;
+            tag = "FEED";
         } else if (tabIndex == 1) {
-            if (searchFragment == null) {
-                searchFragment = new SearchFragment();
-                ft.add(containerId, searchFragment, "SEARCH");
-            }
-            ft.show(searchFragment);
-            
+            if (searchFragment == null) searchFragment = new SearchFragment();
+            targetFragment = searchFragment;
+            tag = "SEARCH";
         } else if (tabIndex == 3) {
-            if (statsFragment == null) {
-                statsFragment = new StatsFragment();
-                ft.add(containerId, statsFragment, "STATS");
-            }
-            ft.show(statsFragment);
-            
+            if (statsFragment == null) statsFragment = new StatsFragment();
+            targetFragment = statsFragment;
+            tag = "STATS";
         } else if (tabIndex == 4) {
-            if (profileFragment == null) {
-                profileFragment = ProfileFragment.newInstance(uid);
-                ft.add(containerId, profileFragment, "PROFILE");
-            }
-            ft.show(profileFragment);
+            if (profileFragment == null) profileFragment = ProfileFragment.newInstance(uid);
+            targetFragment = profileFragment;
+            tag = "PROFILE";
+        }
+
+        if (targetFragment != null) {
+            ft.replace(containerId, targetFragment, tag);
         }
         
         ft.commit();
