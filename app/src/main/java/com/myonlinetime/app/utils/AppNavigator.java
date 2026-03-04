@@ -61,9 +61,8 @@ public class AppNavigator {
     }
 
     public void switchScreen(int tabIndex, String uid) {
-        // ОЧИЩАЕМ ПАМЯТЬ ОТ САБ-СКРИНОВ ПЕРЕД ПЕРЕКЛЮЧЕНИЕМ ВКЛАДОК!
         if (currentSubScreen != null) {
-            fragmentManager.popBackStack(null, androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE);
+            fm.popBackStack(null, androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE); // ИСПРАВЛЕНО
             currentSubScreen = null;
         }
 
