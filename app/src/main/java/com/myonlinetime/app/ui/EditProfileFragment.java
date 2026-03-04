@@ -84,12 +84,14 @@ if (cachedAvatar != null && avatarPreview != null) {
         // Кнопка Отмены использует наш Навигатор!
         if (btnCancel != null) {
             btnCancel.setOnClickListener(new View.OnClickListener() { 
-                public void onClick(View v) { 
-                    activity.resetHeader(); 
-                    activity.navigator.switchScreen(4, acct.getId()); // Возврат в профиль
+            @Override
+            public void onClick(View v) {
+                // Имитируем нажатие системной кнопки НАЗАД
+                if (getActivity() != null) {
+                    getActivity().onBackPressed();
                 }
-            });
-        }
+            }
+        });
 
         // Кнопка Сохранения
         view.findViewById(R.id.btn_save_changes).setOnClickListener(new View.OnClickListener() { 

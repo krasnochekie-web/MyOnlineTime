@@ -61,9 +61,13 @@ public class AppNavigator {
     }
 
     public void switchScreen(int tabIndex, String uid) {
-        FragmentTransaction ft = fm.beginTransaction();
+        // ОЧИЩАЕМ ПАМЯТЬ ОТ САБ-СКРИНОВ ПЕРЕД ПЕРЕКЛЮЧЕНИЕМ ВКЛАДОК!
+        if (currentSubScreen != null) {
+            fragmentManager.popBackStack(null, androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE);
+            currentSubScreen = null;
+        }
 
-        // 1. Анимация ухода Саб-Скрина (Редактора) вниз, если он открыт
+        FragmentTransaction ft = fm.beginTransaction();
         if (currentSubScreen != null) {
             ft.setCustomAnimations(0, R.anim.slide_out_down);
             ft.remove(currentSubScreen);

@@ -38,7 +38,17 @@ import java.util.Set;
 
 public class StatsFragment extends Fragment {
 
-    // Пустой конструктор (обязательно для Fragment)
+    // --- НАШ КЭШ В ПАМЯТИ ---
+    private class CachedStats {
+        List<String> list;
+        Map<String, Long> times;
+        long totalMillis;
+        CachedStats(List<String> l, Map<String, Long> t, long tm) {
+            this.list = l; this.times = t; this.totalMillis = tm;
+        }
+    }
+    private Map<Integer, CachedStats> statsCache = new HashMap<>();
+    
     public StatsFragment() {}
 
     @Override
@@ -74,49 +84,39 @@ public class StatsFragment extends Fragment {
             public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
                 if (activity == null) return;
 
-                // 1. ПОКАЗЫВАЕМ СОСТОЯНИЕ ЗАГРУЗКИ (Опционально)
-                totalTimeText.setText(activity.getString(R.string.loading)); 
-                adapter.updateData(new ArrayList<String>(), new HashMap<String, Long>()); // Очищаем старый список
+                // 1. ПРОВЕРЯЕМ КЭШ: Если мы уже считали этот период, выдаем мгновенно!
+                if (statsCache.containsKey(position)) {
+                    CachedStats cached = statsCache.get(position);
+                    totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
+                    adapter.updateData(cached.list, cached.times);
+                    return; // Выходим, больше ничего считать не нужно!
+                }
 
-                // 2. ОТПРАВЛЯЕМ ТЯЖЕЛУЮ РАБОТУ В ФОНОВЫЙ ПОТОК
+                // 2. ЕСЛИ В КЭШЕ НЕТ: Показываем "Загрузка" (НО НЕ ОЧИЩАЕМ СПИСОК, ЧТОБЫ НЕ БЫЛО ЛАГА)
+                totalTimeText.setText(activity.getString(R.string.loading)); 
+                
                 ExecutorService executor = Executors.newSingleThreadExecutor();
                 final Handler handler = new Handler(Looper.getMainLooper());
 
                 executor.execute(new Runnable() {
                     @Override
                     public void run() {
-                        // === ЭТОТ КОД РАБОТАЕТ В ФОНЕ (НЕ ТОРМОЗИТ АНИМАЦИЮ) ===
+                        // ... (ЗДЕСЬ ВАША ОБЫЧНАЯ МАТЕМАТИКА СО СТАТИСТИКОЙ) ...
+                        // Ничего в расчетах не меняем, всё как было раньше
+                        
                         Calendar cal = Calendar.getInstance(); 
                         long now = System.currentTimeMillis();
                         long startTime = now;
                         int intervalType = UsageStatsManager.INTERVAL_DAILY;
                         
-                        if (position == 0) { 
-                            cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); 
-                            cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0); 
-                            startTime = cal.getTimeInMillis(); 
-                            intervalType = UsageStatsManager.INTERVAL_DAILY;
-                        } 
-                        else if (position == 1) { 
-                            cal.add(Calendar.DAY_OF_YEAR, -7); 
-                            startTime = cal.getTimeInMillis(); 
-                            intervalType = UsageStatsManager.INTERVAL_WEEKLY; 
-                        } 
-                        else if (position == 2) { 
-                            cal.add(Calendar.MONTH, -1); 
-                            startTime = cal.getTimeInMillis(); 
-                            intervalType = UsageStatsManager.INTERVAL_MONTHLY; 
-                        } 
-                        else { 
-                            cal.add(Calendar.YEAR, -1); 
-                            startTime = cal.getTimeInMillis(); 
-                            intervalType = UsageStatsManager.INTERVAL_YEARLY; 
-                        }
+                        if (position == 0) { cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_DAILY;} 
+                        else if (position == 1) { cal.add(Calendar.DAY_OF_YEAR, -7); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_WEEKLY; } 
+                        else if (position == 2) { cal.add(Calendar.MONTH, -1); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_MONTHLY; } 
+                        else { cal.add(Calendar.YEAR, -1); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_YEARLY; }
                         
                         UsageStatsManager usm = (UsageStatsManager) activity.getSystemService(Context.USAGE_STATS_SERVICE);
                         final Map<String, Long> exactTimes = new HashMap<>();
                         long tempTotalMillis = 0;
-                        
                         if (usm != null) {
                             List<UsageStats> stats = usm.queryUsageStats(intervalType, startTime, now);
                             if (stats != null) {
@@ -132,9 +132,7 @@ public class StatsFragment extends Fragment {
                         mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
                         List<android.content.pm.ResolveInfo> resolvedInfos = pm.queryIntentActivities(mainIntent, 0);
                         Set<String> userApps = new HashSet<>();
-                        for (android.content.pm.ResolveInfo info : resolvedInfos) {
-                            userApps.add(info.activityInfo.packageName);
-                        }
+                        for (android.content.pm.ResolveInfo info : resolvedInfos) { userApps.add(info.activityInfo.packageName); }
                         
                         Intent homeIntent = new Intent(Intent.ACTION_MAIN);
                         homeIntent.addCategory(Intent.CATEGORY_HOME);
@@ -145,10 +143,7 @@ public class StatsFragment extends Fragment {
                         for (Map.Entry<String, Long> entry : exactTimes.entrySet()) {
                             String pkg = entry.getKey();
                             long time = entry.getValue();
-                            boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || 
-                                                    pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || 
-                                                    pkg.equals(launcherPkg);
-                                                    
+                            boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || pkg.equals(launcherPkg);
                             if (time > 0 && userApps.contains(pkg) && !isSystemTrash) {
                                 finalList.add(pkg);
                                 tempTotalMillis += time;
@@ -156,23 +151,23 @@ public class StatsFragment extends Fragment {
                         }
                         
                         Collections.sort(finalList, new Comparator<String>() {
-                            @Override
-                            public int compare(String left, String right) {
-                                Long tLeft = exactTimes.get(left);
-                                Long tRight = exactTimes.get(right);
-                                if (tLeft == null) tLeft = 0L;
-                                if (tRight == null) tRight = 0L;
+                            @Override public int compare(String left, String right) {
+                                Long tLeft = exactTimes.get(left); Long tRight = exactTimes.get(right);
+                                if (tLeft == null) tLeft = 0L; if (tRight == null) tRight = 0L;
                                 return Long.compare(tRight, tLeft);
                             }
                         });
 
                         final long finalTotalMillis = tempTotalMillis;
 
-                        // 3. ВОЗВРАЩАЕМСЯ В ГЛАВНЫЙ ПОТОК, ЧТОБЫ ОБНОВИТЬ ЭКРАН
+                        // 3. СОХРАНЯЕМ В КЭШ И ОБНОВЛЯЕМ ЭКРАН
                         handler.post(new Runnable() {
                             @Override
                             public void run() {
                                 if (isAdded()) {
+                                    // Сохраняем в наш кэш
+                                    statsCache.put(position, new CachedStats(finalList, exactTimes, finalTotalMillis));
+                                    
                                     totalTimeText.setText(Utils.formatTime(activity, finalTotalMillis));
                                     adapter.updateData(finalList, exactTimes);
                                 }
@@ -183,9 +178,9 @@ public class StatsFragment extends Fragment {
             }
 
             @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-            } 
-        });  
+            public void onNothingSelected(AdapterView<?> parent) {}
+          }
+        });
         return view; 
     } 
 }
