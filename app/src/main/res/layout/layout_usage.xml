@@ -1,79 +1,86 @@
 <?xml version="1.0" encoding="utf-8"?>
-
-<!-- Изменения внесены только в этот корневой тег -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/backgroundDark" 
-    android:paddingTop="@dimen/header_clearance"
-    android:clipToPadding="false"
-    android:paddingBottom="48dp">
+    android:background="@color/backgroundDark"
+    android:paddingTop="@dimen/header_clearance">
 
-    <!-- Выпадающий список (Spinner) -->
+    <!-- Спиннер ОСТАЕТСЯ СНАРУЖИ (он не будет прокручиваться) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="right"
         android:paddingRight="16dp"
-        android:paddingTop="0dp"> 
+        android:paddingTop="0dp"
+        android:paddingBottom="8dp">
 
         <Spinner
             android:id="@+id/spinner_period"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:popupBackground="@drawable/bg_spinner_popup"
-            android:background="@null" 
+            android:background="@null"
             android:padding="5dp"
             android:spinnerMode="dropdown"/>
     </LinearLayout>
-    
-    <!-- Карточка с общим временем -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_app_card"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:padding="24dp"
-        android:layout_marginLeft="16dp"
-        android:layout_marginRight="16dp"
-        android:layout_marginBottom="16dp">
 
-        <TextView
-            android:text="@string/total_time"
-            android:textColor="@color/textWhite" 
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
-
-        <View
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1"/>
-
-        <TextView
-            android:id="@+id/text_total_time_sum"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="..."
-            android:textColor="@color/burgundyRed" 
-            android:textSize="16sp"
-            android:textStyle="bold"/>
-    </LinearLayout>
-
-    <!-- Современный список статистики -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/apps_list"
+    <!-- СКРОЛЛ ДЛЯ КАРТОЧКИ И СПИСКА -->
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:paddingLeft="16dp"
-        android:paddingRight="16dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp"
         android:clipToPadding="false"
-        android:scrollbars="none"/>
+        android:paddingBottom="@dimen/bottom_nav_clearance">
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- КАРТОЧКА ОБЩЕГО ВРЕМЕНИ (Теперь она будет листаться вверх!) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_app_card"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="24dp"
+                android:layout_marginLeft="16dp"
+                android:layout_marginRight="16dp"
+                android:layout_marginBottom="16dp">
+                <TextView
+                    android:text="@string/total_time"
+                    android:textColor="@color/textWhite"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"/>
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1"/>
+                <TextView
+                    android:id="@+id/text_total_time_sum"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="..."
+                    android:textColor="@color/burgundyRed"
+                    android:textSize="22sp"
+                    android:textStyle="bold"/>
+            </LinearLayout>
+
+            <!-- СПИСОК ПРИЛОЖЕНИЙ -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/apps_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingLeft="16dp"
+                android:paddingRight="16dp"
+                android:nestedScrollingEnabled="false"
+                android:clipToPadding="false"
+                android:scrollbars="none"/>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 </LinearLayout>

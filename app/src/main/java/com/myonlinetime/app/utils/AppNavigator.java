@@ -34,6 +34,15 @@ public class AppNavigator {
     public void openSubScreen(Fragment fragment) {
         FragmentTransaction ft = fm.beginTransaction();
         
+        // МАГИЯ АНИМАЦИИ ДЛЯ ДОЧЕРНИХ ЭКРАНОВ (Всплытие снизу)
+        // Эти анимации сработают на команду ft.add и ft.remove
+        ft.setCustomAnimations(
+            R.anim.slide_in_up,      // Как появляется новый саб-скрин
+            android.R.anim.fade_out, // Как уходит старый (если был)
+            android.R.anim.fade_in,  // (Для бекстека, нам тут не нужно)
+            R.anim.slide_out_down    // Как саб-скрин будет уезжать вниз при закрытии
+        );
+
         // Прячем основные вкладки
         if (feedFragment != null) ft.hide(feedFragment);
         if (searchFragment != null) ft.hide(searchFragment);
@@ -49,19 +58,29 @@ public class AppNavigator {
         ft.add(containerId, currentSubScreen, "SUB_SCREEN");
         ft.commit();
     }
+
     public void switchScreen(int tabIndex, String uid) {
         FragmentTransaction ft = fm.beginTransaction();
+        
+        // Для возврата из редактора (sub-screen) на главные вкладки,
+        // мы тоже применяем анимацию, чтобы редактор КРАСИВО УЕХАЛ ВНИЗ
+        if (currentSubScreen != null) {
+            // Ставим анимацию только на удаление (уход вниз)
+            ft.setCustomAnimations(0, R.anim.slide_out_down);
+            ft.remove(currentSubScreen);
+            currentSubScreen = null;
+        } else {
+            // Для переключения между самими нижними вкладками
+            // используем стандартное, едва заметное растворение (Fade)
+            // Это сделает переход мягким, но не будет "мотать" экраны туда-сюда
+            ft.setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out);
+        }
 
         // 1. Прячем все текущие экраны
         if (feedFragment != null) ft.hide(feedFragment);
         if (searchFragment != null) ft.hide(searchFragment);
         if (statsFragment != null) ft.hide(statsFragment);
         if (profileFragment != null) ft.hide(profileFragment);
-        // Уничтожаем саб-скрин, если мы возвращаемся на главные вкладки
-        if (currentSubScreen != null) {
-            ft.remove(currentSubScreen);
-            currentSubScreen = null;
-        }
 
         // 2. Показываем нужный Фрагмент
         if (tabIndex == 0) {
@@ -92,7 +111,7 @@ public class AppNavigator {
             }
             ft.show(profileFragment);
         }
-
+        
         ft.commit();
     }
 }
