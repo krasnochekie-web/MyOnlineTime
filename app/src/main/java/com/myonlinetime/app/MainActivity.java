@@ -192,24 +192,21 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
     @Override
     public void onBackPressed() {
         handleBackNavigation();
-    }
-    private void handleBackNavigation() {
-        if (headerBackBtn.getVisibility() == View.VISIBLE) {
-            // Если мы в глубине навигации (редактор, чужой профиль)
-            GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(MainActivity.this);
-            if (currentTab == 4) { 
-                if (acct != null) navigator.switchScreen(4, acct.getId()); // Возврат к своему профилю
-            } else {
-                navigator.switchScreen(1, null); // Возврат к списку поиска
-            }
+    }    private void handleBackNavigation() {
+        // 1. Сначала пытаемся закрыть дочерний экран (Редактор)
+        if (navigator.closeSubScreen()) {
             resetHeader();
-        } else if (currentTab != 0) {
-            // Если мы на любой вкладке кроме главной -> идем на главную
+            return; // Экран закрыт, больше ничего не делаем!
+        }
+        
+        // 2. Если дочерних экранов не было, работаем с вкладками
+        if (currentTab != 0) {
+            // Если мы на любой вкладке кроме Ленты -> идем на Ленту
             updateNavState(0);
-            navigator.switchScreen(0, null); // Переключаем на главную
+            navigator.switchScreen(0, null);
             resetHeader();
         } else {
-            // Если мы на главной -> выход
+            // Если мы на Ленте -> выход из приложения
             super.onBackPressed();
         }
     }

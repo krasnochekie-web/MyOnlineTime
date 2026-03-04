@@ -111,4 +111,23 @@ public class AppNavigator {
         
         ft.commit();
     }
+    // Метод для закрытия текущего дочернего экрана (Редактора)
+    public boolean closeSubScreen() {
+        if (currentSubScreen != null) {
+            FragmentTransaction ft = fm.beginTransaction();
+            ft.setCustomAnimations(0, R.anim.slide_out_down); // Анимация ухода вниз
+            ft.remove(currentSubScreen);
+            
+            // Снова показываем ту вкладку, которая была активна
+            if (currentTabIndex == 0 && feedFragment != null) ft.show(feedFragment);
+            if (currentTabIndex == 1 && searchFragment != null) ft.show(searchFragment);
+            if (currentTabIndex == 3 && statsFragment != null) ft.show(statsFragment);
+            if (currentTabIndex == 4 && profileFragment != null) ft.show(profileFragment);
+            
+            ft.commit();
+            currentSubScreen = null;
+            return true; // Вернули true, значит мы успешно закрыли экран
+        }
+        return false; // Закрывать было нечего
+    }
 }
