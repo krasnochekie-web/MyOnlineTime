@@ -183,7 +183,9 @@ public class StatsFragment extends Fragment {
             }
 
             @Override
-            public void onNothingSelected(AdapterView<?> parent) {}
-        });
-    }
+            public void onNothingSelected(AdapterView<?> parent) {
+            } 
+        });  
+        return view; 
+    } 
 }
