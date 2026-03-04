@@ -149,7 +149,6 @@ public class StatsFragment extends Fragment {
                                 tempTotalMillis += time;
                             }
                         }
-                        
                         Collections.sort(finalList, new Comparator<String>() {
                             @Override public int compare(String left, String right) {
                                 Long tLeft = exactTimes.get(left); Long tRight = exactTimes.get(right);
@@ -160,34 +159,27 @@ public class StatsFragment extends Fragment {
 
                         final long finalTotalMillis = tempTotalMillis;
 
-                        // 3. СОХРАНЯЕМ В КЭШ И ОБНОВЛЯЕМ ЭКРАН
+                        // 3. ВОЗВРАЩАЕМСЯ В ГЛАВНЫЙ ПОТОК
                         handler.post(new Runnable() {
                             @Override
                             public void run() {
                                 if (isAdded()) {
-                        // 3. СОХРАНЯЕМ В КЭШ И ОБНОВЛЯЕМ ЭКРАН
-                        handler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (isAdded()) {
-                                    // Сохраняем в наш кэш
                                     statsCache.put(position, new CachedStats(finalList, exactTimes, finalTotalMillis));
-                                    
                                     totalTimeText.setText(Utils.formatTime(activity, finalTotalMillis));
                                     adapter.updateData(finalList, exactTimes);
                                 }
                             }
-                        }); // Конец handler.post
-                    }
-                }); // Конец executor.execute
-            } // Конец метода onItemSelected
+                        });
+                    } // <-- ЗАКРЫВАЕТ МЕТОД run() ДЛЯ ФОНОВОГО ПОТОКА
+                }); // <-- ЗАКРЫВАЕТ executor.execute
+            } // <-- ЗАКРЫВАЕТ МЕТОД onItemSelected
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
-            } 
-        }); // Конец setOnItemSelectedListener
+            }
+        }); // <-- ЗАКРЫВАЕТ setOnItemSelectedListener
 
         return view; 
-    } // Конец метода onCreateView
+    } // <-- ЗАКРЫВАЕТ МЕТОД onCreateView
 
-} // Конец класса StatsFragment
+} // <-- ЗАКРЫВАЕТ КЛАСС StatsFragment
