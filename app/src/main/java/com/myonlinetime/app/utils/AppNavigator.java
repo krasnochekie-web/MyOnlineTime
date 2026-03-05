@@ -12,125 +12,131 @@ import com.myonlinetime.app.ui.StatsFragment;
 
 public class AppNavigator {
 
-    private FragmentManager fm;
-    private int containerId;
+    private final FragmentManager fm;
+    private final int containerId;
+
+    // Главные вкладки
+    private Fragment feedFragment;
+    private SearchFragment searchFragment;
+    private StatsFragment statsFragment;
+    private ProfileFragment profileFragment;
+
+    // Второстепенный экран (Саб-скрин)
+    private Fragment currentSubScreen;
+    
     private int currentTabIndex = -1;
 
-    // Наши Фрагменты теперь живут здесь, а не в MainActivity
-    private Fragment feedFragment;
-    private Fragment searchFragment;
-    private Fragment statsFragment;
-    private Fragment profileFragment;
-    // Для экранов Редактирования и Подписчиков
-    private Fragment currentSubScreen;
-
-    // Конструктор: передаем Activity и ID контейнера, где будем рисовать экраны
     public AppNavigator(AppCompatActivity activity, int containerId) {
-        this.fm = activity.getSupportFragmentManager(); // НОВЫЙ СОВРЕМЕННЫЙ МЕТОД
+        this.fm = activity.getSupportFragmentManager();
         this.containerId = containerId;
     }
 
-    // Тот самый метод переключения, который мы убрали из MainActivity
-    // Метод для открытия "вложенных" экранов (поверх остальных)
+    // --- 1. ОТКРЫТИЕ РЕДАКТОРА / ПОДПИСЧИКОВ (Всплытие снизу) ---
     public void openSubScreen(Fragment fragment) {
         FragmentTransaction ft = fm.beginTransaction();
         
-        // МАГИЯ АНИМАЦИИ ДЛЯ ДОЧЕРНИХ ЭКРАНОВ (Всплытие снизу)
-        // Эти анимации сработают на команду ft.add и ft.remove
-        ft.setCustomAnimations(
-            R.anim.slide_in_up,      // Как появляется новый саб-скрин
-            android.R.anim.fade_out, // Как уходит старый (если был)
-            android.R.anim.fade_in,  // (Для бекстека, нам тут не нужно)
-            R.anim.slide_out_down    // Как саб-скрин будет уезжать вниз при закрытии
-        );
+        // Красивое появление снизу
+        ft.setCustomAnimations(R.anim.slide_in_up, android.R.anim.fade_out);
 
-        // Прячем основные вкладки
-        if (feedFragment != null) ft.hide(feedFragment);
-        if (searchFragment != null) ft.hide(searchFragment);
-        if (statsFragment != null) ft.hide(statsFragment);
-        if (profileFragment != null) ft.hide(profileFragment);
+        // Прячем абсолютно все текущие экраны
+        hideAll(ft);
 
-        // Если уже был открыт какой-то саб-скрин, удаляем его
+        // Если у нас уже был какой-то саб-скрин в памяти (например, старый редактор) - прячем и его
         if (currentSubScreen != null) {
-            ft.remove(currentSubScreen);
+            ft.hide(currentSubScreen);
         }
-        
+
+        // Создаем новый
         currentSubScreen = fragment;
         ft.add(containerId, currentSubScreen, "SUB_SCREEN");
         ft.commit();
     }
 
-    public void switchScreen(int tabIndex, String uid) {
-        if (currentSubScreen != null) {
-            fm.popBackStack(null, androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE); // ИСПРАВЛЕНО
-            currentSubScreen = null;
-        }
-
-        FragmentTransaction ft = fm.beginTransaction();
-        if (currentSubScreen != null) {
-            ft.setCustomAnimations(0, R.anim.slide_out_down);
-            ft.remove(currentSubScreen);
-            currentSubScreen = null;
-        }
-
-        // 2. Определяем направление анимации для главных вкладок
-        if (currentTabIndex != -1 && currentTabIndex != tabIndex) {
-            if (tabIndex > currentTabIndex) {
-                // Идем ВПРАВО (например, с Ленты на Поиск) -> Выезжает справа
-                ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left);
-            } else {
-                // Идем ВЛЕВО (например, с Профиля на Время) -> Выезжает слева
-                ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
-            }
-        }
-        currentTabIndex = tabIndex;
-
-        // 3. Выполняем переключение с помощью REPLACE
-        // (Для анимации перелистывания лучше использовать replace, иначе старые экраны могут мерцать)
-        Fragment targetFragment = null;
-        String tag = "";
-
-        if (tabIndex == 0) {
-            if (feedFragment == null) feedFragment = new Fragment();
-            targetFragment = feedFragment;
-            tag = "FEED";
-        } else if (tabIndex == 1) {
-            if (searchFragment == null) searchFragment = new SearchFragment();
-            targetFragment = searchFragment;
-            tag = "SEARCH";
-        } else if (tabIndex == 3) {
-            if (statsFragment == null) statsFragment = new StatsFragment();
-            targetFragment = statsFragment;
-            tag = "STATS";
-        } else if (tabIndex == 4) {
-            if (profileFragment == null) profileFragment = ProfileFragment.newInstance(uid);
-            targetFragment = profileFragment;
-            tag = "PROFILE";
-        }
-
-        if (targetFragment != null) {
-            ft.replace(containerId, targetFragment, tag);
-        }
-        
-        ft.commit();
-    }
-    // Метод для закрытия текущего дочернего экрана (Редактора)
+    // --- 2. ЗАКРЫТИЕ РЕДАКТОРА (По кнопке НАЗАД) ---
     public boolean closeSubScreen() {
         if (currentSubScreen != null) {
             FragmentTransaction ft = fm.beginTransaction();
-            ft.setCustomAnimations(0, R.anim.slide_out_down); // Анимация ухода вниз
-            ft.remove(currentSubScreen);
             
-            // Снова показываем ту вкладку, которая была активна
-            if (currentTabIndex == 0 && feedFragment != null) ft.show(feedFragment);
-            if (currentTabIndex == 1 && searchFragment != null) ft.show(searchFragment);
-            if (currentTabIndex == 3 && statsFragment != null) ft.show(statsFragment);
-            if (currentTabIndex == 4 && profileFragment != null) ft.show(profileFragment);
+            // Анимация ухода вниз
+            ft.setCustomAnimations(android.R.anim.fade_in, R.anim.slide_out_down);
+            
+            // МАГИЯ ЗДЕСЬ: Мы ПРОСТО ПРЯЧЕМ редактор, а не убиваем его!
+            ft.hide(currentSubScreen); 
+            currentSubScreen = null; // Забываем про него
+            
+            // Возвращаем на экран ту вкладку, откуда мы пришли
+            showMainTab(currentTabIndex, ft);
             
             ft.commit();
-            currentSubScreen = null;
-            return true; // Вернули true, значит мы успешно закрыли экран
+            return true;
         }
-        return false; // Закрывать было нечего
+        return false;
+    }
+
+    // --- 3. ПЕРЕКЛЮЧЕНИЕ ГЛАВНЫХ ВКЛАДОК (Нижнее меню) ---
+    public void switchScreen(int tabIndex, String uid) {
+        FragmentTransaction ft = fm.beginTransaction();
+
+        // МАГИЯ ЗДЕСЬ: Если мы переключаемся на Ленту/Поиск, а открыт Редактор:
+        // Мы ПРОСТО ПРЯЧЕМ Редактор! Никаких remove(), никаких конфликтов.
+        if (currentSubScreen != null) {
+            ft.hide(currentSubScreen);
+            currentSubScreen = null;
+        }
+
+        // Мягкое растворение между вкладками (fade_in / fade_out)
+        ft.setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out);
+        currentTabIndex = tabIndex;
+
+        // Прячем всё
+        hideAll(ft);
+
+        // Показываем или создаем нужную вкладку
+        if (tabIndex == 0) {
+            if (feedFragment == null) {
+                feedFragment = new Fragment(); 
+                ft.add(containerId, feedFragment, "FEED");
+            }
+            ft.show(feedFragment);
+        } 
+        else if (tabIndex == 1) {
+            if (searchFragment == null) {
+                searchFragment = new SearchFragment();
+                ft.add(containerId, searchFragment, "SEARCH");
+            }
+            ft.show(searchFragment);
+        } 
+        else if (tabIndex == 3) {
+            if (statsFragment == null) {
+                statsFragment = new StatsFragment();
+                ft.add(containerId, statsFragment, "STATS");
+            }
+            ft.show(statsFragment);
+        } 
+        else if (tabIndex == 4) {
+            if (profileFragment == null) {
+                profileFragment = ProfileFragment.newInstance(uid);
+                ft.add(containerId, profileFragment, "PROFILE");
+            }
+            ft.show(profileFragment);
+        }
+
+        ft.commit();
+    }
+
+    // --- Вспомогательный метод: Прячет ВСЁ на экране ---
+    private void hideAll(FragmentTransaction ft) {
+        if (feedFragment != null) ft.hide(feedFragment);
+        if (searchFragment != null) ft.hide(searchFragment);
+        if (statsFragment != null) ft.hide(statsFragment);
+        if (profileFragment != null) ft.hide(profileFragment);
+    }
+
+    // --- Вспомогательный метод: Показывает конкретную вкладку ---
+    private void showMainTab(int index, FragmentTransaction ft) {
+        if (index == 0 && feedFragment != null) ft.show(feedFragment);
+        if (index == 1 && searchFragment != null) ft.show(searchFragment);
+        if (index == 3 && statsFragment != null) ft.show(statsFragment);
+        if (index == 4 && profileFragment != null) ft.show(profileFragment);
     }
 }
