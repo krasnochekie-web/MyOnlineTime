@@ -66,20 +66,28 @@ public class StatsFragment extends Fragment {
         Spinner spinner = view.findViewById(R.id.spinner_period);
         final TextView totalTimeText = view.findViewById(R.id.text_total_time_sum);
 
-        // Настраиваем RecyclerView (говорим ему быть списком)
+        // Настраиваем RecyclerView (он пока пустой)
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
-
-        // Создаем наш новый мощный адаптер (он теперь принимает только контекст)
         final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
         recyclerView.setAdapter(adapter);
 
-        // 3. Настройка спиннера
+        // Показываем текст "Загрузка" сразу, чтобы экран не был пустым во время анимации
+        totalTimeText.setText(activity.getString(R.string.loading));
+
+        // Настройка спиннера
         String[] periods = getResources().getStringArray(R.array.periods_array);
         ArrayAdapter<String> spinnerAdapter = new ArrayAdapter<>(activity, R.layout.spinner_item, periods);
         spinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
         spinner.setAdapter(spinnerAdapter);
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (!isAdded()) return; // Защита: вдруг юзер уже ушел с экрана
 
-        spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                // 4. Обработка выбора периода НАЧИНАЕТСЯ ТОЛЬКО СЕЙЧАС
+                spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                    @Override
+                    public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
             @Override
             public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
                 if (activity == null) return;
