@@ -84,8 +84,16 @@ public class AppNavigator {
             currentSubScreen = null;
         }
 
-        // Мягкое растворение между вкладками (fade_in / fade_out)
-        ft.setCustomAnimations(android.R.anim.fade_in, android.R.anim.fade_out);
+        // Возвращаем умную анимацию ПЕРЕЛИСТЫВАНИЯ (Сдвиг)
+        if (currentTabIndex != -1 && currentTabIndex != tabIndex) {
+            if (tabIndex > currentTabIndex) {
+                // Идем ВПРАВО (например, с Ленты на Поиск) -> Выезжает справа
+                ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left);
+            } else {
+                // Идем ВЛЕВО (например, с Профиля на Время) -> Выезжает слева
+                ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
+            }
+        }
         currentTabIndex = tabIndex;
 
         // Прячем всё
