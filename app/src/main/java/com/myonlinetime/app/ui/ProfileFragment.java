@@ -127,15 +127,18 @@ public class ProfileFragment extends Fragment {
             nameView.setText(activity.prefs.getString("my_nickname", account.getDisplayName()));
             aboutView.setText(activity.prefs.getString("my_about", ""));
 
+            // СТАЛО (Доверяем всё Glide):
             Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + myUid);
-            if (cachedAvatar == null) {
-                try {
-                    File file = new File(activity.getFilesDir(), "avatar_" + myUid + ".png");
-                    if (file.exists()) {
-                        cachedAvatar = BitmapFactory.decodeFile(file.getAbsolutePath());
-                        activity.mMemoryCache.put("avatar_" + myUid, cachedAvatar);
-                    }
-                } catch (Exception e) {}
+            if (cachedAvatar != null) {
+                Glide.with(activity).load(cachedAvatar).circleCrop().into(avatarView);
+            } else {
+                // Если картинки нет в нашей быстрой памяти, пусть Glide сам ищет её на диске в фоне!
+                File file = new File(activity.getFilesDir(), "avatar_" + myUid + ".png");
+                if (file.exists()) {
+                    Glide.with(activity).load(file).circleCrop().into(avatarView);
+                } else {
+                    avatarView.setBackgroundResource(R.drawable.bg_edit_circle);
+                }
             }
 
             // СТАЛО:
@@ -164,7 +167,7 @@ if (cachedAvatar != null) {
                     LinearLayout appsContainer = view.findViewById(R.id.profile_apps_container);
                     StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainer);
                 }
-            }, 50);
+            }, 300);
 
         } else {
             nameView.setText(activity.getString(R.string.loading));
