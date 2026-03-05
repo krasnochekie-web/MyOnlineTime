@@ -53,8 +53,8 @@ public class StatsFragment extends Fragment {
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        // 1. Надуваем разметку один раз
-        View view = inflater.inflate(R.layout.layout_usage, container, false);
+        // 1. Надуваем разметку
+        final View view = inflater.inflate(R.layout.layout_usage, container, false);
         
         final MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
@@ -63,131 +63,138 @@ public class StatsFragment extends Fragment {
         }
 
         final RecyclerView recyclerView = view.findViewById(R.id.apps_list);
-        Spinner spinner = view.findViewById(R.id.spinner_period);
+        final Spinner spinner = view.findViewById(R.id.spinner_period);
         final TextView totalTimeText = view.findViewById(R.id.text_total_time_sum);
 
-        // Настраиваем RecyclerView (он пока пустой)
+        // Настраиваем RecyclerView
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
         recyclerView.setAdapter(adapter);
 
-        // Показываем текст "Загрузка" сразу, чтобы экран не был пустым во время анимации
-        totalTimeText.setText(activity.getString(R.string.loading));
+        // Сразу показываем загрузку, чтобы экран не был пустым при анимации
+        totalTimeText.setText(getString(R.string.loading));
 
-        // Настройка спиннера
+        // 3. Настройка спиннера
         String[] periods = getResources().getStringArray(R.array.periods_array);
         ArrayAdapter<String> spinnerAdapter = new ArrayAdapter<>(activity, R.layout.spinner_item, periods);
         spinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
         spinner.setAdapter(spinnerAdapter);
+
+        // --- МАГИЯ ОТЛОЖЕННОЙ ЗАГРУЗКИ ---
+        // Даем 300мс на красивую анимацию перелистывания экрана, а затем считаем стату!
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
-                if (!isAdded()) return; // Защита: вдруг юзер уже ушел с экрана
+                if (!isAdded() || activity == null) return;
 
-                // 4. Обработка выбора периода НАЧИНАЕТСЯ ТОЛЬКО СЕЙЧАС
+                // 4. Вешаем слушатель на спиннер ТОЛЬКО после завершения анимации
                 spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                     @Override
                     public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
-                if (activity == null) return;
-
-                // 1. ПРОВЕРЯЕМ КЭШ: Если мы уже считали этот период, выдаем мгновенно!
-                if (statsCache.containsKey(position)) {
-                    CachedStats cached = statsCache.get(position);
-                    totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
-                    adapter.updateData(cached.list, cached.times);
-                    return; // Выходим, больше ничего считать не нужно!
-                }
-
-                // 2. ЕСЛИ В КЭШЕ НЕТ: Показываем "Загрузка" (НО НЕ ОЧИЩАЕМ СПИСОК, ЧТОБЫ НЕ БЫЛО ЛАГА)
-                totalTimeText.setText(activity.getString(R.string.loading)); 
-                
-                ExecutorService executor = Executors.newSingleThreadExecutor();
-                final Handler handler = new Handler(Looper.getMainLooper());
-
-                executor.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        // ... (ЗДЕСЬ ВАША ОБЫЧНАЯ МАТЕМАТИКА СО СТАТИСТИКОЙ) ...
-                        // Ничего в расчетах не меняем, всё как было раньше
                         
-                        Calendar cal = Calendar.getInstance(); 
-                        long now = System.currentTimeMillis();
-                        long startTime = now;
-                        int intervalType = UsageStatsManager.INTERVAL_DAILY;
-                        
-                        if (position == 0) { cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_DAILY;} 
-                        else if (position == 1) { cal.add(Calendar.DAY_OF_YEAR, -7); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_WEEKLY; } 
-                        else if (position == 2) { cal.add(Calendar.MONTH, -1); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_MONTHLY; } 
-                        else { cal.add(Calendar.YEAR, -1); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_YEARLY; }
-                        
-                        UsageStatsManager usm = (UsageStatsManager) activity.getSystemService(Context.USAGE_STATS_SERVICE);
-                        final Map<String, Long> exactTimes = new HashMap<>();
-                        long tempTotalMillis = 0;
-                        if (usm != null) {
-                            List<UsageStats> stats = usm.queryUsageStats(intervalType, startTime, now);
-                            if (stats != null) {
-                                for (UsageStats stat : stats) {
-                                    long time = stat.getTotalTimeInForeground();
-                                    if (time > 0) exactTimes.put(stat.getPackageName(), exactTimes.getOrDefault(stat.getPackageName(), 0L) + time);
-                                }
-                            }
+                        // Проверяем кэш
+                        if (statsCache.containsKey(position)) {
+                            CachedStats cached = statsCache.get(position);
+                            totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
+                            adapter.updateData(cached.list, cached.times);
+                            return;
                         }
-                        
-                        PackageManager pm = activity.getPackageManager();
-                        Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
-                        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-                        List<android.content.pm.ResolveInfo> resolvedInfos = pm.queryIntentActivities(mainIntent, 0);
-                        Set<String> userApps = new HashSet<>();
-                        for (android.content.pm.ResolveInfo info : resolvedInfos) { userApps.add(info.activityInfo.packageName); }
-                        
-                        Intent homeIntent = new Intent(Intent.ACTION_MAIN);
-                        homeIntent.addCategory(Intent.CATEGORY_HOME);
-                        android.content.pm.ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
-                        String launcherPkg = defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
-                        
-                        final List<String> finalList = new ArrayList<>();
-                        for (Map.Entry<String, Long> entry : exactTimes.entrySet()) {
-                            String pkg = entry.getKey();
-                            long time = entry.getValue();
-                            boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || pkg.equals(launcherPkg);
-                            if (time > 0 && userApps.contains(pkg) && !isSystemTrash) {
-                                finalList.add(pkg);
-                                tempTotalMillis += time;
-                            }
-                        }
-                        Collections.sort(finalList, new Comparator<String>() {
-                            @Override public int compare(String left, String right) {
-                                Long tLeft = exactTimes.get(left); Long tRight = exactTimes.get(right);
-                                if (tLeft == null) tLeft = 0L; if (tRight == null) tRight = 0L;
-                                return Long.compare(tRight, tLeft);
-                            }
-                        });
 
-                        final long finalTotalMillis = tempTotalMillis;
+                        // Если кэша нет - считаем в фоне
+                        totalTimeText.setText(activity.getString(R.string.loading));
+                        ExecutorService executor = Executors.newSingleThreadExecutor();
+                        final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
 
-                        // 3. ВОЗВРАЩАЕМСЯ В ГЛАВНЫЙ ПОТОК
-                        handler.post(new Runnable() {
+                        executor.execute(new Runnable() {
                             @Override
                             public void run() {
-                                if (isAdded()) {
-                                    statsCache.put(position, new CachedStats(finalList, exactTimes, finalTotalMillis));
-                                    totalTimeText.setText(Utils.formatTime(activity, finalTotalMillis));
-                                    adapter.updateData(finalList, exactTimes);
+                                Calendar cal = Calendar.getInstance(); 
+                                long now = System.currentTimeMillis();
+                                long startTime = now;
+                                int intervalType = UsageStatsManager.INTERVAL_DAILY;
+                                
+                                if (position == 0) { cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_DAILY;} 
+                                else if (position == 1) { cal.add(Calendar.DAY_OF_YEAR, -7); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_WEEKLY; } 
+                                else if (position == 2) { cal.add(Calendar.MONTH, -1); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_MONTHLY; } 
+                                else { cal.add(Calendar.YEAR, -1); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_YEARLY; }
+                                
+                                UsageStatsManager usm = (UsageStatsManager) activity.getSystemService(Context.USAGE_STATS_SERVICE);
+                                final Map<String, Long> exactTimes = new HashMap<>();
+                                long tempTotalMillis = 0;
+                                
+                                if (usm != null) {
+                                    // Используем БЫСТРЫЙ метод агрегации
+                                    Map<String, UsageStats> aggregatedStats = usm.queryAndAggregateUsageStats(startTime, now);
+                                    if (aggregatedStats != null) {
+                                        for (Map.Entry<String, UsageStats> entry : aggregatedStats.entrySet()) {
+                                            long time = entry.getValue().getTotalTimeInForeground();
+                                            if (time > 0) {
+                                                exactTimes.put(entry.getKey(), time);
+                                            }
+                                        }
+                                    }
                                 }
+                                
+                                PackageManager pm = activity.getPackageManager();
+                                Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
+                                mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+                                List<android.content.pm.ResolveInfo> resolvedInfos = pm.queryIntentActivities(mainIntent, 0);
+                                Set<String> userApps = new HashSet<>();
+                                for (android.content.pm.ResolveInfo info : resolvedInfos) { userApps.add(info.activityInfo.packageName); }
+                                
+                                Intent homeIntent = new Intent(Intent.ACTION_MAIN);
+                                homeIntent.addCategory(Intent.CATEGORY_HOME);
+                                android.content.pm.ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
+                                String launcherPkg = defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
+                                
+                                final List<String> finalList = new ArrayList<>();
+                                for (Map.Entry<String, Long> entry : exactTimes.entrySet()) {
+                                    String pkg = entry.getKey();
+                                    long time = entry.getValue();
+                                    boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || pkg.equals(launcherPkg);
+                                    if (time > 0 && userApps.contains(pkg) && !isSystemTrash) {
+                                        finalList.add(pkg);
+                                        tempTotalMillis += time;
+                                    }
+                                }
+                                
+                                Collections.sort(finalList, new Comparator<String>() {
+                                    @Override public int compare(String left, String right) {
+                                        Long tLeft = exactTimes.get(left); Long tRight = exactTimes.get(right);
+                                        if (tLeft == null) tLeft = 0L; if (tRight == null) tRight = 0L;
+                                        return Long.compare(tRight, tLeft);
+                                    }
+                                });
+
+                                final long finalTotalMillis = tempTotalMillis;
+
+                                // Возвращаемся в UI поток
+                                handler.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        if (isAdded()) {
+                                            statsCache.put(position, new CachedStats(finalList, exactTimes, finalTotalMillis));
+                                            totalTimeText.setText(Utils.formatTime(activity, finalTotalMillis));
+                                            adapter.updateData(finalList, exactTimes);
+                                        }
+                                    }
+                                });
                             }
                         });
-                    } // <-- ЗАКРЫВАЕТ МЕТОД run() ДЛЯ ФОНОВОГО ПОТОКА
-                }); // <-- ЗАКРЫВАЕТ executor.execute
-            } // <-- ЗАКРЫВАЕТ МЕТОД onItemSelected
+                    }
 
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
+                    @Override
+                    public void onNothingSelected(AdapterView<?> parent) {}
+                }); 
+                
+                // Важно: если спиннер уже имеет выбранный элемент, нужно принудительно запустить загрузку в первый раз
+                if (spinner.getSelectedItemPosition() >= 0) {
+                    spinner.getOnItemSelectedListener().onItemSelected(spinner, null, spinner.getSelectedItemPosition(), 0);
+                }
+                
             }
-        }); // <-- ЗАКРЫВАЕТ setOnItemSelectedListener
+        }, 300); // <-- Конец блока postDelayed (ЖДЕМ 300мс!)
 
-        return view; 
-    } // <-- ЗАКРЫВАЕТ МЕТОД onCreateView
-
-} // <-- ЗАКРЫВАЕТ КЛАСС StatsFragment
+        return view;
+    }
+}
