@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#40FFFFFF"> <!-- Полупрозрачный белый цвет волны -->
+    
+    <!-- Ваша серая подложка (или прозрачная, если это аватарка) -->
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/bg_button_gray"/> 
+        </shape>
+    </item>
+    
+    <!-- МАСКА: говорит системе, что волна не должна выходить за пределы овала -->
+    <item android:id="@android:id/mask">
+        <shape android:shape="oval">
+            <solid android:color="@android:color/white" />
+        </shape>
+    </item>
+</ripple>

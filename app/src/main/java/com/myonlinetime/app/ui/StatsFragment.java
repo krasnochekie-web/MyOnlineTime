@@ -92,19 +92,27 @@ public class StatsFragment extends Fragment {
                     @Override
                     public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
                         
-                        // Проверяем кэш
-                        if (statsCache.containsKey(position)) {
-                            CachedStats cached = statsCache.get(position);
-                            totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
-                            adapter.updateData(cached.list, cached.times);
-                            return;
-                        }
+                // 1. ПРОВЕРЯЕМ КЭШ: Если есть, выдаем мгновенно
+                if (statsCache.containsKey(position)) {
+                    CachedStats cached = statsCache.get(position);
+                    totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
+                    adapter.updateData(cached.list, cached.times);
+                    return; 
+                }
 
-                        // Если кэша нет - считаем в фоне
-                        totalTimeText.setText(activity.getString(R.string.loading));
+                // 2. ЕСЛИ В КЭШЕ НЕТ:
+                // 🌟 ДАЕМ СПИННЕРУ 50мс НА МГНОВЕННОЕ ЗАКРЫТИЕ! 🌟
+                final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+                
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!isAdded()) return;
+
+                        // Теперь показываем "Загрузку", спиннер УЖЕ закрыт!
+                        totalTimeText.setText(activity.getString(R.string.loading)); 
+                        
                         ExecutorService executor = Executors.newSingleThreadExecutor();
-                        final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
-
                         executor.execute(new Runnable() {
                             @Override
                             public void run() {
@@ -168,7 +176,6 @@ public class StatsFragment extends Fragment {
 
                                 final long finalTotalMillis = tempTotalMillis;
 
-                                // Возвращаемся в UI поток
                                 handler.post(new Runnable() {
                                     @Override
                                     public void run() {
@@ -180,8 +187,9 @@ public class StatsFragment extends Fragment {
                                     }
                                 });
                             }
-                        });
+                        }); 
                     }
+                }, 50); // <-- ТЕ САМЫЕ 50 МИЛЛИСЕКУНД ДЛЯ ЗАКРЫТИЯ ОКНА
 
                     @Override
                     public void onNothingSelected(AdapterView<?> parent) {}
