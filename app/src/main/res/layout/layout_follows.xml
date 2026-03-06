@@ -51,7 +51,7 @@
                 android:id="@+id/tab_line_followers" 
                 android:layout_width="match_parent" 
                 android:layout_height="2dp" 
-                android:background="@color/tab_line_color" 
+                android:background="@drawable/bg_tab_line" 
                 android:layout_marginTop="8dp" />
         </LinearLayout>
         
@@ -91,7 +91,7 @@
                 android:id="@+id/tab_line_following" 
                 android:layout_width="match_parent" 
                 android:layout_height="2dp" 
-                android:background="@color/tab_line_color" 
+                android:background="@drawable/bg_tab_line" 
                 android:layout_marginTop="8dp" />
         </LinearLayout>
     </LinearLayout>
