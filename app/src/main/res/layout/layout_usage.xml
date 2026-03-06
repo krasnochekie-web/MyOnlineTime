@@ -23,6 +23,8 @@
             android:popupBackground="@drawable/bg_spinner_popup"
             android:background="@null"
             android:padding="5dp"
+            android:listSelector="@android:color/transparent"
+            android:foreground="?android:attr/selectableItemBackgroundBorderless"
             android:spinnerMode="dropdown"/>
     </LinearLayout>
 
