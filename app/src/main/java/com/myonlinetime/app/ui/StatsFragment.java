@@ -190,7 +190,7 @@ public class StatsFragment extends Fragment {
                         }); 
                     }
                 }, 50); // <-- ТЕ САМЫЕ 50 МИЛЛИСЕКУНД ДЛЯ ЗАКРЫТИЯ ОКНА
-
+              }
                     @Override
                     public void onNothingSelected(AdapterView<?> parent) {}
                 }); 
