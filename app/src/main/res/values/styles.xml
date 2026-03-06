@@ -18,14 +18,5 @@
         <!-- Отключаем системную подсветку при нажатии (так как мы делали свою в ripple) -->
         <item name="colorControlHighlight">#33FFFFFF</item>
     </style>
-    <!-- Стиль для выпадающего меню Спиннера -->
-    <style name="CustomSpinnerPopup" parent="Widget.AppCompat.Spinner.DropDown">
-        <!-- 1. Задаем фон самого окна (наш темный квадрат с закруглениями 16dp) -->
-        <item name="android:popupBackground">@drawable/bg_spinner_popup</item>
-        
-        <!-- 2. Подменяем системный прямоугольный клик на НАШ КРУГЛЫЙ! -->
-        <!-- Это решает проблему двойного свечения и обрезки -->
-        <item name="android:listSelector">@drawable/ripple_spinner_item</item>
-    </style>
 </resources>
 

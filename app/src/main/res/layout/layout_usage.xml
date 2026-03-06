@@ -24,8 +24,8 @@
             android:background="@null"
             android:padding="5dp"
             android:spinnerMode="dropdown"
-            android:theme="@style/CustomSpinnerPopup" 
-            app:popupTheme="@style/CustomSpinnerPopup" />/>
+            android:popupBackground="@drawable/bg_spinner_popup"
+            android:listSelector="@android:color/transparent"/>
     </LinearLayout>
 
     <!-- СКРОЛЛ ДЛЯ КАРТОЧКИ И СПИСКА -->
