@@ -20,7 +20,6 @@
         <Spinner
             android:id="@+id/spinner_period"
             android:popupBackground="@drawable/bg_spinner_popup"
-            android:listSelector="@drawable/empty_selector"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="@null"
