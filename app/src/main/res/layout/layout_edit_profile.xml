@@ -43,12 +43,13 @@
                 android:textSize="9sp"
                 android:layout_marginTop="12dp"/>
 
+            <!-- КНОПКА "ИЗМЕНИТЬ ФОТО" -->
             <LinearLayout
                 android:id="@+id/btn_change_photo"
                 android:layout_width="wrap_content"
                 android:layout_height="40dp"
                 android:background="@drawable/bg_button_gray"
-                android:foreground="?android:attr/ripple_circle"
+                android:foreground="@drawable/ripple_button_gray"
                 android:gravity="center"
                 android:paddingLeft="24dp"
                 android:paddingRight="24dp"
@@ -62,6 +63,7 @@
                     android:text="@string/btn_change_photo"
                     android:textColor="@color/burgundyRed" 
                     android:textStyle="bold"/>
+
             </LinearLayout>
 
             <!-- Поле НИКНЕЙМ -->
@@ -128,21 +130,11 @@
                 android:background="@drawable/bg_button_grapefruit"
                 android:clickable="true" 
                 android:focusable="true"
-                android:foreground="?android:attr/ripple_button_grapefruit"
+                android:foreground="@drawable/ripple_button_grapefruit"
                 android:textColor="@color/textWhite" 
                 android:textStyle="bold"
                 android:layout_marginTop="30dp"
                 android:layout_marginBottom="20dp"/>
-
-            <!-- Кнопка ОТМЕНА -->
-            <Button
-                android:id="@+id/edit_btn_back_bottom"
-                android:layout_width="match_parent"
-                android:layout_height="24dp"
-                android:text="@string/btn_cancel"
-                android:background="@null"
-                android:textColor="@color/textGray" 
-                android:textStyle="bold"/>
 
         </LinearLayout>
     </ScrollView>

@@ -164,7 +164,7 @@
                 android:background="@drawable/bg_edit_circle"
                 android:scaleType="centerCrop" />
 
-            <!-- КАРАНДАШИК (В правом верхнем углу карточки) -->
+            <!-- КАРАНДАШИК (Экран Профиля) -->
             <ImageView
                 android:id="@+id/btn_edit_profile"
                 android:layout_width="32dp"
@@ -175,7 +175,7 @@
                 android:background="@drawable/bg_edit_circle"
                 android:clickable="true"
                 android:focusable="true"
-                android:foreground="?android:attr/ripple_circleBorderless"
+                android:foreground="@drawable/ripple_circle"
                 android:padding="6dp"
                 android:src="@drawable/ic_edit"
                 android:tint="@color/textWhite" />

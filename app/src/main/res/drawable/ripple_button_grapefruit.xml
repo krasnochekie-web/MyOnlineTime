@@ -1,20 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
-    android:color="#40FFFFFF">
-    
-    <!-- Ваш основной оранжевый фон с закруглениями -->
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="@color/burgundyRed" />
-            <corners android:radius="12dp" /> <!-- ВАШЕ скругление (12dp, 16dp и т.д.) -->
-        </shape>
-    </item>
-
-    <!-- МАСКА: Обрезает волну ровно по этим же закруглениями -->
+    android:color="#40FFFFFF"> 
     <item android:id="@android:id/mask">
         <shape android:shape="rectangle">
-            <solid android:color="@android:color/white" />
-            <corners android:radius="12dp" /> 
+            <solid android:color="@android:color/black" />
+            <corners android:radius="28dp" /> 
         </shape>
     </item>
 </ripple>

@@ -57,7 +57,6 @@ public class EditProfileFragment extends Fragment {
 
         final EditText inputName = view.findViewById(R.id.input_nickname);
         final EditText inputAbout = view.findViewById(R.id.input_about);
-        View btnCancel = view.findViewById(R.id.edit_btn_back_bottom);
         View btnChangePhoto = view.findViewById(R.id.btn_change_photo);
         ImageView avatarPreview = view.findViewById(R.id.edit_avatar_preview);
 
@@ -81,18 +80,6 @@ if (cachedAvatar != null && avatarPreview != null) {
         if (btnChangePhoto != null) btnChangePhoto.setOnClickListener(photoClickListener);
         if (avatarPreview != null) avatarPreview.setOnClickListener(photoClickListener);
 
-        // Кнопка Отмены использует наш Навигатор!
-        if (btnCancel != null) {
-            btnCancel.setOnClickListener(new View.OnClickListener() { 
-            @Override
-            public void onClick(View v) {
-                // Имитируем нажатие системной кнопки НАЗАД
-                if (getActivity() != null) {
-                    getActivity().onBackPressed();
-                }
-            }
-        });
-     }
         // Кнопка Сохранения
         view.findViewById(R.id.btn_save_changes).setOnClickListener(new View.OnClickListener() { 
             public void onClick(View v) {
