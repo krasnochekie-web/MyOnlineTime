@@ -1,8 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Когда вкладка выбрана -> берем твой burgundyRed -->
-    <item android:state_selected="true" android:color="@color/burgundyRed"/>
     
-    <!-- В обычном состоянии -> ПРОЗРАЧНЫЙ -->
-    <item android:color="#00000000"/>
+    <!-- Состояние: Вкладка ВЫБРАНА -->
+    <item android:state_selected="true">
+        <!-- Вписываем шейп ПРЯМО внутрь, без всяких фокусов -->
+        <shape android:shape="rectangle">
+            <solid android:color="@color/primaryGrapefruit" />
+        </shape>
+    </item>
+
+    <!-- Состояние по умолчанию: Вкладка НЕ ВЫБРАНА -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+        </shape>
+    </item>
+    
 </selector>
