@@ -17,6 +17,7 @@
 
         <!-- Отключаем системную подсветку при нажатии (так как мы делали свою в ripple) -->
         <item name="colorControlHighlight">#33FFFFFF</item>
+    </style>
     <!-- Стиль для выпадающего меню Спиннера -->
     <style name="CustomSpinnerPopup" parent="Widget.AppCompat.Spinner.DropDown">
         <!-- 1. Задаем фон самого окна (наш темный квадрат с закруглениями 16dp) -->
