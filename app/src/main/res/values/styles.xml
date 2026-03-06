@@ -18,5 +18,14 @@
         <!-- Отключаем системную подсветку при нажатии (так как мы делали свою в ripple) -->
         <item name="colorControlHighlight">#33FFFFFF</item>
     </style>
+    <!-- Тема специально для выпадающего окна Спиннера -->
+    <style name="MySpinnerPopupTheme" parent="ThemeOverlay.AppCompat.Light">
+        <!-- 1. Задаем ВАШ закругленный фон для самого окна -->
+        <item name="android:popupBackground">@drawable/bg_spinner_popup</item>
+        
+        <!-- 2. ГЛАВНОЕ: Меняем цвет системного выделения на ПРОЗРАЧНЫЙ! -->
+        <!-- Это полностью убьет тот самый "старый квадратный риппл", который вам мешал -->
+        <item name="colorControlHighlight">@android:color/transparent</item>
+    </style>
 </resources>
 
