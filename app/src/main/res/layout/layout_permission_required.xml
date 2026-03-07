@@ -34,7 +34,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Мы используем эту функцию для показа вашего онлайн времени за неделю. Чтобы пользоваться приложением, пожалуйста, дайте разрешение на сбор данных: \"My Online Time\" (разрешить отслеживать использование)"
+        android:text="@string/permission_rationale" 
         android:textColor="@color/textWhite"
         android:textSize="13sp"
         android:gravity="center"
@@ -64,7 +64,7 @@
         android:id="@+id/btn_grant_permission"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:text="Дать разрешение"
+        android:text="@string/btn_grant_permission" 
         android:background="@drawable/bg_button_grapefruit"
         android:clickable="true"
         android:focusable="true"
