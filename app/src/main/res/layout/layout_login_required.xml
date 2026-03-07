@@ -4,7 +4,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center"
-    android:background="@color/bg_main" 
+    android:background="@color/backgroundDark" 
     android:clickable="true" 
     android:focusable="true"
     android:scrollbars="none"
