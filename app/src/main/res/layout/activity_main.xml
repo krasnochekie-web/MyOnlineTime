@@ -220,5 +220,11 @@
                 android:visibility="gone"/>
         </LinearLayout>
     </LinearLayout>
-
+    <include 
+        layout="@layout/layout_permission_required"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@+id/app_header" 
+        android:visibility="gone" /> 
+   </LinearLayout>
 </RelativeLayout>
