@@ -8,4 +8,5 @@
     <color name="burgundyRed">#FA8072</color> <!-- Пример красивого бордового, можете вписать свой HEX -->
 	<color name="bgDialogDark">#2C2C2C</color>
 <color name="bgExclamationLightGray">#B3B3B3</color>
+	<color name="borderSemiTransparent">#33FFFFFF</color>
 </resources>
