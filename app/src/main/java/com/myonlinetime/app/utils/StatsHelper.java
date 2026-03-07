@@ -18,7 +18,6 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 
-// НОВОЕ: Импорт для работы с фрагментами
 import androidx.fragment.app.Fragment;
 import com.myonlinetime.app.ui.ProfileFragment; 
 
@@ -34,7 +33,7 @@ import java.util.Set;
 
 public class StatsHelper {
 
-    // 1. МЕТОД ДЛЯ ФОНОВОЙ СИНХРОНИЗАЦИИ С СЕРВЕРОМ (Без изменений)
+    // 1. МЕТОД ДЛЯ ФОНОВОЙ СИНХРОНИЗАЦИИ С СЕРВЕРОМ
     public static void syncUserProfile(final MainActivity activity) {
         final GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         if (account == null) return;
@@ -43,16 +42,20 @@ public class StatsHelper {
         Calendar cal = Calendar.getInstance(); 
         cal.add(Calendar.DAY_OF_YEAR, -7); 
         long startTime = cal.getTimeInMillis();
+        
         UsageStatsManager usm = (UsageStatsManager) activity.getSystemService(Context.USAGE_STATS_SERVICE);
         final Map<String, Long> exactTimes = new HashMap<>();
         long totalMillis = 0;
 
         if (usm != null) {
-            List<UsageStats> stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_WEEKLY, startTime, now);
-            if (stats != null) {
-                for (UsageStats stat : stats) {
-                    long time = stat.getTotalTimeInForeground();
-                    if (time > 0) exactTimes.put(stat.getPackageName(), exactTimes.getOrDefault(stat.getPackageName(), 0L) + time);
+            // ИСПРАВЛЕНИЕ: Используем точный метод аггрегации, как в StatsFragment
+            Map<String, UsageStats> aggregatedStats = usm.queryAndAggregateUsageStats(startTime, now);
+            if (aggregatedStats != null) {
+                for (Map.Entry<String, UsageStats> entry : aggregatedStats.entrySet()) {
+                    long time = entry.getValue().getTotalTimeInForeground();
+                    if (time > 0) {
+                        exactTimes.put(entry.getKey(), time);
+                    }
                 }
             }
         }
@@ -81,7 +84,7 @@ public class StatsHelper {
                                     
             if (time > 0 && userApps.contains(pkg) && !isSystemTrash) {
                 finalList.add(pkg);
-                totalMillis += time;
+                totalMillis += time; // Теперь считаем тотальное время только после фильтрации!
             }
         }
 
@@ -124,16 +127,20 @@ public class StatsHelper {
         Calendar cal = Calendar.getInstance(); 
         cal.add(Calendar.DAY_OF_YEAR, -7); 
         long startTime = cal.getTimeInMillis();
+        
         UsageStatsManager usm = (UsageStatsManager) activity.getSystemService(Context.USAGE_STATS_SERVICE);
         final Map<String, Long> exactTimes = new HashMap<>();
         long totalMillis = 0;
 
         if (usm != null) {
-            List<UsageStats> stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_WEEKLY, startTime, now);
-            if (stats != null) {
-                for (UsageStats stat : stats) {
-                    long time = stat.getTotalTimeInForeground();
-                    if (time > 0) exactTimes.put(stat.getPackageName(), exactTimes.getOrDefault(stat.getPackageName(), 0L) + time);
+            // ИСПРАВЛЕНИЕ: Точный метод, как в StatsFragment
+            Map<String, UsageStats> aggregatedStats = usm.queryAndAggregateUsageStats(startTime, now);
+            if (aggregatedStats != null) {
+                for (Map.Entry<String, UsageStats> entry : aggregatedStats.entrySet()) {
+                    long time = entry.getValue().getTotalTimeInForeground();
+                    if (time > 0) {
+                        exactTimes.put(entry.getKey(), time);
+                    }
                 }
             }
         }
@@ -162,7 +169,7 @@ public class StatsHelper {
                                     
             if (time > 0 && userApps.contains(pkg) && !isSystemTrash) {
                 finalList.add(pkg);
-                totalMillis += time;
+                totalMillis += time; // Собираем время без дубликатов!
             }
         }
 
@@ -185,11 +192,10 @@ public class StatsHelper {
 
         int limit = 0;
         for (String pkg : finalList) {
-            if (limit >= 10) break; // Защита от бесконечности
+            if (limit >= 10) break;
             
             View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, appsContainer, false);
             
-            // ПРЯЧЕМ ВСЕ ЭЛЕМЕНТЫ ПОСЛЕ ТРЕТЬЕГО
             if (limit >= 3) {
                 view.setVisibility(View.GONE);
             }
@@ -207,8 +213,6 @@ public class StatsHelper {
             timeView.setText(Utils.formatTime(activity, exactTimes.get(pkg)));
             appsContainer.addView(view);
 
-            // --- НОВОЕ: ИЩЕМ НАШ PROFILE FRAGMENT И ПОДКЛЮЧАЕМ ЛОГИКУ КНОПОК ---
-            // Мы безопасно находим активный ProfileFragment, чтобы не передавать его в параметры метода
             if (activity.getSupportFragmentManager() != null) {
                 for (Fragment f : activity.getSupportFragmentManager().getFragments()) {
                     if (f instanceof ProfileFragment) {
@@ -217,12 +221,10 @@ public class StatsHelper {
                     }
                 }
             }
-            // ------------------------------------------------------------------
 
             limit++;
         }
         
-        // Показываем кнопку-расширитель, если элементов больше 3
         View btnExpand = ((View)appsContainer.getParent()).findViewById(R.id.btn_expand_apps);
         if (btnExpand != null) {
             btnExpand.setVisibility(limit > 3 ? View.VISIBLE : View.GONE);
