@@ -18,6 +18,10 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 
+// НОВОЕ: Импорт для работы с фрагментами
+import androidx.fragment.app.Fragment;
+import com.myonlinetime.app.ui.ProfileFragment; 
+
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
@@ -30,7 +34,7 @@ import java.util.Set;
 
 public class StatsHelper {
 
-    // 1. МЕТОД ДЛЯ ФОНОВОЙ СИНХРОНИЗАЦИИ С СЕРВЕРОМ
+    // 1. МЕТОД ДЛЯ ФОНОВОЙ СИНХРОНИЗАЦИИ С СЕРВЕРОМ (Без изменений)
     public static void syncUserProfile(final MainActivity activity) {
         final GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         if (account == null) return;
@@ -39,7 +43,6 @@ public class StatsHelper {
         Calendar cal = Calendar.getInstance(); 
         cal.add(Calendar.DAY_OF_YEAR, -7); 
         long startTime = cal.getTimeInMillis();
-
         UsageStatsManager usm = (UsageStatsManager) activity.getSystemService(Context.USAGE_STATS_SERVICE);
         final Map<String, Long> exactTimes = new HashMap<>();
         long totalMillis = 0;
@@ -100,7 +103,6 @@ public class StatsHelper {
         }
         
         final long finalTime = totalMillis;
-
         if (activity.vpsToken != null) {
              VpsApi.saveUser(activity.vpsToken, null, null, null, finalTime, finalTopApps, null);
         } else {
@@ -122,7 +124,6 @@ public class StatsHelper {
         Calendar cal = Calendar.getInstance(); 
         cal.add(Calendar.DAY_OF_YEAR, -7); 
         long startTime = cal.getTimeInMillis();
-
         UsageStatsManager usm = (UsageStatsManager) activity.getSystemService(Context.USAGE_STATS_SERVICE);
         final Map<String, Long> exactTimes = new HashMap<>();
         long totalMillis = 0;
@@ -181,6 +182,7 @@ public class StatsHelper {
         if (weekTimeText != null) {
             weekTimeText.setText(hours > 0 ? hours + " ч " + mins + " мин" : mins + " мин");
         }
+
         int limit = 0;
         for (String pkg : finalList) {
             if (limit >= 10) break; // Защита от бесконечности
@@ -197,13 +199,26 @@ public class StatsHelper {
             TextView timeView = view.findViewById(R.id.app_time);
             
             try {
-                android.content.pm.ApplicationInfo appInfo = pm.getApplicationInfo(pkg, 0);
+                ApplicationInfo appInfo = pm.getApplicationInfo(pkg, 0);
                 nameView.setText(pm.getApplicationLabel(appInfo));
                 iconView.setImageDrawable(pm.getApplicationIcon(appInfo));
             } catch (Exception e) { nameView.setText(pkg); }
             
             timeView.setText(Utils.formatTime(activity, exactTimes.get(pkg)));
             appsContainer.addView(view);
+
+            // --- НОВОЕ: ИЩЕМ НАШ PROFILE FRAGMENT И ПОДКЛЮЧАЕМ ЛОГИКУ КНОПОК ---
+            // Мы безопасно находим активный ProfileFragment, чтобы не передавать его в параметры метода
+            if (activity.getSupportFragmentManager() != null) {
+                for (Fragment f : activity.getSupportFragmentManager().getFragments()) {
+                    if (f instanceof ProfileFragment) {
+                        ((ProfileFragment) f).setupOwnerAppInteractions(activity, view, pkg);
+                        break;
+                    }
+                }
+            }
+            // ------------------------------------------------------------------
+
             limit++;
         }
         

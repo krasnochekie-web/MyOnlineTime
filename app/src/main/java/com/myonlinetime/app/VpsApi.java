@@ -2,12 +2,15 @@ package com.myonlinetime.app;
 
 import android.os.Handler;
 import android.os.Looper;
+
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
+
 import okhttp3.Call;
 import okhttp3.HttpUrl;
 import okhttp3.MediaType;
@@ -15,10 +18,10 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+
 import com.myonlinetime.app.models.User;
 
 public class VpsApi {
-
     private static final String BASE_URL = "https://api.krasnocraft.ru/";
     private static final OkHttpClient client = new OkHttpClient();
     private static final Gson gson = new Gson();
@@ -28,6 +31,10 @@ public class VpsApi {
     private static class SaveUserPayload { String nickname, about, photo; long totalTime; Map<String, Long> topApps; }
     private static class FollowPayload { String targetUid; boolean isFollowing; }
     private static class CheckFollowPayload { String targetUid; }
+    
+    // НОВЫЕ ПЭЙЛОАДЫ ДЛЯ СКРЫТИЯ И ОПИСАНИЙ
+    private static class AppVisibilityPayload { String pkgName; boolean isHidden; }
+    private static class AppDescriptionPayload { String pkgName; String description; }
 
     public interface UserCallback { void onLoaded(User user); void onError(String error); }
     public interface SearchCallback { void onFound(List<User> users); }
@@ -39,7 +46,6 @@ public class VpsApi {
         String jsonBody = "{\"idToken\":\"" + googleIdToken + "\"}";
         RequestBody body = RequestBody.create(jsonBody, JSON);
         
-        // --- ИСПОЛЬЗУЕМ ПРАВИЛЬНЫЙ URL ---
         Request request = new Request.Builder()
                 .url(BASE_URL + "auth/google") 
                 .post(body)
@@ -49,7 +55,6 @@ public class VpsApi {
             @Override public void onFailure(Call call, IOException e) {
                 postError(callback, e.getMessage());
             }
-
             @Override public void onResponse(Call call, Response response) throws IOException {
                 if (response.isSuccessful()) {
                     try {
@@ -191,6 +196,28 @@ public class VpsApi {
                 }
             }
         });
+    }
+
+    // --- НОВЫЙ МЕТОД: СКРЫТЬ/ПОКАЗАТЬ ПРИЛОЖЕНИЕ ---
+    public static void setAppVisibility(String ourServerToken, String pkgName, boolean isHidden, final Callback callback) {
+        AppVisibilityPayload payload = new AppVisibilityPayload();
+        payload.pkgName = pkgName;
+        payload.isHidden = isHidden;
+        Request request = createAuthedRequest("set_app_visibility", ourServerToken)
+                .post(RequestBody.create(gson.toJson(payload), JSON))
+                .build();
+        enqueueCall(request, callback);
+    }
+
+    // --- НОВЫЙ МЕТОД: СОХРАНИТЬ ОПИСАНИЕ ПРИЛОЖЕНИЯ ---
+    public static void setAppDescription(String ourServerToken, String pkgName, String description, final Callback callback) {
+        AppDescriptionPayload payload = new AppDescriptionPayload();
+        payload.pkgName = pkgName;
+        payload.description = description;
+        Request request = createAuthedRequest("set_app_description", ourServerToken)
+                .post(RequestBody.create(gson.toJson(payload), JSON))
+                .build();
+        enqueueCall(request, callback);
     }
 
     private static Request.Builder createAuthedRequest(String path, String token) {

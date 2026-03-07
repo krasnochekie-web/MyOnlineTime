@@ -31,7 +31,7 @@
     <string name="btn_change_photo">Изменить фото</string>
     <string name="label_nickname">Никнейм</string>
     <string name="label_about">О себе</string>
-    <string name="btn_save_changes">Сохранить изменения</string>
+    <string name="btn_save_changes">Сохранить</string>
     <string name="btn_cancel">Отмена</string>
 
     <string name="login_prompt_text">Войдите, чтобы находить друзей, смотреть статистику других и попадать в топы!</string>
@@ -59,4 +59,12 @@
     <string name="err_saving">Ошибка сохранения: </string>
     <string name="err_loading">Ошибка загрузки</string>
     <string name="err_image_processing">Ошибка обработки картинки</string>
+	<string name="action_description">Описание</string>
+<string name="action_hide">Скрыть</string>
+<string name="enter_description">Введите описание</string>
+<string name="app_hidden">Скрыто</string>
+<string name="user_hid_time">Пользователь скрыл время у себя</string>
+<string name="hidden_time_placeholder">XXXX</string>
+<string name="btn_save">Сохранить</string>
+
 </resources>

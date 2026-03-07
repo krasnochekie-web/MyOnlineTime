@@ -4,7 +4,6 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:paddingBottom="8dp">
-
     
     <LinearLayout
         android:layout_width="match_parent"
@@ -13,14 +12,12 @@
         android:gravity="center_vertical"
         android:background="@drawable/bg_app_card"
         android:padding="16dp">
-
         
         <ImageView
             android:id="@+id/app_icon"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:src="@android:drawable/sym_def_app_icon"/>
-
         
         <LinearLayout
             android:layout_width="0dp"
@@ -29,14 +26,44 @@
             android:orientation="vertical"
             android:layout_marginLeft="16dp">
 
-            <TextView
-                android:id="@+id/app_name"
-                android:layout_width="wrap_content"
+            <!-- Горизонтальный контейнер для Названия и Замочка -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="App Name"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:textColor="@color/textWhite"/> 
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/app_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="App Name"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/textWhite"/> 
+
+                <!-- Замочек (По умолчанию скрыт) -->
+                <ImageView
+                    android:id="@+id/app_lock_icon"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginLeft="6dp"
+                    android:src="@drawable/ic_lock"
+                    android:tint="@color/textWhite"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Описание (По умолчанию скрыто, обрезается многоточием) -->
+            <TextView
+                android:id="@+id/app_custom_description"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="@color/textGray"
+                android:textSize="11sp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/app_time"
@@ -47,12 +74,15 @@
                 android:textColor="@color/textGray" 
                 android:layout_marginTop="4dp"/>
         </LinearLayout>
-
         
+        <!-- Кнопка 3 точки (ic_more) с добавленным ID и подсветкой при нажатии -->
         <ImageView
+            android:id="@+id/btn_app_options"
             android:layout_width="24dp"
             android:layout_height="24dp"
-            android:src="@drawable/ic_more"/>
-
+            android:src="@drawable/ic_more"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"/>
     </LinearLayout>
 </LinearLayout>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Светло-серый фон (закругленный квадрат, как на фото) -->
+    <path
+        android:fillColor="#80B3B3B3"
+        android:pathData="M6,2 L18,2 C20.2,2 22,3.8 22,6 L22,18 C22,20.2 20.2,22 18,22 L6,22 C3.8,22 2,20.2 2,18 L2,6 C2,3.8 3.8,2 6,2 Z" />
+    
+    <!-- Белый восклицательный знак -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M10.5,6 h3 l-0.5,8 h-2 z M10.5,16 h3 v3 h-3 z" />
+</vector>
