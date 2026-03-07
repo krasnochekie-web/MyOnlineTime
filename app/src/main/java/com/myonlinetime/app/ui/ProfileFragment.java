@@ -2,6 +2,9 @@ package com.myonlinetime.app.ui;
 
 import androidx.fragment.app.Fragment;
 import android.app.Dialog;
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -24,6 +27,8 @@ import android.widget.Toast;
 import com.bumptech.glide.Glide;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
@@ -39,10 +44,12 @@ import java.util.Set;
 
 public class ProfileFragment extends Fragment {
 
-    // --- ЗАГЛУШКИ ДЛЯ БАЗЫ ДАННЫХ (Потом заменишь на вызовы API VpsApi) ---
-    private Set<String> mockHiddenApps = new HashSet<>();
-    private Map<String, String> mockDescriptions = new HashMap<>();
-    // ----------------------------------------------------------------------
+    // --- КЭШ ТЕЛЕФОНА ---
+    private Set<String> localHiddenApps = new HashSet<>();
+    private Map<String, String> localDescriptions = new HashMap<>();
+    private SharedPreferences prefs;
+    private final Gson gson = new Gson();
+    // ---------------------
 
     public static ProfileFragment newInstance(String targetUid) {
         ProfileFragment fragment = new ProfileFragment();
@@ -74,6 +81,10 @@ public class ProfileFragment extends Fragment {
         final String myUid = account.getId();
         final boolean isMe = targetUid.equals(myUid);
         final String finalTargetUid = targetUid;
+
+        // Инициализируем локальный кэш
+        prefs = activity.getSharedPreferences("MyOnlineTime_Cache_" + myUid, Context.MODE_PRIVATE);
+        loadLocalCache();
 
         final TextView nameView = view.findViewById(R.id.profile_name);
         final TextView aboutView = view.findViewById(R.id.profile_about);
@@ -142,8 +153,6 @@ public class ProfileFragment extends Fragment {
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                 if (!isAdded()) return;
                 LinearLayout appsContainer = view.findViewById(R.id.profile_apps_container);
-                // ВАЖНО: Тут вызывается твой StatsHelper для владельца!
-                // Туда тоже нужно будет передать логику кнопок и меню.
                 StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainer);
             }, 300);
 
@@ -190,9 +199,39 @@ public class ProfileFragment extends Fragment {
                                 }
                             }
 
+                            // ОБНОВЛЕНИЕ КЭША ДАННЫМИ С СЕРВЕРА (ПРИОРИТЕТ СЕРВЕРА)
+                            if (isMe) {
+                                boolean cacheChanged = false;
+                                if (user.hiddenApps != null) {
+                                    localHiddenApps.clear();
+                                    localHiddenApps.addAll(user.hiddenApps);
+                                    prefs.edit().putStringSet("hidden_apps", localHiddenApps).apply();
+                                    cacheChanged = true;
+                                }
+                                if (user.appDescriptions != null) {
+                                    localDescriptions.clear();
+                                    localDescriptions.putAll(user.appDescriptions);
+                                    prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
+                                    cacheChanged = true;
+                                }
+                                // Если кэш обновился с сервера, незаметно обновляем UI
+                                if (cacheChanged) {
+                                    LinearLayout appsContainer = view.findViewById(R.id.profile_apps_container);
+                                    StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainer);
+                                }
+                            }
+
                             if (!isMe) {
+                                // Для других пользователей используем их данные напрямую с сервера
+                                if (user.hiddenApps != null) {
+                                    localHiddenApps.clear();
+                                    localHiddenApps.addAll(user.hiddenApps);
+                                }
+                                if (user.appDescriptions != null) {
+                                    localDescriptions.clear();
+                                    localDescriptions.putAll(user.appDescriptions);
+                                }
                                 LinearLayout appsContainer = view.findViewById(R.id.profile_apps_container);
-                                // Передаем weekTimeText для обработки ситуации "Все скрыты"
                                 renderOtherUserStats(user.topApps, appsContainer, activity, weekTimeText);
                             }
 
@@ -201,7 +240,48 @@ public class ProfileFragment extends Fragment {
                     @Override public void onError(String e) {}
                 });
 
-                // ... остальной код VpsApi.getCounts и VpsApi.checkIsFollowing остался без изменений ...
+                VpsApi.getCounts(activity.vpsToken, finalTargetUid, new VpsApi.Callback() {
+                    @Override public void onSuccess(String result) {
+                        if (!isAdded()) return; 
+                        if (result != null && result.contains(":")) {
+                            String[] parts = result.split(":");
+                            if (parts.length >= 2) {
+                                followersCount.setText(parts[0]);
+                                followingCount.setText(parts[1]);
+                            }
+                        }
+                    }
+                    @Override public void onError(String error) {}
+                });
+
+                if (!isMe) {
+                    VpsApi.checkIsFollowing(activity.vpsToken, finalTargetUid, new VpsApi.BooleanCallback() {
+                         @Override public void onResult(final boolean isFollowing) {
+                             if (!isAdded()) return;
+                             updateFollowButton(btnFollow, isFollowing);
+                             btnFollow.setVisibility(View.VISIBLE);
+                             btnFollow.setOnClickListener(new View.OnClickListener() {
+                                 boolean currentStatus = isFollowing;
+                                 public void onClick(View v) {
+                                     currentStatus = !currentStatus;
+                                     updateFollowButton(btnFollow, currentStatus);
+                                     try {
+                                         int count = Integer.parseInt(followersCount.getText().toString());
+                                         count = currentStatus ? count + 1 : count - 1;
+                                         if (count < 0) count = 0;
+                                         followersCount.setText(String.valueOf(count));
+                                     } catch (Exception e) {}
+                                     VpsApi.setFollow(activity.vpsToken, finalTargetUid, currentStatus, new VpsApi.Callback() {
+                                         @Override public void onSuccess(String s) {}
+                                         @Override public void onError(String err) {
+                                             if (isAdded()) Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
+                                         }
+                                     });
+                                 }
+                             });
+                         }
+                    });
+                }
             }
         };
 
@@ -221,21 +301,42 @@ public class ProfileFragment extends Fragment {
         return view;
     }
 
-    // --- ОБНОВЛЕННЫЙ МЕТОД ДЛЯ ДРУГИХ ПОЛЬЗОВАТЕЛЕЙ ---
+    private void loadLocalCache() {
+        localHiddenApps = new HashSet<>(prefs.getStringSet("hidden_apps", new HashSet<>()));
+        String descJson = prefs.getString("app_descriptions", "{}");
+        try {
+            Map<String, String> map = gson.fromJson(descJson, new TypeToken<Map<String, String>>(){}.getType());
+            if (map != null) {
+                localDescriptions.clear();
+                localDescriptions.putAll(map);
+            }
+        } catch (Exception e) { e.printStackTrace(); }
+    }
+
+    @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        if (!hidden) {
+            MainActivity activity = (MainActivity) getActivity();
+            if (activity != null) {
+                activity.mainHeader.setVisibility(View.VISIBLE);
+                activity.resetHeader();
+            }
+        }
+    }
+
     private void renderOtherUserStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText) {
         container.removeAllViews();
         if (topApps == null || topApps.isEmpty() || activity == null) return;
 
-        android.content.pm.PackageManager pm = activity.getPackageManager();
+        PackageManager pm = activity.getPackageManager();
         int limit = 0;
         long totalVisibleTime = 0;
 
         for (Map.Entry<String, Long> entry : topApps.entrySet()) {
             String pkgName = entry.getKey();
 
-            // 1. Если приложение скрыто, пропускаем его (на его место станет следующее)
-            // В реале: брать из user.hiddenApps, сейчас берем из mock
-            if (mockHiddenApps.contains(pkgName)) {
+            if (localHiddenApps.contains(pkgName)) {
                 continue;
             }
 
@@ -251,17 +352,14 @@ public class ProfileFragment extends Fragment {
             TextView nameView = view.findViewById(R.id.app_name);
             TextView timeView = view.findViewById(R.id.app_time);
             
-            // Новые элементы из item_app_usage.xml
             TextView descView = view.findViewById(R.id.app_custom_description);
             ImageView lockView = view.findViewById(R.id.app_lock_icon);
             ImageView optionsBtn = view.findViewById(R.id.btn_app_options);
 
-            // Так как мы рендерим "чужого" пользователя, меню и замочки скрываем
             if (optionsBtn != null) optionsBtn.setVisibility(View.GONE);
             if (lockView != null) lockView.setVisibility(View.GONE);
 
-            // Обработка описания
-            String description = mockDescriptions.get(pkgName); // В реале: user.appDescriptions.get(pkgName)
+            String description = localDescriptions.get(pkgName);
             if (description != null && !description.isEmpty() && descView != null) {
                 descView.setText(description);
                 descView.setVisibility(View.VISIBLE);
@@ -282,12 +380,10 @@ public class ProfileFragment extends Fragment {
             limit++;
         }
 
-        // 2. Логика если ВСЕ приложения скрыты (показываем XXXX и восклицательный знак)
         if (limit == 0 && !topApps.isEmpty()) {
             String hiddenText = activity.getString(R.string.hidden_time_placeholder) + "  "; 
             SpannableString ss = new SpannableString(hiddenText);
             
-            // Вставляем иконку восклицательного знака с серым фоном в конец текста
             android.graphics.drawable.Drawable d = activity.getResources().getDrawable(R.drawable.ic_hidden_exclamation);
             d.setBounds(0, 0, d.getIntrinsicWidth(), d.getIntrinsicHeight());
             ImageSpan span = new ImageSpan(d, ImageSpan.ALIGN_BOTTOM);
@@ -295,17 +391,14 @@ public class ProfileFragment extends Fragment {
 
             weekTimeText.setText(ss);
             
-            // Показываем Toast при нажатии на текст со знаком
             weekTimeText.setOnClickListener(v -> 
                 Toast.makeText(activity, R.string.user_hid_time, Toast.LENGTH_SHORT).show()
             );
         } else {
-            // Форматируем обычное время
             long minutes = totalVisibleTime / 1000 / 60;
             long hours = minutes / 60;
             long mins = minutes % 60;
             weekTimeText.setText(hours > 0 ? hours + " ч " + mins + " мин" : mins + " мин");
-            // Убираем кликабельность, если она была установлена
             weekTimeText.setOnClickListener(null); 
         }
 
@@ -315,8 +408,6 @@ public class ProfileFragment extends Fragment {
         }
     }
 
-    // --- ЛОГИКА ДЛЯ ВЛАДЕЛЬЦА АККАУНТА (Для вызова из StatsHelper) ---
-    // Вызывай этот метод из StatsHelper при биндинге каждого приложения!
     public void setupOwnerAppInteractions(final MainActivity activity, final View itemView, final String pkgName) {
         final ImageView optionsBtn = itemView.findViewById(R.id.btn_app_options);
         final ImageView lockIcon = itemView.findViewById(R.id.app_lock_icon);
@@ -326,11 +417,10 @@ public class ProfileFragment extends Fragment {
         
         optionsBtn.setVisibility(View.VISIBLE);
 
-        // Восстанавливаем состояние при скролле
-        boolean isHidden = mockHiddenApps.contains(pkgName);
+        boolean isHidden = localHiddenApps.contains(pkgName);
         if (lockIcon != null) lockIcon.setVisibility(isHidden ? View.VISIBLE : View.GONE);
         
-        String currentDesc = mockDescriptions.get(pkgName);
+        String currentDesc = localDescriptions.get(pkgName);
         if (descView != null) {
             if (currentDesc != null && !currentDesc.isEmpty()) {
                 descView.setText(currentDesc);
@@ -340,47 +430,56 @@ public class ProfileFragment extends Fragment {
             }
         }
 
-        // Тост при нажатии на замочек
         if (lockIcon != null) {
             lockIcon.setOnClickListener(v -> Toast.makeText(activity, R.string.app_hidden, Toast.LENGTH_SHORT).show());
         }
 
-        // Открытие Popup Menu
         optionsBtn.setOnClickListener(v -> {
             View popupView = LayoutInflater.from(activity).inflate(R.layout.popup_app_options, null);
             final PopupWindow popupWindow = new PopupWindow(popupView, 
                     ViewGroup.LayoutParams.WRAP_CONTENT, 
                     ViewGroup.LayoutParams.WRAP_CONTENT, true);
             
-            // Прозрачный фон обязателен, чтобы закругления сработали
             popupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             popupWindow.setElevation(10f);
 
             TextView btnDesc = popupView.findViewById(R.id.menu_description);
             TextView btnHide = popupView.findViewById(R.id.menu_hide);
 
-            // Логика "Скрыть"
+            // Кнопка "Скрыть / Показать"
             btnHide.setOnClickListener(v1 -> {
                 popupWindow.dismiss();
-                // Тоггл: скрываем/показываем
-                if (mockHiddenApps.contains(pkgName)) {
-                    mockHiddenApps.remove(pkgName);
-                    if (lockIcon != null) lockIcon.setVisibility(View.GONE);
-                } else {
-                    mockHiddenApps.add(pkgName);
+                
+                boolean willHide = !localHiddenApps.contains(pkgName);
+                
+                if (willHide) {
+                    localHiddenApps.add(pkgName);
                     if (lockIcon != null) lockIcon.setVisibility(View.VISIBLE);
                     Toast.makeText(activity, R.string.app_hidden, Toast.LENGTH_SHORT).show();
+                } else {
+                    localHiddenApps.remove(pkgName);
+                    if (lockIcon != null) lockIcon.setVisibility(View.GONE);
                 }
-                // TODO: Отправить запрос на сервер (VpsApi.setAppHidden(pkgName, isHidden...))
+
+                // Сохраняем в кэш
+                prefs.edit().putStringSet("hidden_apps", localHiddenApps).apply();
+                
+                // Отправляем на сервер
+                if (activity.vpsToken != null) {
+                    VpsApi.setAppVisibility(activity.vpsToken, pkgName, willHide, new VpsApi.Callback() {
+                        @Override public void onSuccess(String result) {}
+                        @Override public void onError(String error) {
+                            // Опционально: показать ошибку или откатить кэш, если сервер недоступен
+                        }
+                    });
+                }
             });
 
-            // Логика "Описание"
             btnDesc.setOnClickListener(v12 -> {
                 popupWindow.dismiss();
                 showDescriptionDialog(activity, pkgName, descView);
             });
 
-            // Показываем под кнопкой (с небольшим смещением)
             popupWindow.showAsDropDown(optionsBtn, -40, 0);
         });
     }
@@ -391,15 +490,24 @@ public class ProfileFragment extends Fragment {
         dialog.setContentView(R.layout.dialog_app_description);
         dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        // Легкая анимация появления (нужно прописать в стилях или оставить дефолтную Android)
         dialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog;
 
         ImageView btnClose = dialog.findViewById(R.id.dialog_close_btn);
         Button btnSave = dialog.findViewById(R.id.dialog_save_btn);
         EditText editDesc = dialog.findViewById(R.id.dialog_edit_description);
+        TextView titleView = dialog.findViewById(R.id.dialog_title);
 
-        // Если уже есть описание, подставляем его
-        String existingDesc = mockDescriptions.get(pkgName);
+        // Получаем красивое имя приложения
+        PackageManager pm = activity.getPackageManager();
+        String appName = pkgName;
+        try {
+            appName = pm.getApplicationLabel(pm.getApplicationInfo(pkgName, 0)).toString();
+        } catch (Exception e) {}
+
+        // Устанавливаем заголовок "Описание НазваниеПриложения"
+        titleView.setText(activity.getString(R.string.action_description) + " " + appName);
+
+        String existingDesc = localDescriptions.get(pkgName);
         if (existingDesc != null) {
             editDesc.setText(existingDesc);
             editDesc.setSelection(existingDesc.length());
@@ -409,8 +517,11 @@ public class ProfileFragment extends Fragment {
 
         btnSave.setOnClickListener(v -> {
             String newDesc = editDesc.getText().toString().trim();
-            mockDescriptions.put(pkgName, newDesc);
+            localDescriptions.put(pkgName, newDesc);
             
+            // Сохраняем в кэш телефона
+            prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
+
             if (descView != null) {
                 if (!newDesc.isEmpty()) {
                     descView.setText(newDesc);
@@ -420,9 +531,28 @@ public class ProfileFragment extends Fragment {
                 }
             }
             dialog.dismiss();
-            // TODO: Сохранить описание на сервере (VpsApi.setAppDescription(pkgName, newDesc...))
+            
+            // Отправляем на сервер
+            if (activity.vpsToken != null) {
+                VpsApi.setAppDescription(activity.vpsToken, pkgName, newDesc, new VpsApi.Callback() {
+                    @Override public void onSuccess(String result) {}
+                    @Override public void onError(String error) {}
+                });
+            }
         });
 
         dialog.show();
+    }
+
+    private void updateFollowButton(android.widget.Button btnFollow, boolean isFollowing) {
+        if (isFollowing) {
+            btnFollow.setText(btnFollow.getContext().getString(R.string.btn_unfollow));
+            btnFollow.setBackgroundResource(R.drawable.bg_button_gray);
+            btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textGray));
+        } else {
+            btnFollow.setText("Подписаться"); // Или R.string.btn_follow, как было
+            btnFollow.setBackgroundResource(R.drawable.bg_button_grapefruit);
+            btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textWhite));
+        }
     }
 }
