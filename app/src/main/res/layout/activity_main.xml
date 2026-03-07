@@ -191,7 +191,7 @@
                 android:visibility="gone"/>
         </LinearLayout>
 
-        <!-- Вкладка 5: Профиль -->
+        <!-- Вкладка 5: Профиль (твой код) -->
         <LinearLayout 
             android:id="@+id/nav_profile" 
             android:layout_width="0dp" 
@@ -218,13 +218,17 @@
                 android:textColor="@color/selector_grapefruit_white" 
                 android:layout_marginTop="2dp"
                 android:visibility="gone"/>
+
         </LinearLayout>
-    </LinearLayout>
+
+    </LinearLayout> <!-- Закрывает bottom_nav_container -->
+
+    <!-- Экран разрешений -->
     <include 
         layout="@layout/layout_permission_required"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_below="@+id/app_header" 
         android:visibility="gone" /> 
-   </LinearLayout>
+
 </RelativeLayout>
