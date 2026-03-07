@@ -4,10 +4,14 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center"
-    android:background="@color/backgroundDark" 
+    android:background="@color/bg_main" 
+    android:clickable="true" 
+    android:focusable="true"
     android:scrollbars="none"
     android:paddingTop="@dimen/header_clearance"
-    android:clipToPadding="false"> 
+    android:clipToPadding="false"
+    android:paddingLeft="24dp"
+    android:paddingRight="24dp"> 
 
     <ImageView
         android:layout_width="100dp"
@@ -25,7 +29,7 @@
         android:layout_marginTop="16dp"/>
 
     <TextView
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/login_prompt_text"
         android:textColor="@color/textWhite" 
@@ -33,7 +37,6 @@
         android:gravity="center"
         android:layout_marginTop="20dp"
         android:layout_marginBottom="60dp"/>
-
     
     <Button
         android:id="@+id/btn_login_center"
@@ -44,5 +47,4 @@
         android:textColor="@color/burgundyRed" 
         android:textStyle="bold"
         android:textSize="12sp"/>
-
 </LinearLayout>
