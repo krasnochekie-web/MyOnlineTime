@@ -66,5 +66,7 @@
 <string name="user_hid_time">Пользователь скрыл время у себя</string>
 <string name="hidden_time_placeholder">XXXX</string>
 <string name="btn_save">Сохранить</string>
-
+    <!-- Экран разрешений -->
+    <string name="permission_rationale">Мы используем эту функцию для показа вашего онлайн времени за неделю. Чтобы пользоваться приложением, пожалуйста, дайте разрешение на сбор данных: \"My Online Time\" (разрешить отслеживать использование)</string>
+    <string name="btn_grant_permission">Дать разрешение</string>
 </resources>
