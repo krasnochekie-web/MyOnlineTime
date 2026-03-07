@@ -3,6 +3,7 @@ package com.myonlinetime.app;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.myonlinetime.app.utils.StatsHelper;
+
 import android.app.AppOpsManager;
 import android.content.Context;
 import android.content.Intent;
@@ -11,39 +12,27 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.Paint;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffXfermode;
-import android.graphics.Rect;
-import android.graphics.Typeface;
-import android.os.AsyncTask;
 import android.os.Bundle;
-import android.provider.MediaStore;
-import android.text.Editable;
-import android.text.TextWatcher;
-import com.bumptech.glide.Glide;
 import android.util.LruCache;
 import android.util.Base64;
-import android.view.Gravity;
-import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.Window;
-import android.view.WindowManager;
 import android.widget.*;
+
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
-import android.app.usage.UsageEvents;
+
 import com.myonlinetime.app.models.User;
 import com.myonlinetime.app.utils.Utils;
 import com.myonlinetime.app.adapters.AppsAdapter;
+
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.tasks.Task;
+import com.bumptech.glide.Glide;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -59,7 +48,6 @@ public class MainActivity extends AppCompatActivity {
     public View mainRoot;
     public TextView headerTitle;
     public ImageView headerBackBtn;
-
     private ImageView iconFeed, iconSearch, iconUsage, iconProfile;
     private TextView textFeed, textSearch, textUsage, textProfile;
     private int currentTab = 0;
@@ -75,27 +63,25 @@ public class MainActivity extends AppCompatActivity {
     public String vpsToken = null;
     public com.myonlinetime.app.utils.AppNavigator navigator;
 
-@Override
-protected void onCreate(Bundle savedInstanceState) {
-    super.onCreate(savedInstanceState);
+    // Ссылка на экран блокировки без разрешений
+    private View permissionOverlay;
 
-    // --- ПРАВИЛЬНЫЙ СПОСОБ ЗАЛЕЗТЬ ПОД СТАТУС-БАР ---
-    Window window = getWindow();
-    // Говорим окну рисоваться под системными панелями
-    window.getDecorView().setSystemUiVisibility(
-            View.SYSTEM_UI_FLAG_LAYOUT_STABLE 
-            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
-    // Делаем сам статус-бар полностью прозрачным
-    window.setStatusBarColor(android.graphics.Color.TRANSPARENT);
-    // ------------------------------------------------
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        
+        Window window = getWindow();
+        window.getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE 
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        window.setStatusBarColor(android.graphics.Color.TRANSPARENT);
 
-    setContentView(R.layout.activity_main);
-    navigator = new com.myonlinetime.app.utils.AppNavigator(this, R.id.fragment_container);
-         mainRoot = findViewById(R.id.main_root);
-
+        setContentView(R.layout.activity_main);
+        
+        navigator = new com.myonlinetime.app.utils.AppNavigator(this, R.id.fragment_container);
+        mainRoot = findViewById(R.id.main_root);
         
         prefs = getSharedPreferences("UserProfile", MODE_PRIVATE);
-
         final int maxMemory = (int) (Runtime.getRuntime().maxMemory() / 1024);
         final int cacheSize = maxMemory / 8;
         mMemoryCache = new LruCache<String, Bitmap>(cacheSize) {
@@ -107,31 +93,17 @@ protected void onCreate(Bundle savedInstanceState) {
                 .requestIdToken("603306715003-0ptgu4fqnldcsoon9niprvi772m2ebks.apps.googleusercontent.com") 
                 .requestEmail().build();
         mGoogleSignInClient = GoogleSignIn.getClient(this, gso);
-
         container = (FrameLayout) findViewById(R.id.fragment_container);
-// Находим шапку (у вас это уже есть)
-mainHeader = findViewById(R.id.app_header);
 
-// --- ДОБАВЛЯЕМ КОД ДЛЯ СКРУГЛЕНИЯ ШАПКИ ---
-// Переводим 24dp (радиус скругления) в пиксели для экрана пользователя
-final float cornerRadius = 24f * getResources().getDisplayMetrics().density;
+        mainHeader = findViewById(R.id.app_header);
+        final float cornerRadius = 24f * getResources().getDisplayMetrics().density;
+        mainHeader.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), (int) (view.getHeight() + cornerRadius), cornerRadius);
+            }
+        });
 
-// Назначаем провайдер контура
-mainHeader.setOutlineProvider(new android.view.ViewOutlineProvider() {
-    @Override
-    public void getOutline(View view, android.graphics.Outline outline) {
-        // Создаем прямоугольник со скругленными углами.
-        // Хитрость: мы увеличиваем высоту на размер радиуса, 
-        // чтобы скруглились только нижние углы, а верхние остались прямыми.
-        outline.setRoundRect(
-            0, 
-            0, 
-            view.getWidth(), 
-            (int) (view.getHeight() + cornerRadius), 
-            cornerRadius
-        );
-    }
-});
         headerTitle = (TextView) findViewById(R.id.header_title);
         headerBackBtn = (ImageView) findViewById(R.id.header_back_btn);
         bottomNav = (View) findViewById(R.id.bottom_nav_container);
@@ -146,35 +118,51 @@ mainHeader.setOutlineProvider(new android.view.ViewOutlineProvider() {
         textUsage = (TextView) findViewById(R.id.text_usage); 
         textProfile = (TextView) findViewById(R.id.text_profile);
 
-findViewById(R.id.nav_feed).setOnClickListener(new View.OnClickListener() {
-    public void onClick(View v) {
-        hideLoginScreen(); // СКРЫВАЕМ ЗАГЛУШКУ
-        updateNavState(0);
-        navigator.switchScreen(0, null);
-        resetHeader();
-    }
-});
+        // --- НОВАЯ ЛОГИКА ДЛЯ ЭКРАНА РАЗРЕШЕНИЙ ---
+        permissionOverlay = findViewById(R.id.permission_overlay);
+        if (permissionOverlay != null) {
+            Button btnGrant = permissionOverlay.findViewById(R.id.btn_grant_permission);
+            if (btnGrant != null) {
+                btnGrant.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        // Открываем настройки доступа к истории использования
+                        startActivity(new Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS));
+                    }
+                });
+            }
+        }
+        // ------------------------------------------
+
+        findViewById(R.id.nav_feed).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                hideLoginScreen(); 
+                updateNavState(0);
+                navigator.switchScreen(0, null);
+                resetHeader();
+            }
+        });
 
         findViewById(R.id.nav_search).setOnClickListener(new View.OnClickListener() { 
             public void onClick(View v) { updateNavState(1); checkAuthAndLoad(1); }
         });
-findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
-    public void onClick(View v) {
-        hideLoginScreen(); // СКРЫВАЕМ ЗАГЛУШКУ
-        updateNavState(3);
-        navigator.switchScreen(3, null);
-        resetHeader();
-    }
-});
+
+        findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                hideLoginScreen(); 
+                updateNavState(3);
+                navigator.switchScreen(3, null);
+                resetHeader();
+            }
+        });
+
         findViewById(R.id.nav_profile).setOnClickListener(new View.OnClickListener() { 
             public void onClick(View v) { updateNavState(4); checkAuthAndLoad(4); }
         });
 
         headerBackBtn.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(View v) {
-                handleBackNavigation();
-            }
+            public void onClick(View v) { handleBackNavigation(); }
         });
 
         updateNavState(0);
@@ -183,30 +171,51 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
         mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, new com.google.android.gms.tasks.OnCompleteListener<GoogleSignInAccount>() {
             @Override
             public void onComplete(Task<GoogleSignInAccount> task) {
-                // Как только токен обновлен - запускаем синхронизацию!
                 StatsHelper.syncUserProfile(MainActivity.this);
             }
         });
     } 
-    
+
+    // --- НОВЫЙ МЕТОД: ПРОВЕРКА РАЗРЕШЕНИЙ ПРИ ВОЗВРАЩЕНИИ В ПРИЛОЖЕНИЕ ---
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (permissionOverlay != null) {
+            if (hasPermission()) {
+                // Разрешение есть -> скрываем заглушку
+                permissionOverlay.setVisibility(View.GONE);
+                
+                // Если мы только что получили разрешение, нужно принудительно 
+                // обновить данные на сервере
+                GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+                if (account != null) {
+                    StatsHelper.syncUserProfile(this);
+                }
+            } else {
+                // Разрешения нет -> показываем заглушку
+                permissionOverlay.setVisibility(View.VISIBLE);
+                permissionOverlay.bringToFront(); // Убеждаемся, что она поверх всего
+                mainHeader.bringToFront(); // Возвращаем шапку поверх заглушки (как ты просил)
+            }
+        }
+    }
+    // ----------------------------------------------------------------------
+
     @Override
     public void onBackPressed() {
         handleBackNavigation();
-    }    private void handleBackNavigation() {
-        // 1. Сначала пытаемся закрыть дочерний экран (Редактор)
+    }    
+
+    private void handleBackNavigation() {
         if (navigator.closeSubScreen()) {
             resetHeader();
-            return; // Экран закрыт, больше ничего не делаем!
+            return; 
         }
-        
-        // 2. Если дочерних экранов не было, работаем с вкладками
         if (currentTab != 0) {
-            // Если мы на любой вкладке кроме Ленты -> идем на Ленту
             updateNavState(0);
             navigator.switchScreen(0, null);
             resetHeader();
         } else {
-            // Если мы на Ленте -> выход из приложения
             super.onBackPressed();
         }
     }
@@ -220,9 +229,9 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
     private void checkAuthAndLoad(int tabIndex) {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         if (account == null) {
-            showLoginScreen(); // Показываем
+            showLoginScreen(); 
         } else {
-            hideLoginScreen(); // СКРЫВАЕМ ЗАГЛУШКУ, если авторизован!
+            hideLoginScreen(); 
             if (tabIndex == 1) navigator.switchScreen(1, null); 
             if (tabIndex == 4) {
                 resetHeader();
@@ -230,9 +239,8 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
                 navigator.switchScreen(4, account.getId()); 
             }
         }
-    } // <--- ВОТ ЭТА СКОБКА БЫЛА ПОТЕРЯНА! ОНА ЗАКРЫВАЕТ checkAuthAndLoad
+    } 
 
-    // НОВЫЙ МЕТОД (Чтобы заглушка не зависала)
     public void hideLoginScreen() {
         View loginView = container.findViewWithTag("login_screen_overlay");
         if (loginView != null) {
@@ -240,19 +248,16 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
         }
     }
 
-    // ВАШ МЕТОД (С добавленным тегом)
     public void showLoginScreen() {
         mainHeader.setVisibility(View.VISIBLE);
         resetHeader();
-        
-        // Проверяем по тегу, нет ли уже заглушки на экране
         if (container.findViewWithTag("login_screen_overlay") != null) return; 
-
+        
+        // Тут мы используем backgroundDark из твоих ресурсов вместо хардкода
         View view = getLayoutInflater().inflate(R.layout.layout_login_required, container, false);
-        view.setBackgroundColor(0xCC000000);
         view.setClickable(true);
-        view.setTag("login_screen_overlay"); // ДОБАВИЛИ ТЕГ
-
+        view.setTag("login_screen_overlay"); 
+        
         Button btn = (Button) view.findViewById(R.id.btn_login_center);
         btn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
@@ -261,11 +266,11 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
         });
         container.addView(view);
     }
+
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         
-        // --- 1. ОБРАБОТКА ВХОДА ЧЕРЕЗ GOOGLE ---
         if (requestCode == RC_SIGN_IN) {
             Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
             try {
@@ -288,7 +293,6 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
             }
         }
 
-        // --- 2. ОБРАБОТКА ВЫБОРА АВАТАРКИ ---
         if (requestCode == RC_PICK_IMAGE && resultCode == RESULT_OK && data != null) {
             try {
                 InputStream inputStream = getContentResolver().openInputStream(data.getData());
@@ -339,9 +343,7 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
                 Toast.makeText(MainActivity.this, getString(R.string.err_image_processing), Toast.LENGTH_SHORT).show();
             }
         }
-    } // <-- Конец метода onActivityResult
-
-    // Дальше должен идти ваш следующий метод, например loadCustomAvatar...
+    }
 
     private void loadCustomAvatar(ImageView imageView, String uid) {
         try {
@@ -369,18 +371,20 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
         currentTab = index;
         mainHeader.setVisibility(View.VISIBLE);
         mainHeader.bringToFront(); 
+        
+        // ВАЖНО: Если есть заглушка прав, мы снова дергаем шапку на самый верх
+        if (permissionOverlay != null && permissionOverlay.getVisibility() == View.VISIBLE) {
+            mainHeader.bringToFront();
+        }
+
         bottomNav.setVisibility(View.VISIBLE);
 
-        // Этот код автоматически применяет нужный цвет из твоего XML файла
         iconFeed.setSelected(index == 0);
         textFeed.setSelected(index == 0);
-
         iconSearch.setSelected(index == 1);
         textSearch.setSelected(index == 1);
-
         iconUsage.setSelected(index == 3);
         textUsage.setSelected(index == 3);
-
         iconProfile.setSelected(index == 4);
         textProfile.setSelected(index == 4);
     }
@@ -410,4 +414,4 @@ findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
         });
         return cleanList;
     }
-} 
+}
