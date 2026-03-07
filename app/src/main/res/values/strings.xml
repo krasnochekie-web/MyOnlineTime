@@ -31,7 +31,7 @@
     <string name="btn_change_photo">Change photo</string>
     <string name="label_nickname">Nickname</string>
     <string name="label_about">About me</string>
-    <string name="btn_save_changes">Save changes</string>
+    <string name="btn_save_changes">Save</string>
     <string name="btn_cancel">Cancel</string>
 
     <string name="login_prompt_text">Sign in to find friends, view stats and get to the top!</string>
@@ -59,4 +59,11 @@
     <string name="err_saving">Save error: </string>
     <string name="err_loading">Loading error</string>
     <string name="err_image_processing">Image processing error</string>
+    <string name="action_description">Description</string>
+    <string name="action_hide">Hide</string>
+    <string name="enter_description">Enter description</string>
+    <string name="app_hidden">Hidden</string>
+    <string name="user_hid_time">User hid their time</string>
+    <string name="hidden_time_placeholder">XXXX</string>
+    <string name="btn_save">Save</string>
 </resources>
