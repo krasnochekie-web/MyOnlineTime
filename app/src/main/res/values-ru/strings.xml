@@ -66,7 +66,8 @@
 <string name="user_hid_time">Пользователь скрыл время у себя</string>
 <string name="hidden_time_placeholder">XXXX</string>
 <string name="btn_save">Сохранить</string>
-    <!-- Экран разрешений -->
-    <string name="permission_rationale">Мы используем эту функцию для показа вашего онлайн времени за неделю. Чтобы пользоваться приложением, пожалуйста, дайте разрешение на сбор данных: \"My Online Time\" (разрешить отслеживать использование)</string>
+    <string name="permission_title">Включить доступ для My Online Time</string>
+    <string name="permission_rationale">Для отображения времени требуется доступ к статистике. Нажмите кнопку <font color="#FA8072">\"Включить доступ\"</font>, выберите <font color="#FA8072">My Online Time</font> в списке приложений и включите доступ.</string>
+    <string name="btn_enable_access">Включить доступ</string>
     <string name="btn_grant_permission">Дать разрешение</string>
 </resources>
