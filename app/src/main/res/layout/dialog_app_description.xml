@@ -66,10 +66,14 @@
             android:layout_marginHorizontal="16dp"
             android:layout_marginBottom="16dp"
             android:background="@drawable/bg_button_grapefruit"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="@drawable/ripple_button_grapefruit"
             android:text="@string/btn_save"
             android:textColor="@color/textWhite"
             android:textStyle="bold" />
     </LinearLayout>
 </androidx.cardview.widget.CardView>
+
 
 
