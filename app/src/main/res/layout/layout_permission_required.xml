@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/permission_overlay"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="@color/backgroundDark"
+    android:clickable="true"
+    android:focusable="true"
+    android:elevation="20dp" 
+    android:paddingLeft="24dp"
+    android:paddingRight="24dp">
+    <!-- elevation="20dp" гарантированно перекроет нижнее меню, у которого 16dp -->
+
+    <!-- Иконка My Online Time -->
+    <ImageView
+        android:layout_width="90dp"
+        android:layout_height="90dp"
+        android:src="@drawable/ic_nav_time_h"
+        android:tint="@color/burgundyRed"/> 
+
+    <!-- Заголовок -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="My Online Time" 
+        android:textColor="@color/burgundyRed" 
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_marginTop="16dp"/>
+
+    <!-- Текст-описание (с правильной скобкой) -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Мы используем эту функцию для показа вашего онлайн времени за неделю. Чтобы пользоваться приложением, пожалуйста, дайте разрешение на сбор данных: \"My Online Time\" (разрешить отслеживать использование)"
+        android:textColor="@color/textWhite"
+        android:textSize="13sp"
+        android:gravity="center"
+        android:lineSpacingExtra="4dp"
+        android:layout_marginTop="24dp"
+        android:layout_marginBottom="32dp"/>
+
+    <!-- Картинка-пример (Второй скриншот с ползунком) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_image_border"
+        android:clipToOutline="true" 
+        android:layout_marginBottom="40dp">
+
+        <!-- Здесь твоя обрезанная картинка-пример -->
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:scaleType="fitCenter"
+            android:src="@drawable/img_permission_example" /> 
+    </LinearLayout>
+
+    <!-- Кнопка дать разрешение -->
+    <Button
+        android:id="@+id/btn_grant_permission"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="Дать разрешение"
+        android:background="@drawable/bg_button_grapefruit"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="@drawable/ripple_button_grapefruit"
+        android:textColor="@color/textWhite"
+        android:textStyle="bold"
+        android:textSize="14sp"/>
+
+</LinearLayout>
