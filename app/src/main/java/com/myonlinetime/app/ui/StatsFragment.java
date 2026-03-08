@@ -133,12 +133,55 @@ public class StatsFragment extends Fragment {
                                         long tempTotalMillis = 0;
                                         
                                         if (usm != null) {
-                                            Map<String, UsageStats> aggregatedStats = usm.queryAndAggregateUsageStats(startTime, now);
-                                            if (aggregatedStats != null) {
-                                                for (Map.Entry<String, UsageStats> entry : aggregatedStats.entrySet()) {
-                                                    long time = entry.getValue().getTotalTimeInForeground();
-                                                    if (time > 0) {
-                                                        exactTimes.put(entry.getKey(), time);
+                                            if (position == 0) {
+                                                // --- ИДЕАЛЬНЫЙ ПОДСЧЕТ ДЛЯ "ЗА СУТКИ" ---
+                                                android.app.usage.UsageEvents events = usm.queryEvents(startTime, now);
+                                                android.app.usage.UsageEvents.Event event = new android.app.usage.UsageEvents.Event();
+                                                Map<String, Long> startTimes = new HashMap<>(); 
+                                                
+                                                while (events.hasNextEvent()) {
+                                                    events.getNextEvent(event);
+                                                    String pkg = event.getPackageName();
+                                                    int type = event.getEventType();
+                                                    long timestamp = event.getTimeStamp();
+
+                                                    if (type == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED) {
+                                                        startTimes.put(pkg, timestamp);
+                                                    } else if (type == android.app.usage.UsageEvents.Event.ACTIVITY_PAUSED || type == android.app.usage.UsageEvents.Event.ACTIVITY_STOPPED) {
+                                                        if (startTimes.containsKey(pkg)) {
+                                                            long start = startTimes.get(pkg);
+                                                            long duration = timestamp - start;
+                                                            if (duration > 0) {
+                                                                Long current = exactTimes.get(pkg);
+                                                                exactTimes.put(pkg, (current == null ? 0 : current) + duration);
+                                                            }
+                                                            startTimes.remove(pkg);
+                                                        } else {
+                                                            long duration = timestamp - startTime;
+                                                            if (duration > 0) {
+                                                                Long current = exactTimes.get(pkg);
+                                                                exactTimes.put(pkg, (current == null ? 0 : current) + duration);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                for (Map.Entry<String, Long> entry : startTimes.entrySet()) {
+                                                    long duration = now - entry.getValue();
+                                                    if (duration > 0) {
+                                                        String pkg = entry.getKey();
+                                                        Long current = exactTimes.get(pkg);
+                                                        exactTimes.put(pkg, (current == null ? 0 : current) + duration);
+                                                    }
+                                                }
+                                            } else {
+                                                // --- СТАРЫЙ ДОБРЫЙ МЕТОД ДЛЯ НЕДЕЛИ, МЕСЯЦА, ГОДА ---
+                                                Map<String, UsageStats> aggregatedStats = usm.queryAndAggregateUsageStats(startTime, now);
+                                                if (aggregatedStats != null) {
+                                                    for (Map.Entry<String, UsageStats> entry : aggregatedStats.entrySet()) {
+                                                        long time = entry.getValue().getTotalTimeInForeground();
+                                                        if (time > 0) {
+                                                            exactTimes.put(entry.getKey(), time);
+                                                        }
                                                     }
                                                 }
                                             }
