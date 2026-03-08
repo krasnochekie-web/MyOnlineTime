@@ -137,7 +137,9 @@ public class StatsFragment extends Fragment {
                                                 // --- ИДЕАЛЬНЫЙ ПОДСЧЕТ ДЛЯ "ЗА СУТКИ" ---
                                                 android.app.usage.UsageEvents events = usm.queryEvents(startTime, now);
                                                 android.app.usage.UsageEvents.Event event = new android.app.usage.UsageEvents.Event();
+                                                
                                                 Map<String, Long> startTimes = new HashMap<>(); 
+                                                Set<String> handledOrphans = new HashSet<>(); // Защита от фантомных событий
                                                 
                                                 while (events.hasNextEvent()) {
                                                     events.getNextEvent(event);
@@ -145,10 +147,14 @@ public class StatsFragment extends Fragment {
                                                     int type = event.getEventType();
                                                     long timestamp = event.getTimeStamp();
 
-                                                    if (type == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED) {
+                                                    // 1 = ACTIVITY_RESUMED (Появилось на экране)
+                                                    if (type == 1) {
                                                         startTimes.put(pkg, timestamp);
-                                                    } else if (type == android.app.usage.UsageEvents.Event.ACTIVITY_PAUSED || type == android.app.usage.UsageEvents.Event.ACTIVITY_STOPPED) {
+                                                    } 
+                                                    // 2 = ACTIVITY_PAUSED (Ушло с экрана)
+                                                    else if (type == 2) {
                                                         if (startTimes.containsKey(pkg)) {
+                                                            // Нормальная сессия (открыли -> закрыли)
                                                             long start = startTimes.get(pkg);
                                                             long duration = timestamp - start;
                                                             if (duration > 0) {
@@ -156,15 +162,19 @@ public class StatsFragment extends Fragment {
                                                                 exactTimes.put(pkg, (current == null ? 0 : current) + duration);
                                                             }
                                                             startTimes.remove(pkg);
-                                                        } else {
+                                                        } else if (!handledOrphans.contains(pkg)) {
+                                                            // Приложение открыли ДО 00:00, а закрыли только что
                                                             long duration = timestamp - startTime;
                                                             if (duration > 0) {
                                                                 Long current = exactTimes.get(pkg);
                                                                 exactTimes.put(pkg, (current == null ? 0 : current) + duration);
                                                             }
+                                                            handledOrphans.add(pkg); // Запоминаем, чтобы не накрутить время снова!
                                                         }
                                                     }
                                                 }
+                                                
+                                                // Для приложений, которые открыты ПРЯМО СЕЙЧАС (нет события закрытия)
                                                 for (Map.Entry<String, Long> entry : startTimes.entrySet()) {
                                                     long duration = now - entry.getValue();
                                                     if (duration > 0) {
