@@ -163,50 +163,31 @@ public class MainActivity extends AppCompatActivity {
         updateNavState(0);
         resetHeader();
         
-    // --- КОНЕЦ МЕТОДА onCreate (Сюда мы добавляем слушатель скролла) ---
+        // --- КОНЕЦ МЕТОДА onCreate ---
         mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
             StatsHelper.syncUserProfile(MainActivity.this);
             loadUserAvatarToBottomNav(); 
         });
 
-        // --- БЕТОННЫЙ СЛУШАТЕЛЬ СКРОЛЛА (РАБОТАЕТ ВЕЗДЕ) ---
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            container.getViewTreeObserver().addOnScrollChangedListener(new android.view.ViewTreeObserver.OnScrollChangedListener() {
-                private int[] location = new int[2];
-                private int lastY = -1;
-
-                @Override
-                public void onScrollChanged() {
-                    // Берем первый видимый элемент (обычно это ScrollView или RecyclerView из фрагмента)
-                    View scrollableView = container.getChildAt(0);
-                    if (scrollableView == null) return;
-
-                    scrollableView.getLocationOnScreen(location);
-                    int currentY = location[1];
-
-                    // Инициализация при первом запуске
-                    if (lastY == -1) {
-                        lastY = currentY;
-                        return;
-                    }
-
-                    int dy = currentY - lastY;
-
-                    // Если экран едет ВВЕРХ (мы листаем вниз) - прячем
-                    if (dy < -15 && isBottomNavVisible) {
-                        hideBottomNav();
-                    } 
-                    // Если экран едет ВНИЗ (мы листаем вверх к началу) - показываем
-                    else if (dy > 15 && !isBottomNavVisible) {
-                        showBottomNav();
-                    }
-
-                    lastY = currentY;
-                }
-            });
-        }
-        
     } // <-- ВОТ ЗДЕСЬ ИДЕАЛЬНО ЗАКРЫВАЕТСЯ МЕТОД onCreate
+
+    // --- СРАЗУ ПОСЛЕ НЕГО ИДЕТ МЕТОД ЗАГРУЗКИ АВАТАРКИ ---
+    private void loadUserAvatarToBottomNav() {
+        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+        if (account != null && iconProfile != null) {
+            Bitmap cachedAvatar = mMemoryCache.get("avatar_" + account.getId());
+            if (cachedAvatar != null) {
+                Glide.with(this).load(cachedAvatar).circleCrop().into(iconProfile);
+            } else {
+                File file = new File(getFilesDir(), "avatar_" + account.getId() + ".png");
+                if (file.exists()) {
+                    Glide.with(this).load(file).circleCrop().into(iconProfile);
+                } else {
+                    iconProfile.setImageResource(R.drawable.ic_nav_profile); 
+                }
+            }
+        }
+    }
 
     // --- НОВЫЙ МЕТОД: ЗАГРУЗКА АВАТАРКИ В ЦЕНТРАЛЬНУЮ КНОПКУ ---
     private void loadUserAvatarToBottomNav() {
