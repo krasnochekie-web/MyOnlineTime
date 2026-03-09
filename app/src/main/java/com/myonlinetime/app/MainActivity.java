@@ -67,10 +67,6 @@ public class MainActivity extends AppCompatActivity {
 
     private View permissionOverlay;
 
-    // --- ПЕРЕМЕННЫЕ ДЛЯ АНИМАЦИИ ПАНЕЛИ ---
-    private float lastTouchY;
-    private boolean isBottomNavVisible = true;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -171,29 +167,6 @@ public class MainActivity extends AppCompatActivity {
         });
     } 
 
-    // --- МАГИЯ АНИМАЦИИ МЕНЮ ПРИ СКРОЛЛИНГЕ ---
-    @Override
-    public boolean dispatchTouchEvent(MotionEvent event) {
-        switch (event.getAction()) {
-            case MotionEvent.ACTION_DOWN:
-                lastTouchY = event.getY();
-                break;
-            case MotionEvent.ACTION_MOVE:
-                float dy = event.getY() - lastTouchY;
-                if (dy > 30 && !isBottomNavVisible) {
-                    // Палец идет вниз (листаем вверх) -> Показываем панель
-                    showBottomNav();
-                    lastTouchY = event.getY();
-                } else if (dy < -30 && isBottomNavVisible) {
-                    // Палец идет вверх (листаем вниз) -> Скрываем панель
-                    hideBottomNav();
-                    lastTouchY = event.getY();
-                }
-                break;
-        }
-        return super.dispatchTouchEvent(event);
-    }
-
     private void showBottomNav() {
         if (bottomNav == null) return;
         isBottomNavVisible = true;
@@ -221,10 +194,44 @@ public class MainActivity extends AppCompatActivity {
                     Glide.with(this).load(file).circleCrop().into(iconProfile);
                 } else {
                     iconProfile.setImageResource(R.drawable.ic_nav_profile); 
+        // ... (остальной код onCreate, где ты настраиваешь кнопки и т.д.)
+        
+        mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
+            StatsHelper.syncUserProfile(MainActivity.this);
+            loadUserAvatarToBottomNav(); 
+        });
+
+        // --- НОВЫЙ УМНЫЙ СЛУШАТЕЛЬ РЕАЛЬНОГО СКРОЛЛА ---
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            container.setOnScrollChangeListener(new View.OnScrollChangeListener() {
+                private int scrollThreshold = 20; // Минимальный порог скролла, чтобы избежать ложных срабатываний
+                private boolean isPanelHidden = false;
+
+                @Override
+                public void onScrollChange(View v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
+                    int dy = scrollY - oldScrollY;
+
+                    if (dy > scrollThreshold && !isPanelHidden) {
+                        // Скроллим ВНИЗ (читаем дальше) -> Прячем панель
+                        isPanelHidden = true;
+                        bottomNav.animate()
+                                .translationY(bottomNav.getHeight() + 50)
+                                .setDuration(250)
+                                .start();
+                    } else if (dy < -scrollThreshold && isPanelHidden) {
+                        // Скроллим ВВЕРХ (возвращаемся) -> Показываем панель
+                        isPanelHidden = false;
+                        bottomNav.animate()
+                                .translationY(0)
+                                .setDuration(250)
+                                .start();
+                    }
                 }
-            }
+            });
         }
-    }
+        // ---------------------------------------------
+        
+    } // Конец метода onCreate
 
     @Override
     protected void onResume() {
