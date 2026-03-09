@@ -9,4 +9,5 @@
 	<color name="bgDialogDark">#2C2C2C</color>
 <color name="bgExclamationLightGray">#B3B3B3</color>
 	<color name="borderSemiTransparent">#33FFFFFF</color>
+	<color name="hisaDark">#696969</color>
 </resources>
