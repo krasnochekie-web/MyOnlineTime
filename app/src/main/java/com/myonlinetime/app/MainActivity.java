@@ -15,6 +15,7 @@ import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.util.LruCache;
 import android.util.Base64;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.Window;
 import android.widget.*;
@@ -48,8 +49,10 @@ public class MainActivity extends AppCompatActivity {
     public View mainRoot;
     public TextView headerTitle;
     public ImageView headerBackBtn;
-    private ImageView iconFeed, iconSearch, iconUsage, iconProfile;
-    private TextView textFeed, textSearch, textUsage, textProfile;
+    
+    // Иконки меню (добавили настройки)
+    private ImageView iconFeed, iconSearch, iconUsage, iconProfile, iconSettings;
+    
     private int currentTab = 0;
 
     public GoogleSignInClient mGoogleSignInClient;
@@ -59,12 +62,14 @@ public class MainActivity extends AppCompatActivity {
     public SharedPreferences prefs;
     public LruCache<String, Bitmap> mMemoryCache;
     
-    private String lastSearchQuery = "";
     public String vpsToken = null;
     public com.myonlinetime.app.utils.AppNavigator navigator;
 
-    // Ссылка на экран блокировки без разрешений
     private View permissionOverlay;
+
+    // --- ПЕРЕМЕННЫЕ ДЛЯ АНИМАЦИИ ПАНЕЛИ ---
+    private float lastTouchY;
+    private boolean isBottomNavVisible = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -110,101 +115,136 @@ public class MainActivity extends AppCompatActivity {
         
         iconFeed = (ImageView) findViewById(R.id.icon_feed); 
         iconSearch = (ImageView) findViewById(R.id.icon_search);
+        iconProfile = (ImageView) findViewById(R.id.icon_profile); // Это теперь по центру
         iconUsage = (ImageView) findViewById(R.id.icon_usage); 
-        iconProfile = (ImageView) findViewById(R.id.icon_profile);
-        
-        textFeed = (TextView) findViewById(R.id.text_feed); 
-        textSearch = (TextView) findViewById(R.id.text_search);
-        textUsage = (TextView) findViewById(R.id.text_usage); 
-        textProfile = (TextView) findViewById(R.id.text_profile);
+        iconSettings = (ImageView) findViewById(R.id.icon_settings); // Это новая справа
 
-        // --- НОВАЯ ЛОГИКА ДЛЯ ЭКРАНА РАЗРЕШЕНИЙ ---
         permissionOverlay = findViewById(R.id.permission_overlay);
         if (permissionOverlay != null) {
             Button btnGrant = permissionOverlay.findViewById(R.id.btn_grant_permission);
             if (btnGrant != null) {
-                btnGrant.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        // Открываем настройки доступа к истории использования
-                        startActivity(new Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS));
-                    }
-                });
+                btnGrant.setOnClickListener(v -> startActivity(new Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)));
             }
         }
-        // ------------------------------------------
 
-        findViewById(R.id.nav_feed).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                hideLoginScreen(); 
-                updateNavState(0);
-                navigator.switchScreen(0, null);
-                resetHeader();
-            }
+        // Логика кликов по меню
+        findViewById(R.id.nav_feed).setOnClickListener(v -> {
+            hideLoginScreen(); 
+            updateNavState(0);
+            navigator.switchScreen(0, null);
+            resetHeader();
         });
 
-        findViewById(R.id.nav_search).setOnClickListener(new View.OnClickListener() { 
-            public void onClick(View v) { updateNavState(1); checkAuthAndLoad(1); }
+        findViewById(R.id.nav_search).setOnClickListener(v -> { 
+            updateNavState(1); 
+            checkAuthAndLoad(1); 
+        });
+        
+        // Вкладка 3: Профиль (Центральная) - индекс 4 остался старым, чтобы не ломать твой код
+        findViewById(R.id.nav_profile).setOnClickListener(v -> { 
+            updateNavState(4); 
+            checkAuthAndLoad(4); 
         });
 
-        findViewById(R.id.nav_usage).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                hideLoginScreen(); 
-                updateNavState(3);
-                navigator.switchScreen(3, null);
-                resetHeader();
-            }
+        findViewById(R.id.nav_usage).setOnClickListener(v -> {
+            hideLoginScreen(); 
+            updateNavState(3);
+            navigator.switchScreen(3, null);
+            resetHeader();
         });
 
-        findViewById(R.id.nav_profile).setOnClickListener(new View.OnClickListener() { 
-            public void onClick(View v) { updateNavState(4); checkAuthAndLoad(4); }
+        // Вкладка 5: Настройки
+        findViewById(R.id.nav_settings).setOnClickListener(v -> {
+            updateNavState(5);
+            Toast.makeText(MainActivity.this, "Раздел настроек", Toast.LENGTH_SHORT).show();
+            // TODO: navigator.switchScreen(5, null);
         });
 
-        headerBackBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) { handleBackNavigation(); }
-        });
+        headerBackBtn.setOnClickListener(v -> handleBackNavigation());
 
         updateNavState(0);
         resetHeader();
         
-        mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, new com.google.android.gms.tasks.OnCompleteListener<GoogleSignInAccount>() {
-            @Override
-            public void onComplete(Task<GoogleSignInAccount> task) {
-                StatsHelper.syncUserProfile(MainActivity.this);
-            }
+        mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
+            StatsHelper.syncUserProfile(MainActivity.this);
+            loadUserAvatarToBottomNav(); // Загружаем аватарку в меню
         });
     } 
 
-    // --- НОВЫЙ МЕТОД: ПРОВЕРКА РАЗРЕШЕНИЙ ПРИ ВОЗВРАЩЕНИИ В ПРИЛОЖЕНИЕ ---
+    // --- МАГИЯ АНИМАЦИИ МЕНЮ ПРИ СКРОЛЛИНГЕ ---
     @Override
-    protected void onResume() {
-        super.onResume();
-        if (permissionOverlay != null) {
-            if (hasPermission()) {
-                // Разрешение есть -> скрываем заглушку
-                permissionOverlay.setVisibility(View.GONE);
-                
-                // Если мы только что получили разрешение, нужно принудительно 
-                // обновить данные на сервере
-                GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
-                if (account != null) {
-                    StatsHelper.syncUserProfile(this);
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                lastTouchY = event.getY();
+                break;
+            case MotionEvent.ACTION_MOVE:
+                float dy = event.getY() - lastTouchY;
+                if (dy > 30 && !isBottomNavVisible) {
+                    // Палец идет вниз (листаем вверх) -> Показываем панель
+                    showBottomNav();
+                    lastTouchY = event.getY();
+                } else if (dy < -30 && isBottomNavVisible) {
+                    // Палец идет вверх (листаем вниз) -> Скрываем панель
+                    hideBottomNav();
+                    lastTouchY = event.getY();
                 }
+                break;
+        }
+        return super.dispatchTouchEvent(event);
+    }
+
+    private void showBottomNav() {
+        if (bottomNav == null) return;
+        isBottomNavVisible = true;
+        bottomNav.animate().translationY(0).setDuration(250).start();
+    }
+
+    private void hideBottomNav() {
+        if (bottomNav == null) return;
+        isBottomNavVisible = false;
+        // Скрываем панель, уводя ее вниз за пределы экрана
+        bottomNav.animate().translationY(bottomNav.getHeight() + 50).setDuration(250).start();
+    }
+    // ---------------------------------------------
+
+    // --- ЗАГРУЗКА АВАТАРКИ В ЦЕНТРАЛЬНУЮ КНОПКУ ---
+    private void loadUserAvatarToBottomNav() {
+        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+        if (account != null && iconProfile != null) {
+            Bitmap cachedAvatar = mMemoryCache.get("avatar_" + account.getId());
+            if (cachedAvatar != null) {
+                Glide.with(this).load(cachedAvatar).circleCrop().into(iconProfile);
             } else {
-                // Разрешения нет -> показываем заглушку
-                permissionOverlay.setVisibility(View.VISIBLE);
-                permissionOverlay.bringToFront(); // Убеждаемся, что она поверх всего
-                mainHeader.bringToFront(); // Возвращаем шапку поверх заглушки (как ты просил)
+                File file = new File(getFilesDir(), "avatar_" + account.getId() + ".png");
+                if (file.exists()) {
+                    Glide.with(this).load(file).circleCrop().into(iconProfile);
+                } else {
+                    iconProfile.setImageResource(R.drawable.ic_nav_profile); 
+                }
             }
         }
     }
-    // ----------------------------------------------------------------------
 
     @Override
-    public void onBackPressed() {
-        handleBackNavigation();
-    }    
+    protected void onResume() {
+        super.onResume();
+        loadUserAvatarToBottomNav(); // Обновляем картинку при возвращении
+        if (permissionOverlay != null) {
+            if (hasPermission()) {
+                permissionOverlay.setVisibility(View.GONE);
+                GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+                if (account != null) StatsHelper.syncUserProfile(this);
+            } else {
+                permissionOverlay.setVisibility(View.VISIBLE);
+                permissionOverlay.bringToFront();
+                mainHeader.bringToFront();
+            }
+        }
+    }
+
+    @Override
+    public void onBackPressed() { handleBackNavigation(); }    
 
     private void handleBackNavigation() {
         if (navigator.closeSubScreen()) {
@@ -243,9 +283,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void hideLoginScreen() {
         View loginView = container.findViewWithTag("login_screen_overlay");
-        if (loginView != null) {
-            container.removeView(loginView); 
-        }
+        if (loginView != null) container.removeView(loginView); 
     }
 
     public void showLoginScreen() {
@@ -253,17 +291,12 @@ public class MainActivity extends AppCompatActivity {
         resetHeader();
         if (container.findViewWithTag("login_screen_overlay") != null) return; 
         
-        // Тут мы используем backgroundDark из твоих ресурсов вместо хардкода
         View view = getLayoutInflater().inflate(R.layout.layout_login_required, container, false);
         view.setClickable(true);
         view.setTag("login_screen_overlay"); 
         
-        Button btn = (Button) view.findViewById(R.id.btn_login_center);
-        btn.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                startActivityForResult(mGoogleSignInClient.getSignInIntent(), RC_SIGN_IN);
-            }
-        });
+        Button btn = view.findViewById(R.id.btn_login_center);
+        btn.setOnClickListener(v -> startActivityForResult(mGoogleSignInClient.getSignInIntent(), RC_SIGN_IN));
         container.addView(view);
     }
 
@@ -279,6 +312,7 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onSuccess(String ourServerToken) {
                         vpsToken = ourServerToken;
+                        loadUserAvatarToBottomNav(); // Загружаем картинку после входа
                         updateNavState(4);
                         StatsHelper.syncUserProfile(MainActivity.this);
                         navigator.switchScreen(4, acct.getId()); 
@@ -308,11 +342,10 @@ public class MainActivity extends AppCompatActivity {
                 inputStream.close();
                 
                 mMemoryCache.put("avatar_" + acct.getId(), scaled);
+                loadUserAvatarToBottomNav(); // Обновляем картинку меню сразу после выбора!
                 
-                ImageView preview = (ImageView) findViewById(R.id.edit_avatar_preview);
-                if (preview != null) {
-                    Glide.with(MainActivity.this).load(scaled).circleCrop().into(preview);
-                }
+                ImageView preview = findViewById(R.id.edit_avatar_preview);
+                if (preview != null) Glide.with(MainActivity.this).load(scaled).circleCrop().into(preview);
                 
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 scaled.compress(Bitmap.CompressFormat.JPEG, 70, baos);
@@ -323,95 +356,38 @@ public class MainActivity extends AppCompatActivity {
                     public void onSuccess(String token) {
                         vpsToken = token;
                         VpsApi.saveUser(vpsToken, null, null, base64, 0, null, new VpsApi.Callback() {
-                            @Override
-                            public void onSuccess(String s) {
-                                Toast.makeText(MainActivity.this, getString(R.string.msg_avatar_saved), Toast.LENGTH_SHORT).show();
-                            }
-                            @Override
-                            public void onError(String s) {
-                                Toast.makeText(MainActivity.this, getString(R.string.err_server) + s, Toast.LENGTH_LONG).show();
-                            }
+                            @Override public void onSuccess(String s) {}
+                            @Override public void onError(String s) {}
                         });
                     }
-                    @Override
-                    public void onError(String e) {
-                        Toast.makeText(MainActivity.this, getString(R.string.err_auth) + e, Toast.LENGTH_LONG).show();
-                    }
+                    @Override public void onError(String e) {}
                 });
-            } catch (Exception e) {
-                e.printStackTrace();
-                Toast.makeText(MainActivity.this, getString(R.string.err_image_processing), Toast.LENGTH_SHORT).show();
-            }
+            } catch (Exception e) { e.printStackTrace(); }
         }
     }
 
-    private void loadCustomAvatar(ImageView imageView, String uid) {
-        try {
-            File file = new File(getFilesDir(), "avatar_" + uid + ".png");
-            if (file.exists()) {
-                Bitmap bmp = BitmapFactory.decodeFile(file.getAbsolutePath());
-                mMemoryCache.put("avatar_" + uid, bmp);
-                Glide.with(this).load(bmp).circleCrop().into(imageView);
-            }
-        } catch (Exception e) {}
-    }
-    
-    private String getLocalAvatarAsBase64(String uid) {
-        try {
-            File file = new File(getFilesDir(), "avatar_" + uid + ".png");
-            if (!file.exists()) return null;
-            Bitmap bm = BitmapFactory.decodeFile(file.getAbsolutePath());
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            bm.compress(Bitmap.CompressFormat.JPEG, 70, baos); 
-            return Base64.encodeToString(baos.toByteArray(), Base64.DEFAULT);
-        } catch (Exception e) { return null; }
-    }
-    
     private void updateNavState(int index) {
         currentTab = index;
         mainHeader.setVisibility(View.VISIBLE);
         mainHeader.bringToFront(); 
         
-        // ВАЖНО: Если есть заглушка прав, мы снова дергаем шапку на самый верх
         if (permissionOverlay != null && permissionOverlay.getVisibility() == View.VISIBLE) {
             mainHeader.bringToFront();
         }
 
         bottomNav.setVisibility(View.VISIBLE);
+        showBottomNav(); // Принудительно показываем меню при переключении вкладок
 
         iconFeed.setSelected(index == 0);
-        textFeed.setSelected(index == 0);
         iconSearch.setSelected(index == 1);
-        textSearch.setSelected(index == 1);
+        iconProfile.setSelected(index == 4); // Центральная вкладка профиля
         iconUsage.setSelected(index == 3);
-        textUsage.setSelected(index == 3);
-        iconProfile.setSelected(index == 4);
-        textProfile.setSelected(index == 4);
+        iconSettings.setSelected(index == 5); // Вкладка настроек
     }
 
     private boolean hasPermission() {
         AppOpsManager appOps = (AppOpsManager) getSystemService(Context.APP_OPS_SERVICE);
         int mode = appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), getPackageName());
         return mode == AppOpsManager.MODE_ALLOWED;
-    }
-    
-    private List<UsageStats> getCleanUsageStats(long start, long end) {
-        UsageStatsManager usm = (UsageStatsManager) getSystemService("usagestats");
-        Map<String, UsageStats> statsMap = usm.queryAndAggregateUsageStats(start, end);
-        List<UsageStats> cleanList = new ArrayList<>();
-        PackageManager pm = getPackageManager();
-        for (UsageStats stat : statsMap.values()) {
-            if (stat.getTotalTimeInForeground() < 1000) continue;
-            if (stat.getLastTimeUsed() < start) continue;
-            if (pm.getLaunchIntentForPackage(stat.getPackageName()) == null) continue;
-            cleanList.add(stat);
-        }
-        Collections.sort(cleanList, new Comparator<UsageStats>() {
-            @Override
-            public int compare(UsageStats a, UsageStats b) {
-                return Long.compare(b.getTotalTimeInForeground(), a.getTotalTimeInForeground());
-            }
-        });
-        return cleanList;
     }
 }
