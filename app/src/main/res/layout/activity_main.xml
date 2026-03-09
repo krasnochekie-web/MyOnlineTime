@@ -61,9 +61,9 @@
         android:layout_width="match_parent"
         android:layout_height="64dp" 
         android:layout_alignParentBottom="true"
-        android:layout_marginLeft="16dp" 
-        android:layout_marginRight="16dp"
-        android:layout_marginBottom="24dp" 
+        android:layout_marginLeft="10dp" 
+        android:layout_marginRight="10dp"
+        android:layout_marginBottom="12dp" 
         android:background="@drawable/bg_floating_bottom_nav"
         android:orientation="horizontal"
         android:gravity="center_vertical"
@@ -71,12 +71,12 @@
         android:elevation="20dp">
 
         <!-- Вкладка 1: Лента -->
-        <LinearLayout android:id="@+id/nav_feed" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_dark_theme">
+        <LinearLayout android:id="@+id/nav_feed" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_circle_dark">
             <ImageView android:id="@+id/icon_feed" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_nav_feed" android:tint="@color/selector_grapefruit_white"/>
         </LinearLayout>
 
         <!-- Вкладка 2: Поиск -->
-        <LinearLayout android:id="@+id/nav_search" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_dark_theme">
+        <LinearLayout android:id="@+id/nav_search" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_circle_dark">
             <ImageView android:id="@+id/icon_search" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_nav_search" android:tint="@color/selector_grapefruit_white"/>
         </LinearLayout>
 
@@ -92,12 +92,12 @@
         </LinearLayout>
 
         <!-- Вкладка 4: Время -->
-        <LinearLayout android:id="@+id/nav_usage" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_dark_theme">
+        <LinearLayout android:id="@+id/nav_usage" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_circle_dark">
             <ImageView android:id="@+id/icon_usage" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_nav_time" android:tint="@color/selector_grapefruit_white"/>
         </LinearLayout>
 
         <!-- Вкладка 5: НАСТРОЙКИ (Вместо старого профиля) -->
-        <LinearLayout android:id="@+id/nav_settings" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_dark_theme">
+        <LinearLayout android:id="@+id/nav_settings" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_circle_dark">
             <ImageView android:id="@+id/icon_settings" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_settings" android:tint="@color/selector_grapefruit_white"/>
         </LinearLayout>
     </LinearLayout>
