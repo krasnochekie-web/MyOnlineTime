@@ -169,23 +169,39 @@ public class MainActivity extends AppCompatActivity {
             loadUserAvatarToBottomNav(); 
         });
 
-        // --- НОВЫЙ УМНЫЙ СЛУШАТЕЛЬ РЕАЛЬНОГО СКРОЛЛА ---
+        // --- БЕТОННЫЙ СЛУШАТЕЛЬ СКРОЛЛА (РАБОТАЕТ ВЕЗДЕ) ---
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            container.setOnScrollChangeListener(new View.OnScrollChangeListener() {
-                private int scrollThreshold = 20; 
-                private boolean isPanelHidden = false;
+            container.getViewTreeObserver().addOnScrollChangedListener(new android.view.ViewTreeObserver.OnScrollChangedListener() {
+                private int[] location = new int[2];
+                private int lastY = -1;
 
                 @Override
-                public void onScrollChange(View v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
-                    int dy = scrollY - oldScrollY;
+                public void onScrollChanged() {
+                    // Берем первый видимый элемент (обычно это ScrollView или RecyclerView из фрагмента)
+                    View scrollableView = container.getChildAt(0);
+                    if (scrollableView == null) return;
 
-                    if (dy > scrollThreshold && !isPanelHidden) {
-                        isPanelHidden = true;
+                    scrollableView.getLocationOnScreen(location);
+                    int currentY = location[1];
+
+                    // Инициализация при первом запуске
+                    if (lastY == -1) {
+                        lastY = currentY;
+                        return;
+                    }
+
+                    int dy = currentY - lastY;
+
+                    // Если экран едет ВВЕРХ (мы листаем вниз) - прячем
+                    if (dy < -15 && isBottomNavVisible) {
                         hideBottomNav();
-                    } else if (dy < -scrollThreshold && isPanelHidden) {
-                        isPanelHidden = false;
+                    } 
+                    // Если экран едет ВНИЗ (мы листаем вверх к началу) - показываем
+                    else if (dy > 15 && !isBottomNavVisible) {
                         showBottomNav();
                     }
+
+                    lastY = currentY;
                 }
             });
         }
@@ -253,35 +269,6 @@ public class MainActivity extends AppCompatActivity {
         } else {
             super.onBackPressed();
         }
-    }
-    
-    // --- УМНАЯ АНИМАЦИЯ МЕНЮ ---
-    @Override
-    public boolean dispatchTouchEvent(MotionEvent event) {
-        switch (event.getAction()) {
-            case MotionEvent.ACTION_DOWN:
-                lastTouchY = event.getY();
-                lastTouchX = event.getX();
-                break;
-            case MotionEvent.ACTION_MOVE:
-                float dy = event.getY() - lastTouchY;
-                float dx = event.getX() - lastTouchX;
-
-                // Срабатывает ТОЛЬКО если свайп строго вертикальный и длиннее 40 пикселей (защита от случайных касаний)
-                if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 40) { 
-                    if (dy > 0 && !isBottomNavVisible) {
-                        // Скролл вверх (возвращаемся) -> Показываем
-                        showBottomNav();
-                        lastTouchY = event.getY(); 
-                    } else if (dy < 0 && isBottomNavVisible) {
-                        // Скролл вниз (читаем) -> Прячем
-                        hideBottomNav();
-                        lastTouchY = event.getY();
-                    }
-                }
-                break;
-        }
-        return super.dispatchTouchEvent(event);
     }
 
     public void resetHeader() {
