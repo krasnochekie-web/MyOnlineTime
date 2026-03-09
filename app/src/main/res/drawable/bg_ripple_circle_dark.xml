@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
-    android:color="#33FFFFFF"> <!-- Цвет волны при нажатии (полупрозрачный белый) -->
+    android:color="#33FFFFFF"> <!-- Цвет волны -->
     
-    <!-- Маска, ограничивающая волну идеальным кругом -->
     <item android:id="@android:id/mask">
-        <shape android:shape="oval">
-            <solid android:color="@android:color/white" />
-        </shape>
+        <!-- Сдавливаем круг со всех сторон, чтобы он был маленьким и аккуратным -->
+        <inset 
+            android:insetTop="8dp" 
+            android:insetBottom="8dp" 
+            android:insetLeft="16dp" 
+            android:insetRight="16dp">
+            
+            <shape android:shape="oval">
+                <solid android:color="@android:color/white" />
+            </shape>
+        </inset>
     </item>
 </ripple>
