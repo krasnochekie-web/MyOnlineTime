@@ -7,11 +7,12 @@
     android:background="@color/backgroundDark">
 
     <!-- КОНТЕЙНЕР ДЛЯ ФРАГМЕНТОВ -->
-    <!-- app:layout_behavior заставит фрагменты реагировать на нижнюю панель -->
+    <!-- app:layout_behavior связывает прокрутку фрагментов с системой -->
     <FrameLayout
         android:id="@+id/fragment_container"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
     <!-- ШАПКА -->
     <!-- app:layout_dodgeInsetEdges="top" гарантирует, что она всегда сверху -->
