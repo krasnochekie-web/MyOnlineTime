@@ -1,16 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/main_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/backgroundDark">
 
+    <!-- КОНТЕЙНЕР ДЛЯ ФРАГМЕНТОВ -->
+    <!-- app:layout_behavior заставит фрагменты реагировать на нижнюю панель -->
     <FrameLayout
         android:id="@+id/fragment_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
     <!-- ШАПКА -->
+    <!-- app:layout_dodgeInsetEdges="top" гарантирует, что она всегда сверху -->
     <LinearLayout
         android:id="@+id/app_header"
         android:clipToOutline="true"
@@ -19,7 +23,8 @@
         android:background="@drawable/bg_gradient_header"
         android:orientation="vertical"
         fitsSystemWindows="true"
-        android:elevation="0dp">
+        android:elevation="0dp"
+        app:layout_insetEdge="top">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -50,37 +55,34 @@
                 android:textSize="20sp"
                 android:textStyle="bold"
                 android:textColor="@color/textWhite"/>
-            
-            <!-- Иконка настроек отсюда УДАЛЕНА -->
         </LinearLayout>
     </LinearLayout>
 
     <!-- ПЛАВАЮЩЕЕ НИЖНЕЕ МЕНЮ НАВИГАЦИИ -->
+    <!-- Вот эта строчка app:layout_behavior="..." творит магию! -->
     <LinearLayout
         android:id="@+id/bottom_nav_container"
         android:layout_width="match_parent"
         android:layout_height="64dp" 
-        android:layout_alignParentBottom="true"
+        android:layout_gravity="bottom"
         android:layout_marginLeft="10dp" 
         android:layout_marginRight="10dp"
-        android:layout_marginBottom="10dp" 
+        android:layout_marginBottom="12dp" 
         android:background="@drawable/bg_floating_bottom_nav"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:baselineAligned="false"
-        android:elevation="20dp">
+        android:elevation="20dp"
+        app:layout_behavior="com.google.android.material.behavior.HideBottomViewOnScrollBehavior">
 
-        <!-- Вкладка 1: Лента -->
         <LinearLayout android:id="@+id/nav_feed" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_circle_dark">
             <ImageView android:id="@+id/icon_feed" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_nav_feed" android:tint="@color/selector_grapefruit_white"/>
         </LinearLayout>
 
-        <!-- Вкладка 2: Поиск -->
         <LinearLayout android:id="@+id/nav_search" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_circle_dark">
             <ImageView android:id="@+id/icon_search" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_nav_search" android:tint="@color/selector_grapefruit_white"/>
         </LinearLayout>
 
-        <!-- Вкладка 3: ПРОФИЛЬ (По центру) -->
         <LinearLayout android:id="@+id/nav_profile" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true">
             <ImageView
                 android:id="@+id/icon_profile"
@@ -91,24 +93,23 @@
                 android:src="@drawable/ic_nav_profile"/>
         </LinearLayout>
 
-        <!-- Вкладка 4: Время -->
         <LinearLayout android:id="@+id/nav_usage" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_circle_dark">
             <ImageView android:id="@+id/icon_usage" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_nav_time" android:tint="@color/selector_grapefruit_white"/>
         </LinearLayout>
 
-        <!-- Вкладка 5: НАСТРОЙКИ (Вместо старого профиля) -->
         <LinearLayout android:id="@+id/nav_settings" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_circle_dark">
             <ImageView android:id="@+id/icon_settings" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_settings" android:tint="@color/selector_grapefruit_white"/>
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Экран разрешений поверх всего -->
+    <!-- Экран разрешений -->
     <include 
         layout="@layout/layout_permission_required"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@+id/app_header" 
+        android:layout_gravity="center"
+        android:layout_marginTop="76dp" 
         android:elevation="30dp"
         android:visibility="gone" /> 
 
-</RelativeLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
