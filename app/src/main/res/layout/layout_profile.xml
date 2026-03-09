@@ -20,6 +20,13 @@
             android:layout_marginTop="20dp"
             android:paddingHorizontal="16dp">
 
+        <!-- ВЕРХНИЙ БЛОК: Кнопка назад, Аватарка и Карандашик -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp" 
+            android:paddingHorizontal="16dp"> <!-- paddingHorizontal="16dp" задает отступ от правого и левого края экрана -->
+
             <!-- Кнопка НАЗАД -->
             <ImageView
                 android:id="@+id/profile_back_btn"
@@ -41,14 +48,18 @@
                 android:background="@drawable/bg_edit_circle"
                 android:scaleType="centerCrop" />
 
-            <!-- КАРАНДАШИК (Справа вверху, как и было) -->
+            <!-- КАРАНДАШИК (Симметрично отвязан от аватара) -->
+            <!-- Он прижат вправо (через alignParentRight) и вверх (через alignParentTop). 
+                 Расстояние справа диктуется paddingHorizontal="16dp" родителя, 
+                 а расстояние сверху мы задаем через layout_marginTop="16dp" для идеальной симметрии! -->
             <ImageView
                 android:id="@+id/btn_edit_profile"
                 android:layout_width="32dp"
                 android:layout_height="32dp"
                 android:layout_alignParentEnd="true"
                 android:layout_alignParentRight="true"
-                android:layout_centerVertical="true"
+                android:layout_alignParentTop="true"
+                android:layout_marginTop="16dp" 
                 android:background="@drawable/bg_edit_circle"
                 android:clickable="true"
                 android:focusable="true"
@@ -271,7 +282,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="40dp"
                 android:background="?android:attr/selectableItemBackground"
-                android:padding="8dp"
+                android:paddingBottom="8dp"
+                android:paddingTop="8dp"
                 android:src="@android:drawable/ic_menu_sort_by_size"
                 android:tint="@color/textGray"
                 android:visibility="gone" />
@@ -282,7 +294,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="40dp"
                 android:background="?android:attr/selectableItemBackground"
-                android:padding="16dp"
+                android:paddingBottom="8dp"
+                android:paddingTop="8dp"
                 android:src="@android:drawable/btn_minus"
                 android:tint="@color/textGray"
                 android:visibility="gone" />
