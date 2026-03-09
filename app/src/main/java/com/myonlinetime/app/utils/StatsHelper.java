@@ -196,7 +196,7 @@ public class StatsHelper {
             
             View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, appsContainer, false);
             
-            if (limit >= 3) {
+            if (limit >= 2) {
                 view.setVisibility(View.GONE);
             }
 
@@ -227,7 +227,7 @@ public class StatsHelper {
         
         View btnExpand = ((View)appsContainer.getParent()).findViewById(R.id.btn_expand_apps);
         if (btnExpand != null) {
-            btnExpand.setVisibility(limit > 3 ? View.VISIBLE : View.GONE);
+            btnExpand.setVisibility(limit > 2 ? View.VISIBLE : View.GONE);
         }
     }
 }
