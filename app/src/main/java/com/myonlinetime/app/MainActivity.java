@@ -66,6 +66,8 @@ public class MainActivity extends AppCompatActivity {
     public com.myonlinetime.app.utils.AppNavigator navigator;
 
     private View permissionOverlay;
+    private float lastTouchY, lastTouchX;
+    private boolean isBottomNavVisible = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -251,6 +253,35 @@ public class MainActivity extends AppCompatActivity {
         } else {
             super.onBackPressed();
         }
+    }
+    
+    // --- УМНАЯ АНИМАЦИЯ МЕНЮ ---
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                lastTouchY = event.getY();
+                lastTouchX = event.getX();
+                break;
+            case MotionEvent.ACTION_MOVE:
+                float dy = event.getY() - lastTouchY;
+                float dx = event.getX() - lastTouchX;
+
+                // Срабатывает ТОЛЬКО если свайп строго вертикальный и длиннее 40 пикселей (защита от случайных касаний)
+                if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 40) { 
+                    if (dy > 0 && !isBottomNavVisible) {
+                        // Скролл вверх (возвращаемся) -> Показываем
+                        showBottomNav();
+                        lastTouchY = event.getY(); 
+                    } else if (dy < 0 && isBottomNavVisible) {
+                        // Скролл вниз (читаем) -> Прячем
+                        hideBottomNav();
+                        lastTouchY = event.getY();
+                    }
+                }
+                break;
+        }
+        return super.dispatchTouchEvent(event);
     }
 
     public void resetHeader() {
