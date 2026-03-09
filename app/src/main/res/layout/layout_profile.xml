@@ -17,15 +17,8 @@
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="12dp"
             android:paddingHorizontal="16dp">
-
-        <!-- ВЕРХНИЙ БЛОК: Кнопка назад, Аватарка и Карандашик -->
-        <RelativeLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp" 
-            android:paddingHorizontal="16dp"> <!-- paddingHorizontal="16dp" задает отступ от правого и левого края экрана -->
 
             <!-- Кнопка НАЗАД -->
             <ImageView
@@ -48,10 +41,7 @@
                 android:background="@drawable/bg_edit_circle"
                 android:scaleType="centerCrop" />
 
-            <!-- КАРАНДАШИК (Симметрично отвязан от аватара) -->
-            <!-- Он прижат вправо (через alignParentRight) и вверх (через alignParentTop). 
-                 Расстояние справа диктуется paddingHorizontal="16dp" родителя, 
-                 а расстояние сверху мы задаем через layout_marginTop="16dp" для идеальной симметрии! -->
+            <!-- КАРАНДАШИК (Симметрично справа вверху) -->
             <ImageView
                 android:id="@+id/btn_edit_profile"
                 android:layout_width="32dp"
@@ -69,7 +59,7 @@
                 android:tint="@color/textWhite" />
         </RelativeLayout>
 
-        <!-- НИКНЕЙМ (Сделали крупнее) -->
+        <!-- НИКНЕЙМ -->
         <TextView
             android:id="@+id/profile_name"
             android:layout_width="match_parent"
@@ -176,7 +166,7 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- О СЕБЕ (Отдельная подложка, до 6 строк) -->
+        <!-- О СЕБЕ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -220,7 +210,7 @@
             android:textStyle="bold"
             android:visibility="gone" />
 
-        <!-- ВКЛАДКИ (Топ-приложения / Посты) -->
+        <!-- ВКЛАДКИ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="48dp"
@@ -267,8 +257,7 @@
             android:layout_marginBottom="30dp"
             android:background="@drawable/bg_card_glass"
             android:orientation="vertical"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp">
+            android:paddingTop="8dp">
 
             <LinearLayout
                 android:id="@+id/profile_apps_container"
@@ -282,8 +271,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="40dp"
                 android:background="?android:attr/selectableItemBackground"
-                android:paddingBottom="8dp"
                 android:paddingTop="8dp"
+                android:paddingBottom="8dp"
                 android:src="@android:drawable/ic_menu_sort_by_size"
                 android:tint="@color/textGray"
                 android:visibility="gone" />
@@ -294,8 +283,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="40dp"
                 android:background="?android:attr/selectableItemBackground"
-                android:paddingBottom="8dp"
                 android:paddingTop="8dp"
+                android:paddingBottom="8dp"
                 android:src="@android:drawable/btn_minus"
                 android:tint="@color/textGray"
                 android:visibility="gone" />
