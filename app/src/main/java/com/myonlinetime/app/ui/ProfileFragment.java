@@ -114,7 +114,7 @@ public class ProfileFragment extends Fragment {
         });
 
         btnCollapse.setOnClickListener(v -> {
-            for (int i = 3; i < appsContainerLocal.getChildCount(); i++) {
+            for (int i = 2; i < appsContainerLocal.getChildCount(); i++) {
                 appsContainerLocal.getChildAt(i).setVisibility(View.GONE);
             }
             btnCollapse.setVisibility(View.GONE);
@@ -344,7 +344,7 @@ public class ProfileFragment extends Fragment {
 
             View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, container, false);
 
-            if (limit >= 3) {
+            if (limit >= 2) {
                 view.setVisibility(View.GONE);
             }
 
@@ -404,7 +404,7 @@ public class ProfileFragment extends Fragment {
 
         View btnExpand = ((View)container.getParent()).findViewById(R.id.btn_expand_apps);
         if (btnExpand != null) {
-            btnExpand.setVisibility(limit > 3 ? View.VISIBLE : View.GONE);
+            btnExpand.setVisibility(limit > 2 ? View.VISIBLE : View.GONE);
         }
     }
 
