@@ -5,7 +5,8 @@
     android:orientation="vertical"
     android:background="@color/backgroundDark"
     android:paddingTop="@dimen/header_clearance"
-    android:clipToPadding="false">
+    android:clipToPadding="false"
+    android:nestedScrollingEnabled="true">
 
     <EditText
         android:id="@+id/search_input"
