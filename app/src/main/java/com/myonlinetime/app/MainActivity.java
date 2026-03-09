@@ -161,27 +161,36 @@ public class MainActivity extends AppCompatActivity {
         updateNavState(0);
         resetHeader();
         
+    // --- КОНЕЦ МЕТОДА onCreate (Сюда мы добавляем слушатель скролла) ---
         mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
             StatsHelper.syncUserProfile(MainActivity.this);
-            loadUserAvatarToBottomNav(); // Загружаем аватарку в меню
+            loadUserAvatarToBottomNav(); 
         });
-    } 
 
-    private void showBottomNav() {
-        if (bottomNav == null) return;
-        isBottomNavVisible = true;
-        bottomNav.animate().translationY(0).setDuration(250).start();
-    }
+        // --- НОВЫЙ УМНЫЙ СЛУШАТЕЛЬ РЕАЛЬНОГО СКРОЛЛА ---
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            container.setOnScrollChangeListener(new View.OnScrollChangeListener() {
+                private int scrollThreshold = 20; 
+                private boolean isPanelHidden = false;
 
-    private void hideBottomNav() {
-        if (bottomNav == null) return;
-        isBottomNavVisible = false;
-        // Скрываем панель, уводя ее вниз за пределы экрана
-        bottomNav.animate().translationY(bottomNav.getHeight() + 50).setDuration(250).start();
-    }
-    // ---------------------------------------------
+                @Override
+                public void onScrollChange(View v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
+                    int dy = scrollY - oldScrollY;
 
-    // --- ЗАГРУЗКА АВАТАРКИ В ЦЕНТРАЛЬНУЮ КНОПКУ ---
+                    if (dy > scrollThreshold && !isPanelHidden) {
+                        isPanelHidden = true;
+                        hideBottomNav();
+                    } else if (dy < -scrollThreshold && isPanelHidden) {
+                        isPanelHidden = false;
+                        showBottomNav();
+                    }
+                }
+            });
+        }
+        
+    } // <-- ВОТ ЗДЕСЬ ИДЕАЛЬНО ЗАКРЫВАЕТСЯ МЕТОД onCreate
+
+    // --- НОВЫЙ МЕТОД: ЗАГРУЗКА АВАТАРКИ В ЦЕНТРАЛЬНУЮ КНОПКУ ---
     private void loadUserAvatarToBottomNav() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         if (account != null && iconProfile != null) {
@@ -194,44 +203,21 @@ public class MainActivity extends AppCompatActivity {
                     Glide.with(this).load(file).circleCrop().into(iconProfile);
                 } else {
                     iconProfile.setImageResource(R.drawable.ic_nav_profile); 
-        // ... (остальной код onCreate, где ты настраиваешь кнопки и т.д.)
-        
-        mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
-            StatsHelper.syncUserProfile(MainActivity.this);
-            loadUserAvatarToBottomNav(); 
-        });
-
-        // --- НОВЫЙ УМНЫЙ СЛУШАТЕЛЬ РЕАЛЬНОГО СКРОЛЛА ---
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            container.setOnScrollChangeListener(new View.OnScrollChangeListener() {
-                private int scrollThreshold = 20; // Минимальный порог скролла, чтобы избежать ложных срабатываний
-                private boolean isPanelHidden = false;
-
-                @Override
-                public void onScrollChange(View v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
-                    int dy = scrollY - oldScrollY;
-
-                    if (dy > scrollThreshold && !isPanelHidden) {
-                        // Скроллим ВНИЗ (читаем дальше) -> Прячем панель
-                        isPanelHidden = true;
-                        bottomNav.animate()
-                                .translationY(bottomNav.getHeight() + 50)
-                                .setDuration(250)
-                                .start();
-                    } else if (dy < -scrollThreshold && isPanelHidden) {
-                        // Скроллим ВВЕРХ (возвращаемся) -> Показываем панель
-                        isPanelHidden = false;
-                        bottomNav.animate()
-                                .translationY(0)
-                                .setDuration(250)
-                                .start();
-                    }
                 }
-            });
+            }
         }
-        // ---------------------------------------------
-        
-    } // Конец метода onCreate
+    }
+    // <-- Здесь закрывается loadUserAvatarToBottomNav
+
+    private void showBottomNav() {
+        if (bottomNav == null) return;
+        bottomNav.animate().translationY(0).setDuration(250).start();
+    }
+
+    private void hideBottomNav() {
+        if (bottomNav == null) return;
+        bottomNav.animate().translationY(bottomNav.getHeight() + 50).setDuration(250).start();
+    }
 
     @Override
     protected void onResume() {
