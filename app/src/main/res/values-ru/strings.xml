@@ -20,6 +20,7 @@
     <string name="unit_m">мин</string>
     <string-array name="periods_array">
         <item>За день</item>
+		<item>Вчера</item>
         <item>За неделю</item>
         <item>За месяц</item>
         <item>За год</item>
