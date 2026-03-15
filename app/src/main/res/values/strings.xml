@@ -20,6 +20,7 @@
     <string name="unit_m">m</string>
     <string-array name="periods_array">
         <item>Last Day</item>
+        <item>Yesterday</item>
         <item>Last Week</item>
         <item>Last Month</item>
         <item>Last Year</item>
