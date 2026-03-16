@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Цвет фона кнопки (замените на нужный вам оттенок темного в colors.xml, например #1E1E1E) -->
+    <solid android:color="@color/backgroundDarker" /> 
+    <corners android:radius="12dp" />
+</shape>
