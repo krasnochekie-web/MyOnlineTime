@@ -26,7 +26,6 @@ import com.myonlinetime.app.utils.Utils;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -65,8 +64,8 @@ public class StatsFragment extends Fragment {
         final TextView btnChart = view.findViewById(R.id.btn_chart);
         final TextView btnAllTime = view.findViewById(R.id.btn_all_time);
 
-        btnChart.setOnClickListener(v -> { /* TODO: Логика графика */ });
-        btnAllTime.setOnClickListener(v -> { /* TODO: Логика "за всё время" */ });
+        btnChart.setOnClickListener(v -> { /* Логика графика */ });
+        btnAllTime.setOnClickListener(v -> { /* Логика "за всё время" */ });
         
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
@@ -94,7 +93,6 @@ public class StatsFragment extends Fragment {
 
                     new Handler(Looper.getMainLooper()).postDelayed(() -> {
                         if (!isAdded()) return;
-                        
                         totalTimeText.setText(activity.getString(R.string.loading));
                         
                         ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -102,40 +100,44 @@ public class StatsFragment extends Fragment {
                             Calendar cal = Calendar.getInstance(); 
                             long endTime = System.currentTimeMillis();
                             long startTime;
+                            int interval;
                             
+                            // ВЫБИРАЕМ ПРАВИЛЬНЫЙ ИНТЕРВАЛ ХРАНИЛИЩА
                             switch (position) {
                                 case 0: // Сегодня
                                     cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0);
                                     startTime = cal.getTimeInMillis();
+                                    interval = -1; // Флаг для использования Events (самый точный для суток)
                                     break;
                                 case 1: // Вчера
                                     cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0);
                                     endTime = cal.getTimeInMillis();
                                     cal.add(Calendar.DAY_OF_YEAR, -1);
                                     startTime = cal.getTimeInMillis();
+                                    interval = -1; // Флаг для использования Events
                                     break;
                                 case 2: // Неделя
                                     cal.add(Calendar.DAY_OF_YEAR, -7);
                                     startTime = cal.getTimeInMillis();
+                                    interval = UsageStatsManager.INTERVAL_WEEKLY;
                                     break;
                                 case 3: // Месяц
                                     cal.add(Calendar.MONTH, -1);
                                     startTime = cal.getTimeInMillis();
+                                    interval = UsageStatsManager.INTERVAL_MONTHLY;
                                     break;
                                 default: // Год
                                     cal.add(Calendar.YEAR, -1);
                                     startTime = cal.getTimeInMillis();
+                                    interval = UsageStatsManager.INTERVAL_YEARLY;
                                     break;
                             }
                             
-                            // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ: ВЫБИРАЕМ МЕТОД В ЗАВИСИМОСТИ ОТ ПЕРИОДА ---
                             final Map<String, Long> exactTimes;
-                            if (position <= 1) {
-                                // Для "Сегодня" и "Вчера" используем самый точный метод событий
-                                exactTimes = calculateTimesFromEvents(activity, startTime, endTime);
+                            if (interval == -1) {
+                                exactTimes = calculateFromEvents(activity, startTime, endTime);
                             } else {
-                                // Для "Недели", "Месяца" и "Года" используем агрегированный метод по дням
-                                exactTimes = calculateTimesFromDailyStats(activity, startTime, endTime);
+                                exactTimes = calculateFromStats(activity, interval, startTime, endTime);
                             }
                             
                             long tempTotalMillis = 0;
@@ -148,14 +150,13 @@ public class StatsFragment extends Fragment {
                                 String pkg = entry.getKey();
                                 long time = entry.getValue();
                                 boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || pkg.equals(launcherPkg);
-                                if (time > 1000 && userApps.contains(pkg) && !isSystemTrash) { // Отсекаем мусор < 1 секунды
+                                if (time > 1000 && userApps.contains(pkg) && !isSystemTrash) {
                                     finalList.add(pkg);
                                     tempTotalMillis += time;
                                 }
                             }
                             
                             Collections.sort(finalList, (left, right) -> Long.compare(exactTimes.get(right), exactTimes.get(left)));
-
                             final long finalTotalMillis = tempTotalMillis;
                             
                             new Handler(Looper.getMainLooper()).post(() -> {
@@ -178,57 +179,51 @@ public class StatsFragment extends Fragment {
         return view;
     }
 
-    /**
-     * Точный метод для коротких периодов (Сегодня, Вчера) через события.
-     */
-    private Map<String, Long> calculateTimesFromEvents(Context context, long startTime, long endTime) {
-        Map<String, Long> exactTimes = new HashMap<>();
+    // МЕТОД 1: Через события (для Сегодня/Вчера)
+    private Map<String, Long> calculateFromEvents(Context context, long start, long end) {
+        Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
-        if (usm == null) return exactTimes;
+        if (usm == null) return results;
 
-        UsageEvents events = usm.queryEvents(startTime, endTime);
-        Map<String, Long> startEventTimes = new HashMap<>();
-        
+        UsageEvents events = usm.queryEvents(start, end);
+        Map<String, Long> openTimes = new HashMap<>();
+        UsageEvents.Event event = new UsageEvents.Event();
+
         while (events.hasNextEvent()) {
-            UsageEvents.Event event = new UsageEvents.Event();
             events.getNextEvent(event);
             String pkg = event.getPackageName();
-            
             if (event.getEventType() == UsageEvents.Event.ACTIVITY_RESUMED) {
-                startEventTimes.put(pkg, event.getTimeStamp());
-            } 
-            else if (event.getEventType() == UsageEvents.Event.ACTIVITY_PAUSED) {
-                if (startEventTimes.containsKey(pkg)) {
-                    long start = startEventTimes.get(pkg);
-                    long duration = event.getTimeStamp() - start;
-                    if (duration > 0) {
-                        exactTimes.put(pkg, exactTimes.getOrDefault(pkg, 0L) + duration);
-                    }
-                    startEventTimes.remove(pkg);
+                openTimes.put(pkg, event.getTimeStamp());
+            } else if (event.getEventType() == UsageEvents.Event.ACTIVITY_PAUSED) {
+                if (openTimes.containsKey(pkg)) {
+                    long duration = event.getTimeStamp() - openTimes.get(pkg);
+                    if (duration > 0) results.put(pkg, results.getOrDefault(pkg, 0L) + duration);
+                    openTimes.remove(pkg);
                 }
             }
         }
-        return exactTimes;
+        return results;
     }
-    
-    /**
-     * Надежный метод для длинных периодов (Неделя, Месяц, Год) через суммирование дневной статистики.
-     */
-    private Map<String, Long> calculateTimesFromDailyStats(Context context, long startTime, long endTime) {
-        Map<String, Long> exactTimes = new HashMap<>();
+
+    // МЕТОД 2: Через бакеты (для Недели/Месяца/Года)
+    private Map<String, Long> calculateFromStats(Context context, int interval, long start, long end) {
+        Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
-        if (usm == null) return exactTimes;
-        
-        List<UsageStats> statsList = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
-        
-        for (UsageStats stats : statsList) {
-            long timeInForeground = stats.getTotalTimeInForeground();
-            if (timeInForeground > 0) {
-                String pkg = stats.getPackageName();
-                exactTimes.put(pkg, exactTimes.getOrDefault(pkg, 0L) + timeInForeground);
+        if (usm == null) return results;
+
+        // Запрашиваем статистику по конкретному интервалу (WEEKLY, MONTHLY или YEARLY)
+        List<UsageStats> stats = usm.queryUsageStats(interval, start, end);
+        if (stats != null) {
+            for (UsageStats s : stats) {
+                long time = s.getTotalTimeInForeground();
+                if (time > 0) {
+                    // Важно: в списке могут быть дубли бакетов, мы берем МАКСИМАЛЬНОЕ значение для пакета
+                    // так как в WEEKLY/MONTHLY интервалах система сама накапливает сумму.
+                    results.put(s.getPackageName(), Math.max(results.getOrDefault(s.getPackageName(), 0L), time));
+                }
             }
         }
-        return exactTimes;
+        return results;
     }
 
     private Set<String> getUserApps(PackageManager pm) {
@@ -236,9 +231,7 @@ public class StatsFragment extends Fragment {
         Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
         mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
         List<android.content.pm.ResolveInfo> resolvedInfos = pm.queryIntentActivities(mainIntent, 0);
-        for (android.content.pm.ResolveInfo info : resolvedInfos) { 
-            apps.add(info.activityInfo.packageName); 
-        }
+        for (android.content.pm.ResolveInfo info : resolvedInfos) { apps.add(info.activityInfo.packageName); }
         return apps;
     }
     
