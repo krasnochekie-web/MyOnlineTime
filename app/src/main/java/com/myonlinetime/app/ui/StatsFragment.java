@@ -62,7 +62,25 @@ public class StatsFragment extends Fragment {
         final RecyclerView recyclerView = view.findViewById(R.id.apps_list);
         final Spinner spinner = view.findViewById(R.id.spinner_period);
         final TextView totalTimeText = view.findViewById(R.id.text_total_time_sum);
+        final TextView btnChart = view.findViewById(R.id.btn_chart);
+        
+final TextView btnAllTime = view.findViewById(R.id.btn_all_time);
 
+// Слушатель для графика
+btnChart.setOnClickListener(new View.OnClickListener() {
+    @Override
+    public void onClick(View v) {
+        // TODO: Здесь будет логика открытия графика
+    }
+});
+
+// Слушатель для кнопки "За все время"
+btnAllTime.setOnClickListener(new View.OnClickListener() {
+    @Override
+    public void onClick(View v) {
+        // TODO: Здесь будет логика подсчета "За все время" (о которой мы говорили ранее)
+    }
+});
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
         recyclerView.setAdapter(adapter);
