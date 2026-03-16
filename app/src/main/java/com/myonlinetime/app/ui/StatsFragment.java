@@ -1,6 +1,7 @@
 package com.myonlinetime.app.ui;
 
 import android.app.usage.UsageEvents;
+import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
@@ -36,7 +37,6 @@ import java.util.concurrent.Executors;
 
 public class StatsFragment extends Fragment {
 
-    // --- КЭШ В ПАМЯТИ ---
     private static class CachedStats {
         List<String> list;
         Map<String, Long> times;
@@ -65,7 +65,6 @@ public class StatsFragment extends Fragment {
         final TextView btnChart = view.findViewById(R.id.btn_chart);
         final TextView btnAllTime = view.findViewById(R.id.btn_all_time);
 
-        // Инициализация слушателей кнопок (вы уже делали это, просто убедитесь, что они есть)
         btnChart.setOnClickListener(v -> { /* TODO: Логика графика */ });
         btnAllTime.setOnClickListener(v -> { /* TODO: Логика "за всё время" */ });
         
@@ -80,7 +79,6 @@ public class StatsFragment extends Fragment {
         spinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
         spinner.setAdapter(spinnerAdapter);
 
-        // Отложенная загрузка для плавной анимации
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (!isAdded() || activity == null) return;
 
@@ -94,7 +92,6 @@ public class StatsFragment extends Fragment {
                         return;
                     }
 
-                    // Ждем закрытия спиннера, затем запускаем подсчет
                     new Handler(Looper.getMainLooper()).postDelayed(() -> {
                         if (!isAdded()) return;
                         
@@ -102,7 +99,6 @@ public class StatsFragment extends Fragment {
                         
                         ExecutorService executor = Executors.newSingleThreadExecutor();
                         executor.execute(() -> {
-                            // --- НАЧАЛО ТОЧНОГО ПОДСЧЕТА ---
                             Calendar cal = Calendar.getInstance(); 
                             long endTime = System.currentTimeMillis();
                             long startTime;
@@ -132,10 +128,17 @@ public class StatsFragment extends Fragment {
                                     break;
                             }
                             
-                            // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ: ИСПОЛЬЗУЕМ QUERYEVENTS ДЛЯ ВСЕХ ПЕРИОДОВ ---
-                            final Map<String, Long> exactTimes = calculateExactTimes(activity, startTime, endTime);
+                            // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ: ВЫБИРАЕМ МЕТОД В ЗАВИСИМОСТИ ОТ ПЕРИОДА ---
+                            final Map<String, Long> exactTimes;
+                            if (position <= 1) {
+                                // Для "Сегодня" и "Вчера" используем самый точный метод событий
+                                exactTimes = calculateTimesFromEvents(activity, startTime, endTime);
+                            } else {
+                                // Для "Недели", "Месяца" и "Года" используем агрегированный метод по дням
+                                exactTimes = calculateTimesFromDailyStats(activity, startTime, endTime);
+                            }
+                            
                             long tempTotalMillis = 0;
-
                             PackageManager pm = activity.getPackageManager();
                             Set<String> userApps = getUserApps(pm);
                             String launcherPkg = getLauncherPackage(pm);
@@ -145,22 +148,16 @@ public class StatsFragment extends Fragment {
                                 String pkg = entry.getKey();
                                 long time = entry.getValue();
                                 boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || pkg.equals(launcherPkg);
-                                if (time > 0 && userApps.contains(pkg) && !isSystemTrash) {
+                                if (time > 1000 && userApps.contains(pkg) && !isSystemTrash) { // Отсекаем мусор < 1 секунды
                                     finalList.add(pkg);
                                     tempTotalMillis += time;
                                 }
                             }
                             
-                            Collections.sort(finalList, (left, right) -> {
-                                Long tLeft = exactTimes.get(left); Long tRight = exactTimes.get(right);
-                                if (tLeft == null) tLeft = 0L; if (tRight == null) tRight = 0L;
-                                return Long.compare(tRight, tLeft);
-                            });
+                            Collections.sort(finalList, (left, right) -> Long.compare(exactTimes.get(right), exactTimes.get(left)));
 
                             final long finalTotalMillis = tempTotalMillis;
-                            // --- КОНЕЦ ПОДСЧЕТА ---
                             
-                            // Возврат в UI-поток
                             new Handler(Looper.getMainLooper()).post(() -> {
                                 if (isAdded()) {
                                     statsCache.put(position, new CachedStats(finalList, exactTimes, finalTotalMillis));
@@ -174,7 +171,6 @@ public class StatsFragment extends Fragment {
                 @Override public void onNothingSelected(AdapterView<?> parent) {}
             }); 
             
-            // Первый запуск
             if (spinner.getSelectedItemPosition() >= 0) {
                 spinner.getOnItemSelectedListener().onItemSelected(spinner, null, spinner.getSelectedItemPosition(), 0);
             }
@@ -183,58 +179,53 @@ public class StatsFragment extends Fragment {
     }
 
     /**
-     * Самый точный метод подсчета времени через события.
+     * Точный метод для коротких периодов (Сегодня, Вчера) через события.
      */
-    private Map<String, Long> calculateExactTimes(Context context, long startTime, long endTime) {
+    private Map<String, Long> calculateTimesFromEvents(Context context, long startTime, long endTime) {
         Map<String, Long> exactTimes = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
         if (usm == null) return exactTimes;
 
         UsageEvents events = usm.queryEvents(startTime, endTime);
-        UsageEvents.Event event = new UsageEvents.Event();
-        
-        Map<String, Long> startTimes = new HashMap<>(); 
-        Set<String> handledOrphans = new HashSet<>();
+        Map<String, Long> startEventTimes = new HashMap<>();
         
         while (events.hasNextEvent()) {
+            UsageEvents.Event event = new UsageEvents.Event();
             events.getNextEvent(event);
             String pkg = event.getPackageName();
-            int type = event.getEventType();
-            long timestamp = event.getTimeStamp();
             
-            // 1 = ACTIVITY_RESUMED (Приложение появилось на экране)
-            if (type == 1) {
-                startTimes.put(pkg, timestamp);
+            if (event.getEventType() == UsageEvents.Event.ACTIVITY_RESUMED) {
+                startEventTimes.put(pkg, event.getTimeStamp());
             } 
-            // 2 = ACTIVITY_PAUSED (Приложение ушло с экрана)
-            else if (type == 2) {
-                if (startTimes.containsKey(pkg)) {
-                    long start = startTimes.get(pkg);
-                    long duration = timestamp - start;
+            else if (event.getEventType() == UsageEvents.Event.ACTIVITY_PAUSED) {
+                if (startEventTimes.containsKey(pkg)) {
+                    long start = startEventTimes.get(pkg);
+                    long duration = event.getTimeStamp() - start;
                     if (duration > 0) {
-                        Long current = exactTimes.get(pkg);
-                        exactTimes.put(pkg, (current == null ? 0 : current) + duration);
+                        exactTimes.put(pkg, exactTimes.getOrDefault(pkg, 0L) + duration);
                     }
-                    startTimes.remove(pkg);
-                } else if (!handledOrphans.contains(pkg)) {
-                    // Сессия, которая началась до startTime, а закончилась после
-                    long duration = timestamp - startTime;
-                    if (duration > 0) {
-                        Long current = exactTimes.get(pkg);
-                        exactTimes.put(pkg, (current == null ? 0 : current) + duration);
-                    }
-                    handledOrphans.add(pkg);
+                    startEventTimes.remove(pkg);
                 }
             }
         }
+        return exactTimes;
+    }
+    
+    /**
+     * Надежный метод для длинных периодов (Неделя, Месяц, Год) через суммирование дневной статистики.
+     */
+    private Map<String, Long> calculateTimesFromDailyStats(Context context, long startTime, long endTime) {
+        Map<String, Long> exactTimes = new HashMap<>();
+        UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
+        if (usm == null) return exactTimes;
         
-        // Для приложений, которые были открыты в момент вызова (еще нет события закрытия)
-        for (Map.Entry<String, Long> entry : startTimes.entrySet()) {
-            long duration = endTime - entry.getValue();
-            if (duration > 0) {
-                String pkg = entry.getKey();
-                Long current = exactTimes.get(pkg);
-                exactTimes.put(pkg, (current == null ? 0 : current) + duration);
+        List<UsageStats> statsList = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
+        
+        for (UsageStats stats : statsList) {
+            long timeInForeground = stats.getTotalTimeInForeground();
+            if (timeInForeground > 0) {
+                String pkg = stats.getPackageName();
+                exactTimes.put(pkg, exactTimes.getOrDefault(pkg, 0L) + timeInForeground);
             }
         }
         return exactTimes;
