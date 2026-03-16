@@ -1,25 +1,23 @@
 package com.myonlinetime.app.ui;
 
-import androidx.fragment.app.Fragment;
-import android.app.usage.UsageStats;
+import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import android.os.Handler;
-import android.os.Looper;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
 import android.widget.Spinner;
 import android.widget.TextView;
+import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.adapters.AppsAdapter;
@@ -33,11 +31,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class StatsFragment extends Fragment {
 
-    // --- НАШ КЭШ В ПАМЯТИ ---
-    private class CachedStats {
+    // --- КЭШ В ПАМЯТИ ---
+    private static class CachedStats {
         List<String> list;
         Map<String, Long> times;
         long totalMillis;
@@ -45,7 +45,7 @@ public class StatsFragment extends Fragment {
             this.list = l; this.times = t; this.totalMillis = tm;
         }
     }
-    private Map<Integer, CachedStats> statsCache = new HashMap<>();
+    private final Map<Integer, CachedStats> statsCache = new HashMap<>();
     
     public StatsFragment() {}
 
@@ -63,24 +63,12 @@ public class StatsFragment extends Fragment {
         final Spinner spinner = view.findViewById(R.id.spinner_period);
         final TextView totalTimeText = view.findViewById(R.id.text_total_time_sum);
         final TextView btnChart = view.findViewById(R.id.btn_chart);
+        final TextView btnAllTime = view.findViewById(R.id.btn_all_time);
+
+        // Инициализация слушателей кнопок (вы уже делали это, просто убедитесь, что они есть)
+        btnChart.setOnClickListener(v -> { /* TODO: Логика графика */ });
+        btnAllTime.setOnClickListener(v -> { /* TODO: Логика "за всё время" */ });
         
-final TextView btnAllTime = view.findViewById(R.id.btn_all_time);
-
-// Слушатель для графика
-btnChart.setOnClickListener(new View.OnClickListener() {
-    @Override
-    public void onClick(View v) {
-        // TODO: Здесь будет логика открытия графика
-    }
-});
-
-// Слушатель для кнопки "За все время"
-btnAllTime.setOnClickListener(new View.OnClickListener() {
-    @Override
-    public void onClick(View v) {
-        // TODO: Здесь будет логика подсчета "За все время" (о которой мы говорили ранее)
-    }
-});
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
         recyclerView.setAdapter(adapter);
@@ -92,181 +80,181 @@ btnAllTime.setOnClickListener(new View.OnClickListener() {
         spinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
         spinner.setAdapter(spinnerAdapter);
 
-        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                if (!isAdded() || activity == null) return;
+        // Отложенная загрузка для плавной анимации
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!isAdded() || activity == null) return;
 
-                spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-                    @Override
-                    public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
-                        
-                        if (statsCache.containsKey(position)) {
-                            CachedStats cached = statsCache.get(position);
-                            totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
-                            adapter.updateData(cached.list, cached.times);
-                            return;
-                        }
-
-                        final Handler uiHandler = new Handler(Looper.getMainLooper());
-                        
-                        uiHandler.postDelayed(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (!isAdded()) return;
-                                
-                                totalTimeText.setText(activity.getString(R.string.loading));
-                                
-                                ExecutorService executor = Executors.newSingleThreadExecutor();
-                                executor.execute(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        // --- НАЧАЛО ТЯЖЕЛОЙ МАТЕМАТИКИ ---
-                                        Calendar cal = Calendar.getInstance(); 
-                                        long now = System.currentTimeMillis();
-                                        long startTime = now;
-                                        long endTime = now; // Добавлен endTime (важно для "Вчера")
-                                        
-                                        if (position == 0) { // Сегодня
-                                            cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0); 
-                                            startTime = cal.getTimeInMillis(); 
-                                        } 
-                                        else if (position == 1) { // Вчера
-                                            cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0); 
-                                            endTime = cal.getTimeInMillis(); // Конец вчерашнего дня - это начало сегодняшнего
-                                            cal.add(Calendar.DAY_OF_YEAR, -1);
-                                            startTime = cal.getTimeInMillis(); // Начало вчерашнего дня
-                                        } 
-                                        else if (position == 2) { cal.add(Calendar.DAY_OF_YEAR, -7); startTime = cal.getTimeInMillis(); } // Неделя
-                                        else if (position == 3) { cal.add(Calendar.MONTH, -1); startTime = cal.getTimeInMillis(); } // Месяц
-                                        else { cal.add(Calendar.YEAR, -1); startTime = cal.getTimeInMillis(); } // Год
-                                        
-                                        UsageStatsManager usm = (UsageStatsManager) activity.getSystemService(Context.USAGE_STATS_SERVICE);
-                                        final Map<String, Long> exactTimes = new HashMap<>();
-                                        long tempTotalMillis = 0;
-                                        
-                                        if (usm != null) {
-                                            if (position == 0 || position == 1) {
-                                                // --- ИДЕАЛЬНЫЙ ПОДСЧЕТ ДЛЯ "ЗА СУТКИ" И "ВЧЕРА" ---
-                                                // Используем endTime вместо now, чтобы "Вчера" обрезалось ровно в 00:00
-                                                android.app.usage.UsageEvents events = usm.queryEvents(startTime, endTime);
-                                                android.app.usage.UsageEvents.Event event = new android.app.usage.UsageEvents.Event();
-                                                
-                                                Map<String, Long> startTimes = new HashMap<>(); 
-                                                Set<String> handledOrphans = new HashSet<>(); 
-                                                
-                                                while (events.hasNextEvent()) {
-                                                    events.getNextEvent(event);
-                                                    String pkg = event.getPackageName();
-                                                    int type = event.getEventType();
-                                                    long timestamp = event.getTimeStamp();
-                                                    
-                                                    if (type == 1) {
-                                                        startTimes.put(pkg, timestamp);
-                                                    } 
-                                                    else if (type == 2) {
-                                                        if (startTimes.containsKey(pkg)) {
-                                                            long start = startTimes.get(pkg);
-                                                            long duration = timestamp - start;
-                                                            if (duration > 0) {
-                                                                Long current = exactTimes.get(pkg);
-                                                                exactTimes.put(pkg, (current == null ? 0 : current) + duration);
-                                                            }
-                                                            startTimes.remove(pkg);
-                                                        } else if (!handledOrphans.contains(pkg)) {
-                                                            long duration = timestamp - startTime;
-                                                            if (duration > 0) {
-                                                                Long current = exactTimes.get(pkg);
-                                                                exactTimes.put(pkg, (current == null ? 0 : current) + duration);
-                                                            }
-                                                            handledOrphans.add(pkg);
-                                                        }
-                                                    }
-                                                }
-                                                
-                                                // Для приложений, которые закрыли уже после endTime (переход через полночь)
-                                                for (Map.Entry<String, Long> entry : startTimes.entrySet()) {
-                                                    long duration = endTime - entry.getValue(); // ТУТ ВАЖНО: endTime вместо now!
-                                                    if (duration > 0) {
-                                                        String pkg = entry.getKey();
-                                                        Long current = exactTimes.get(pkg);
-                                                        exactTimes.put(pkg, (current == null ? 0 : current) + duration);
-                                                    }
-                                                }
-                                            } else {
-                                                // --- НОВЫЙ ТОЧНЫЙ МЕТОД ДЛЯ НЕДЕЛИ, МЕСЯЦА, ГОДА ---
-                                                // Ручное сложение суточных интервалов решает проблему завышения времени в 2 раза!
-                                                List<UsageStats> statsList = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
-                                                if (statsList != null) {
-                                                    for (UsageStats stats : statsList) {
-                                                        long time = stats.getTotalTimeInForeground();
-                                                        if (time > 0) {
-                                                            String pkg = stats.getPackageName();
-                                                            Long current = exactTimes.get(pkg);
-                                                            exactTimes.put(pkg, (current == null ? 0 : current) + time);
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        
-                                        PackageManager pm = activity.getPackageManager();
-                                        Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
-                                        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-                                        List<android.content.pm.ResolveInfo> resolvedInfos = pm.queryIntentActivities(mainIntent, 0);
-                                        Set<String> userApps = new HashSet<>();
-                                        for (android.content.pm.ResolveInfo info : resolvedInfos) { userApps.add(info.activityInfo.packageName); }
-                                        
-                                        Intent homeIntent = new Intent(Intent.ACTION_MAIN);
-                                        homeIntent.addCategory(Intent.CATEGORY_HOME);
-                                        android.content.pm.ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
-                                        String launcherPkg = defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
-                                        
-                                        final List<String> finalList = new ArrayList<>();
-                                        for (Map.Entry<String, Long> entry : exactTimes.entrySet()) {
-                                            String pkg = entry.getKey();
-                                            long time = entry.getValue();
-                                            boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || pkg.equals(launcherPkg);
-                                            if (time > 0 && userApps.contains(pkg) && !isSystemTrash) {
-                                                finalList.add(pkg);
-                                                tempTotalMillis += time;
-                                            }
-                                        }
-                                        
-                                        Collections.sort(finalList, new Comparator<String>() {
-                                            @Override public int compare(String left, String right) {
-                                                Long tLeft = exactTimes.get(left); Long tRight = exactTimes.get(right);
-                                                if (tLeft == null) tLeft = 0L; if (tRight == null) tRight = 0L;
-                                                return Long.compare(tRight, tLeft);
-                                            }
-                                        });
-                                        final long finalTotalMillis = tempTotalMillis;
-                                        
-                                        uiHandler.post(new Runnable() {
-                                            @Override
-                                            public void run() {
-                                                if (isAdded()) {
-                                                    statsCache.put(position, new CachedStats(finalList, exactTimes, finalTotalMillis));
-                                                    totalTimeText.setText(Utils.formatTime(activity, finalTotalMillis));
-                                                    adapter.updateData(finalList, exactTimes);
-                                                }
-                                            }
-                                        });
-                                    }
-                                }); 
-                            }
-                        }, 300);
+            spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
+                    if (statsCache.containsKey(position)) {
+                        CachedStats cached = statsCache.get(position);
+                        totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
+                        adapter.updateData(cached.list, cached.times);
+                        return;
                     }
-                    @Override
-                    public void onNothingSelected(AdapterView<?> parent) {}
-                }); 
-                
-                if (spinner.getSelectedItemPosition() >= 0) {
-                    spinner.getOnItemSelectedListener().onItemSelected(spinner, null, spinner.getSelectedItemPosition(), 0);
+
+                    // Ждем закрытия спиннера, затем запускаем подсчет
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        if (!isAdded()) return;
+                        
+                        totalTimeText.setText(activity.getString(R.string.loading));
+                        
+                        ExecutorService executor = Executors.newSingleThreadExecutor();
+                        executor.execute(() -> {
+                            // --- НАЧАЛО ТОЧНОГО ПОДСЧЕТА ---
+                            Calendar cal = Calendar.getInstance(); 
+                            long endTime = System.currentTimeMillis();
+                            long startTime;
+                            
+                            switch (position) {
+                                case 0: // Сегодня
+                                    cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0);
+                                    startTime = cal.getTimeInMillis();
+                                    break;
+                                case 1: // Вчера
+                                    cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0);
+                                    endTime = cal.getTimeInMillis();
+                                    cal.add(Calendar.DAY_OF_YEAR, -1);
+                                    startTime = cal.getTimeInMillis();
+                                    break;
+                                case 2: // Неделя
+                                    cal.add(Calendar.DAY_OF_YEAR, -7);
+                                    startTime = cal.getTimeInMillis();
+                                    break;
+                                case 3: // Месяц
+                                    cal.add(Calendar.MONTH, -1);
+                                    startTime = cal.getTimeInMillis();
+                                    break;
+                                default: // Год
+                                    cal.add(Calendar.YEAR, -1);
+                                    startTime = cal.getTimeInMillis();
+                                    break;
+                            }
+                            
+                            // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ: ИСПОЛЬЗУЕМ QUERYEVENTS ДЛЯ ВСЕХ ПЕРИОДОВ ---
+                            final Map<String, Long> exactTimes = calculateExactTimes(activity, startTime, endTime);
+                            long tempTotalMillis = 0;
+
+                            PackageManager pm = activity.getPackageManager();
+                            Set<String> userApps = getUserApps(pm);
+                            String launcherPkg = getLauncherPackage(pm);
+                            
+                            final List<String> finalList = new ArrayList<>();
+                            for (Map.Entry<String, Long> entry : exactTimes.entrySet()) {
+                                String pkg = entry.getKey();
+                                long time = entry.getValue();
+                                boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || pkg.equals(launcherPkg);
+                                if (time > 0 && userApps.contains(pkg) && !isSystemTrash) {
+                                    finalList.add(pkg);
+                                    tempTotalMillis += time;
+                                }
+                            }
+                            
+                            Collections.sort(finalList, (left, right) -> {
+                                Long tLeft = exactTimes.get(left); Long tRight = exactTimes.get(right);
+                                if (tLeft == null) tLeft = 0L; if (tRight == null) tRight = 0L;
+                                return Long.compare(tRight, tLeft);
+                            });
+
+                            final long finalTotalMillis = tempTotalMillis;
+                            // --- КОНЕЦ ПОДСЧЕТА ---
+                            
+                            // Возврат в UI-поток
+                            new Handler(Looper.getMainLooper()).post(() -> {
+                                if (isAdded()) {
+                                    statsCache.put(position, new CachedStats(finalList, exactTimes, finalTotalMillis));
+                                    totalTimeText.setText(Utils.formatTime(activity, finalTotalMillis));
+                                    adapter.updateData(finalList, exactTimes);
+                                }
+                            });
+                        }); 
+                    }, 300);
                 }
-                
+                @Override public void onNothingSelected(AdapterView<?> parent) {}
+            }); 
+            
+            // Первый запуск
+            if (spinner.getSelectedItemPosition() >= 0) {
+                spinner.getOnItemSelectedListener().onItemSelected(spinner, null, spinner.getSelectedItemPosition(), 0);
             }
         }, 300);
         return view;
+    }
+
+    /**
+     * Самый точный метод подсчета времени через события.
+     */
+    private Map<String, Long> calculateExactTimes(Context context, long startTime, long endTime) {
+        Map<String, Long> exactTimes = new HashMap<>();
+        UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
+        if (usm == null) return exactTimes;
+
+        UsageEvents events = usm.queryEvents(startTime, endTime);
+        UsageEvents.Event event = new UsageEvents.Event();
+        
+        Map<String, Long> startTimes = new HashMap<>(); 
+        Set<String> handledOrphans = new HashSet<>();
+        
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event);
+            String pkg = event.getPackageName();
+            int type = event.getEventType();
+            long timestamp = event.getTimeStamp();
+            
+            // 1 = ACTIVITY_RESUMED (Приложение появилось на экране)
+            if (type == 1) {
+                startTimes.put(pkg, timestamp);
+            } 
+            // 2 = ACTIVITY_PAUSED (Приложение ушло с экрана)
+            else if (type == 2) {
+                if (startTimes.containsKey(pkg)) {
+                    long start = startTimes.get(pkg);
+                    long duration = timestamp - start;
+                    if (duration > 0) {
+                        Long current = exactTimes.get(pkg);
+                        exactTimes.put(pkg, (current == null ? 0 : current) + duration);
+                    }
+                    startTimes.remove(pkg);
+                } else if (!handledOrphans.contains(pkg)) {
+                    // Сессия, которая началась до startTime, а закончилась после
+                    long duration = timestamp - startTime;
+                    if (duration > 0) {
+                        Long current = exactTimes.get(pkg);
+                        exactTimes.put(pkg, (current == null ? 0 : current) + duration);
+                    }
+                    handledOrphans.add(pkg);
+                }
+            }
+        }
+        
+        // Для приложений, которые были открыты в момент вызова (еще нет события закрытия)
+        for (Map.Entry<String, Long> entry : startTimes.entrySet()) {
+            long duration = endTime - entry.getValue();
+            if (duration > 0) {
+                String pkg = entry.getKey();
+                Long current = exactTimes.get(pkg);
+                exactTimes.put(pkg, (current == null ? 0 : current) + duration);
+            }
+        }
+        return exactTimes;
+    }
+
+    private Set<String> getUserApps(PackageManager pm) {
+        Set<String> apps = new HashSet<>();
+        Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
+        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+        List<android.content.pm.ResolveInfo> resolvedInfos = pm.queryIntentActivities(mainIntent, 0);
+        for (android.content.pm.ResolveInfo info : resolvedInfos) { 
+            apps.add(info.activityInfo.packageName); 
+        }
+        return apps;
+    }
+    
+    private String getLauncherPackage(PackageManager pm) {
+        Intent homeIntent = new Intent(Intent.ACTION_MAIN);
+        homeIntent.addCategory(Intent.CATEGORY_HOME);
+        android.content.pm.ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
+        return defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
     }
 }
