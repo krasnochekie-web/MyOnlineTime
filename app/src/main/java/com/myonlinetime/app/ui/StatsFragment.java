@@ -20,12 +20,10 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import android.widget.Spinner;
 import android.widget.TextView;
-
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.adapters.AppsAdapter;
 import com.myonlinetime.app.utils.Utils;
-
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
@@ -53,7 +51,6 @@ public class StatsFragment extends Fragment {
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        // 1. Надуваем разметку
         final View view = inflater.inflate(R.layout.layout_usage, container, false);
         
         final MainActivity activity = (MainActivity) getActivity();
@@ -66,33 +63,26 @@ public class StatsFragment extends Fragment {
         final Spinner spinner = view.findViewById(R.id.spinner_period);
         final TextView totalTimeText = view.findViewById(R.id.text_total_time_sum);
 
-        // Настраиваем RecyclerView
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
         recyclerView.setAdapter(adapter);
 
-        // Сразу показываем загрузку, чтобы экран не был пустым при анимации
         totalTimeText.setText(getString(R.string.loading));
 
-        // 3. Настройка спиннера
         String[] periods = getResources().getStringArray(R.array.periods_array);
         ArrayAdapter<String> spinnerAdapter = new ArrayAdapter<>(activity, R.layout.spinner_item, periods);
         spinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
         spinner.setAdapter(spinnerAdapter);
 
-        // --- МАГИЯ ОТЛОЖЕННОЙ ЗАГРУЗКИ ---
-        // Даем 300мс на красивую анимацию перелистывания экрана, а затем считаем стату!
-        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
                 if (!isAdded() || activity == null) return;
 
-                // 4. Вешаем слушатель на спиннер
                 spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                     @Override
                     public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
                         
-                        // Проверяем кэш. Если есть - выдаем мгновенно (это не тормозит)
                         if (statsCache.containsKey(position)) {
                             CachedStats cached = statsCache.get(position);
                             totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
@@ -100,19 +90,15 @@ public class StatsFragment extends Fragment {
                             return;
                         }
 
-                        // ЕСЛИ КЭША НЕТ: 
-                        // СНАЧАЛА ЖДЕМ ПОЛНОГО ЗАКРЫТИЯ СПИННЕРА (300мс)
-                        final android.os.Handler uiHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+                        final Handler uiHandler = new Handler(Looper.getMainLooper());
                         
                         uiHandler.postDelayed(new Runnable() {
                             @Override
                             public void run() {
                                 if (!isAdded()) return;
                                 
-                                // ТОЛЬКО ТЕПЕРЬ, когда окно спиннера 100% исчезло, меняем текст
                                 totalTimeText.setText(activity.getString(R.string.loading));
                                 
-                                // И запускаем тяжелый фоновый поток
                                 ExecutorService executor = Executors.newSingleThreadExecutor();
                                 executor.execute(new Runnable() {
                                     @Override
@@ -121,40 +107,47 @@ public class StatsFragment extends Fragment {
                                         Calendar cal = Calendar.getInstance(); 
                                         long now = System.currentTimeMillis();
                                         long startTime = now;
-                                        int intervalType = UsageStatsManager.INTERVAL_DAILY;
+                                        long endTime = now; // Добавлен endTime (важно для "Вчера")
                                         
-                                        if (position == 0) { cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_DAILY;} 
-                                        else if (position == 1) { cal.add(Calendar.DAY_OF_YEAR, -7); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_WEEKLY; } 
-                                        else if (position == 2) { cal.add(Calendar.MONTH, -1); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_MONTHLY; } 
-                                        else { cal.add(Calendar.YEAR, -1); startTime = cal.getTimeInMillis(); intervalType = UsageStatsManager.INTERVAL_YEARLY; }
+                                        if (position == 0) { // Сегодня
+                                            cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0); 
+                                            startTime = cal.getTimeInMillis(); 
+                                        } 
+                                        else if (position == 1) { // Вчера
+                                            cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0); 
+                                            endTime = cal.getTimeInMillis(); // Конец вчерашнего дня - это начало сегодняшнего
+                                            cal.add(Calendar.DAY_OF_YEAR, -1);
+                                            startTime = cal.getTimeInMillis(); // Начало вчерашнего дня
+                                        } 
+                                        else if (position == 2) { cal.add(Calendar.DAY_OF_YEAR, -7); startTime = cal.getTimeInMillis(); } // Неделя
+                                        else if (position == 3) { cal.add(Calendar.MONTH, -1); startTime = cal.getTimeInMillis(); } // Месяц
+                                        else { cal.add(Calendar.YEAR, -1); startTime = cal.getTimeInMillis(); } // Год
                                         
                                         UsageStatsManager usm = (UsageStatsManager) activity.getSystemService(Context.USAGE_STATS_SERVICE);
                                         final Map<String, Long> exactTimes = new HashMap<>();
                                         long tempTotalMillis = 0;
                                         
                                         if (usm != null) {
-                                            if (position == 0) {
-                                                // --- ИДЕАЛЬНЫЙ ПОДСЧЕТ ДЛЯ "ЗА СУТКИ" ---
-                                                android.app.usage.UsageEvents events = usm.queryEvents(startTime, now);
+                                            if (position == 0 || position == 1) {
+                                                // --- ИДЕАЛЬНЫЙ ПОДСЧЕТ ДЛЯ "ЗА СУТКИ" И "ВЧЕРА" ---
+                                                // Используем endTime вместо now, чтобы "Вчера" обрезалось ровно в 00:00
+                                                android.app.usage.UsageEvents events = usm.queryEvents(startTime, endTime);
                                                 android.app.usage.UsageEvents.Event event = new android.app.usage.UsageEvents.Event();
                                                 
                                                 Map<String, Long> startTimes = new HashMap<>(); 
-                                                Set<String> handledOrphans = new HashSet<>(); // Защита от фантомных событий
+                                                Set<String> handledOrphans = new HashSet<>(); 
                                                 
                                                 while (events.hasNextEvent()) {
                                                     events.getNextEvent(event);
                                                     String pkg = event.getPackageName();
                                                     int type = event.getEventType();
                                                     long timestamp = event.getTimeStamp();
-
-                                                    // 1 = ACTIVITY_RESUMED (Появилось на экране)
+                                                    
                                                     if (type == 1) {
                                                         startTimes.put(pkg, timestamp);
                                                     } 
-                                                    // 2 = ACTIVITY_PAUSED (Ушло с экрана)
                                                     else if (type == 2) {
                                                         if (startTimes.containsKey(pkg)) {
-                                                            // Нормальная сессия (открыли -> закрыли)
                                                             long start = startTimes.get(pkg);
                                                             long duration = timestamp - start;
                                                             if (duration > 0) {
@@ -163,20 +156,19 @@ public class StatsFragment extends Fragment {
                                                             }
                                                             startTimes.remove(pkg);
                                                         } else if (!handledOrphans.contains(pkg)) {
-                                                            // Приложение открыли ДО 00:00, а закрыли только что
                                                             long duration = timestamp - startTime;
                                                             if (duration > 0) {
                                                                 Long current = exactTimes.get(pkg);
                                                                 exactTimes.put(pkg, (current == null ? 0 : current) + duration);
                                                             }
-                                                            handledOrphans.add(pkg); // Запоминаем, чтобы не накрутить время снова!
+                                                            handledOrphans.add(pkg);
                                                         }
                                                     }
                                                 }
                                                 
-                                                // Для приложений, которые открыты ПРЯМО СЕЙЧАС (нет события закрытия)
+                                                // Для приложений, которые закрыли уже после endTime (переход через полночь)
                                                 for (Map.Entry<String, Long> entry : startTimes.entrySet()) {
-                                                    long duration = now - entry.getValue();
+                                                    long duration = endTime - entry.getValue(); // ТУТ ВАЖНО: endTime вместо now!
                                                     if (duration > 0) {
                                                         String pkg = entry.getKey();
                                                         Long current = exactTimes.get(pkg);
@@ -184,13 +176,16 @@ public class StatsFragment extends Fragment {
                                                     }
                                                 }
                                             } else {
-                                                // --- СТАРЫЙ ДОБРЫЙ МЕТОД ДЛЯ НЕДЕЛИ, МЕСЯЦА, ГОДА ---
-                                                Map<String, UsageStats> aggregatedStats = usm.queryAndAggregateUsageStats(startTime, now);
-                                                if (aggregatedStats != null) {
-                                                    for (Map.Entry<String, UsageStats> entry : aggregatedStats.entrySet()) {
-                                                        long time = entry.getValue().getTotalTimeInForeground();
+                                                // --- НОВЫЙ ТОЧНЫЙ МЕТОД ДЛЯ НЕДЕЛИ, МЕСЯЦА, ГОДА ---
+                                                // Ручное сложение суточных интервалов решает проблему завышения времени в 2 раза!
+                                                List<UsageStats> statsList = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
+                                                if (statsList != null) {
+                                                    for (UsageStats stats : statsList) {
+                                                        long time = stats.getTotalTimeInForeground();
                                                         if (time > 0) {
-                                                            exactTimes.put(entry.getKey(), time);
+                                                            String pkg = stats.getPackageName();
+                                                            Long current = exactTimes.get(pkg);
+                                                            exactTimes.put(pkg, (current == null ? 0 : current) + time);
                                                         }
                                                     }
                                                 }
@@ -227,11 +222,8 @@ public class StatsFragment extends Fragment {
                                                 return Long.compare(tRight, tLeft);
                                             }
                                         });
-
                                         final long finalTotalMillis = tempTotalMillis;
-                                        // --- КОНЕЦ ТЯЖЕЛОЙ МАТЕМАТИКИ ---
-
-                                        // Возвращаемся в UI поток, чтобы показать результат
+                                        
                                         uiHandler.post(new Runnable() {
                                             @Override
                                             public void run() {
@@ -245,21 +237,18 @@ public class StatsFragment extends Fragment {
                                     }
                                 }); 
                             }
-                        }, 300); // <-- ВАЖНО: ЖДЕМ 300мс ДЛЯ ИДЕАЛЬНО ПЛАВНОГО ЗАКРЫТИЯ ОКНА!
+                        }, 300);
                     }
-
                     @Override
                     public void onNothingSelected(AdapterView<?> parent) {}
                 }); 
                 
-                // Важно: если спиннер уже имеет выбранный элемент, нужно принудительно запустить загрузку в первый раз
                 if (spinner.getSelectedItemPosition() >= 0) {
                     spinner.getOnItemSelectedListener().onItemSelected(spinner, null, spinner.getSelectedItemPosition(), 0);
                 }
                 
             }
-        }, 300); // <-- Конец блока postDelayed (ЖДЕМ 300мс!)
-
+        }, 300);
         return view;
     }
 }
