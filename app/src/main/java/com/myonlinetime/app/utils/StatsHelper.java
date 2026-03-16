@@ -11,16 +11,13 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
-
 import androidx.fragment.app.Fragment;
 import com.myonlinetime.app.ui.ProfileFragment; 
-
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
@@ -46,20 +43,22 @@ public class StatsHelper {
         UsageStatsManager usm = (UsageStatsManager) activity.getSystemService(Context.USAGE_STATS_SERVICE);
         final Map<String, Long> exactTimes = new HashMap<>();
         long totalMillis = 0;
-
+        
         if (usm != null) {
-            // ИСПРАВЛЕНИЕ: Используем точный метод аггрегации, как в StatsFragment
-            Map<String, UsageStats> aggregatedStats = usm.queryAndAggregateUsageStats(startTime, now);
-            if (aggregatedStats != null) {
-                for (Map.Entry<String, UsageStats> entry : aggregatedStats.entrySet()) {
-                    long time = entry.getValue().getTotalTimeInForeground();
+            // ИСПРАВЛЕНИЕ ЗАВЫШЕНИЯ: Складываем суточные бакеты вручную
+            List<UsageStats> statsList = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, now);
+            if (statsList != null) {
+                for (UsageStats stats : statsList) {
+                    long time = stats.getTotalTimeInForeground();
                     if (time > 0) {
-                        exactTimes.put(entry.getKey(), time);
+                        String pkg = stats.getPackageName();
+                        Long current = exactTimes.get(pkg);
+                        exactTimes.put(pkg, (current == null ? 0 : current) + time);
                     }
                 }
             }
         }
-
+        
         PackageManager pm = activity.getPackageManager();
         Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
         mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -68,12 +67,11 @@ public class StatsHelper {
         for (android.content.pm.ResolveInfo info : resolvedInfos) {
             userApps.add(info.activityInfo.packageName);
         }
-
         Intent homeIntent = new Intent(Intent.ACTION_MAIN);
         homeIntent.addCategory(Intent.CATEGORY_HOME);
         android.content.pm.ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
         String launcherPkg = defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
-
+        
         List<String> finalList = new ArrayList<>();
         for (Map.Entry<String, Long> entry : exactTimes.entrySet()) {
             String pkg = entry.getKey();
@@ -84,10 +82,10 @@ public class StatsHelper {
                                     
             if (time > 0 && userApps.contains(pkg) && !isSystemTrash) {
                 finalList.add(pkg);
-                totalMillis += time; // Теперь считаем тотальное время только после фильтрации!
+                totalMillis += time; 
             }
         }
-
+        
         Collections.sort(finalList, new Comparator<String>() {
             public int compare(String left, String right) {
                 Long tLeft = exactTimes.get(left);
@@ -97,7 +95,7 @@ public class StatsHelper {
                 return Long.compare(tRight, tLeft);
             }
         });
-
+        
         final Map<String, Long> finalTopApps = new HashMap<>();
         int limit = 0;
         for (String pkg : finalList) {
@@ -131,20 +129,22 @@ public class StatsHelper {
         UsageStatsManager usm = (UsageStatsManager) activity.getSystemService(Context.USAGE_STATS_SERVICE);
         final Map<String, Long> exactTimes = new HashMap<>();
         long totalMillis = 0;
-
+        
         if (usm != null) {
-            // ИСПРАВЛЕНИЕ: Точный метод, как в StatsFragment
-            Map<String, UsageStats> aggregatedStats = usm.queryAndAggregateUsageStats(startTime, now);
-            if (aggregatedStats != null) {
-                for (Map.Entry<String, UsageStats> entry : aggregatedStats.entrySet()) {
-                    long time = entry.getValue().getTotalTimeInForeground();
+            // ИСПРАВЛЕНИЕ ЗАВЫШЕНИЯ: Складываем суточные бакеты вручную
+            List<UsageStats> statsList = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, now);
+            if (statsList != null) {
+                for (UsageStats stats : statsList) {
+                    long time = stats.getTotalTimeInForeground();
                     if (time > 0) {
-                        exactTimes.put(entry.getKey(), time);
+                        String pkg = stats.getPackageName();
+                        Long current = exactTimes.get(pkg);
+                        exactTimes.put(pkg, (current == null ? 0 : current) + time);
                     }
                 }
             }
         }
-
+        
         PackageManager pm = activity.getPackageManager();
         Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
         mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -153,12 +153,11 @@ public class StatsHelper {
         for (android.content.pm.ResolveInfo info : resolvedInfos) {
             userApps.add(info.activityInfo.packageName);
         }
-
         Intent homeIntent = new Intent(Intent.ACTION_MAIN);
         homeIntent.addCategory(Intent.CATEGORY_HOME);
         android.content.pm.ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
         String launcherPkg = defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
-
+        
         List<String> finalList = new ArrayList<>();
         for (Map.Entry<String, Long> entry : exactTimes.entrySet()) {
             String pkg = entry.getKey();
@@ -169,10 +168,10 @@ public class StatsHelper {
                                     
             if (time > 0 && userApps.contains(pkg) && !isSystemTrash) {
                 finalList.add(pkg);
-                totalMillis += time; // Собираем время без дубликатов!
+                totalMillis += time; 
             }
         }
-
+        
         Collections.sort(finalList, new Comparator<String>() {
             public int compare(String left, String right) {
                 Long tLeft = exactTimes.get(left);
@@ -182,14 +181,14 @@ public class StatsHelper {
                 return Long.compare(tRight, tLeft);
             }
         });
-
+        
         long minutes = totalMillis / 1000 / 60;
         long hours = minutes / 60;
         long mins = minutes % 60;
         if (weekTimeText != null) {
             weekTimeText.setText(hours > 0 ? hours + " ч " + mins + " мин" : mins + " мин");
         }
-
+        
         int limit = 0;
         for (String pkg : finalList) {
             if (limit >= 10) break;
@@ -199,7 +198,6 @@ public class StatsHelper {
             if (limit >= 2) {
                 view.setVisibility(View.GONE);
             }
-
             ImageView iconView = view.findViewById(R.id.app_icon);
             TextView nameView = view.findViewById(R.id.app_name);
             TextView timeView = view.findViewById(R.id.app_time);
@@ -212,7 +210,6 @@ public class StatsHelper {
             
             timeView.setText(Utils.formatTime(activity, exactTimes.get(pkg)));
             appsContainer.addView(view);
-
             if (activity.getSupportFragmentManager() != null) {
                 for (Fragment f : activity.getSupportFragmentManager().getFragments()) {
                     if (f instanceof ProfileFragment) {
@@ -221,7 +218,6 @@ public class StatsHelper {
                     }
                 }
             }
-
             limit++;
         }
         
