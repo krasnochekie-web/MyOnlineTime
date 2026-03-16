@@ -14,6 +14,8 @@
     <string name="posts">Posts</string>
     <string name="liked">Liked</string>
     <string name="followers">Followers</string>
+    <string name="btn_chart_text">Chart</string>
+    <string name="btn_all_time_text">All time</string>
     <string name="following">Following</string>
     <string name="last_week">Last week</string>
     <string name="unit_h">h</string>
