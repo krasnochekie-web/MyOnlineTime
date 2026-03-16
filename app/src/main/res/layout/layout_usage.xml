@@ -5,74 +5,82 @@
     android:orientation="vertical"
     android:background="@color/backgroundDark"
     android:paddingTop="@dimen/header_clearance">
-    
-    <!-- Верхняя панель (Спиннер и Кнопки остаются снаружи и не прокручиваются) -->
-    <LinearLayout
+
+    <!-- НОВАЯ ВЕРХНЯЯ ПАНЕЛЬ (Кнопки и спиннер) -->
+    <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="right|center_vertical"
         android:paddingLeft="16dp"
         android:paddingRight="16dp"
-        android:paddingTop="0dp"
         android:paddingBottom="8dp">
 
-        <!-- Кнопка "График" -->
-        <TextView
-            android:id="@+id/btn_chart"
+        <!-- Вертикальный блок для кнопок (слева) -->
+        <LinearLayout
+            android:id="@+id/buttons_panel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_button_dark"
-            android:text="@string/btn_chart_text"
-            android:textColor="@color/textWhite"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:drawableLeft="@drawable/ic_chart_yellow" 
-            android:drawablePadding="6dp"
-            android:paddingLeft="12dp"
-            android:paddingRight="12dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
-            android:layout_marginRight="8dp"
-            android:gravity="center_vertical" />
+            android:orientation="vertical"
+            android:layout_alignParentLeft="true"
+            android:layout_centerVertical="true">
 
-        <!-- Кнопка "За все время" -->
-        <TextView
-            android:id="@+id/btn_all_time"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_button_dark"
-            android:text="@string/btn_all_time_text"
-            android:textColor="@color/textWhite"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:drawableLeft="@drawable/ic_star_yellow"
-            android:drawablePadding="6dp"
-            android:paddingLeft="12dp"
-            android:paddingRight="12dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
-            android:layout_marginRight="12dp"
-            android:gravity="center_vertical" />
+            <!-- Кнопка "График" -->
+            <TextView
+                android:id="@+id/btn_chart"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_button_dark"
+                android:text="@string/btn_chart_text"
+                android:textColor="@color/textWhite"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:drawableLeft="@drawable/ic_chart_yellow"
+                android:drawablePadding="6dp"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:layout_marginBottom="4dp"
+                android:gravity="center_vertical" />
 
-        <!-- Ваш существующий спиннер -->
+            <!-- Кнопка "За все время" -->
+            <TextView
+                android:id="@+id/btn_all_time"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_button_dark"
+                android:text="@string/btn_all_time_text"
+                android:textColor="@color/textWhite"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:drawableLeft="@drawable/ic_star_yellow"
+                android:drawablePadding="6dp"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:gravity="center_vertical" />
+        </LinearLayout>
+
+        <!-- Спиннер (справа) -->
         <Spinner
             android:id="@+id/spinner_period"
-            android:popupBackground="@drawable/bg_spinner_popup"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            android:layout_centerVertical="true"
             android:background="@null"
             android:padding="5dp"
+            android:popupBackground="@drawable/bg_spinner_popup"
             android:spinnerMode="dropdown" />
-    </LinearLayout>
 
-    <!-- ГЛАВНЫЙ СКРОЛЛ (Именно он командует нижней панели прятаться!) -->
+    </RelativeLayout>
+
+    <!-- ГЛАВНЫЙ СКРОЛЛ (Остается без изменений) -->
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
         android:paddingBottom="@dimen/bottom_nav_clearance">
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -97,12 +105,10 @@
                     android:textStyle="bold"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"/>
-
                 <View
                     android:layout_width="0dp"
                     android:layout_height="1dp"
                     android:layout_weight="1"/>
-
                 <TextView
                     android:id="@+id/text_total_time_sum"
                     android:layout_width="wrap_content"
@@ -113,7 +119,7 @@
                     android:textStyle="bold"/>
             </LinearLayout>
 
-            <!-- СПИСОК ПРИЛОЖЕНИЙ (Внутри скролла он выключен, чтобы не конфликтовать) -->
+            <!-- СПИСОК ПРИЛОЖЕНИЙ -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/apps_list"
                 android:layout_width="match_parent"
@@ -123,8 +129,6 @@
                 android:nestedScrollingEnabled="false"
                 android:clipToPadding="false"
                 android:scrollbars="none"/>
-
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
-
 </LinearLayout>
