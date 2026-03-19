@@ -131,8 +131,8 @@ public class StatsFragment extends Fragment {
                                 default: // Год
                                     cal.add(Calendar.YEAR, -1);
                                     startTime = cal.getTimeInMillis();
-                                    // ИСПОЛЬЗУЕМ НЕДЕЛИ! Складываем 52 надежных недельных бакета
-                                    interval = UsageStatsManager.INTERVAL_WEEKLY; 
+                                    // ВОЗВРАЩАЕМ YEARLY, чтобы достать старые данные из системного архива!
+                                    interval = UsageStatsManager.INTERVAL_YEARLY; 
                                     break;
                             }
                             
@@ -208,7 +208,7 @@ public class StatsFragment extends Fragment {
         return results;
     }
 
-    // МЕТОД 2: Через суммирование "кирпичиков" (Для Недели, Месяца, Года)
+    // МЕТОД 2: Гибридный (суммирование для месяца, Math.max для года)
     private Map<String, Long> calculateFromStats(Context context, int interval, long start, long end) {
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
@@ -219,8 +219,13 @@ public class StatsFragment extends Fragment {
             for (UsageStats s : stats) {
                 long time = s.getTotalTimeInForeground();
                 if (time > 0) {
-                    // --- ИСПРАВЛЕНИЕ: МЫ СУММИРУЕМ, А НЕ ИСПОЛЬЗУЕМ Math.max ---
-                    results.put(s.getPackageName(), results.getOrDefault(s.getPackageName(), 0L) + time);
+                    if (interval == UsageStatsManager.INTERVAL_YEARLY) {
+                        // ДЛЯ ГОДА: Используем Math.max, как в вашем стабильном коде, чтобы не было дублей!
+                        results.put(s.getPackageName(), Math.max(results.getOrDefault(s.getPackageName(), 0L), time));
+                    } else {
+                        // ДЛЯ МЕСЯЦА: Суммируем "кирпичики", чтобы получить идеальную точность
+                        results.put(s.getPackageName(), results.getOrDefault(s.getPackageName(), 0L) + time);
+                    }
                 }
             }
         }
