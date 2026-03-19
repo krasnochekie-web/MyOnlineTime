@@ -102,34 +102,37 @@ public class StatsFragment extends Fragment {
                             long startTime;
                             int interval;
                             
-                            // ВЫБИРАЕМ ПРАВИЛЬНЫЙ ИНТЕРВАЛ ХРАНИЛИЩА
+                            // --- ИСПОЛЬЗУЕМ "КИРПИЧИКИ" ДЛЯ ИДЕАЛЬНОЙ СБОРКИ ПЕРИОДОВ ---
                             switch (position) {
                                 case 0: // Сегодня
                                     cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0);
                                     startTime = cal.getTimeInMillis();
-                                    interval = -1; // Флаг для использования Events (самый точный для суток)
+                                    interval = -1; // Используем события
                                     break;
                                 case 1: // Вчера
                                     cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0);
                                     endTime = cal.getTimeInMillis();
                                     cal.add(Calendar.DAY_OF_YEAR, -1);
                                     startTime = cal.getTimeInMillis();
-                                    interval = -1; // Флаг для использования Events
+                                    interval = -1; // Используем события
                                     break;
                                 case 2: // Неделя
                                     cal.add(Calendar.DAY_OF_YEAR, -7);
                                     startTime = cal.getTimeInMillis();
-                                    interval = UsageStatsManager.INTERVAL_WEEKLY;
+                                    // Складываем 7 ежедневных бакетов
+                                    interval = UsageStatsManager.INTERVAL_DAILY; 
                                     break;
                                 case 3: // Месяц
                                     cal.add(Calendar.MONTH, -1);
                                     startTime = cal.getTimeInMillis();
-                                    interval = UsageStatsManager.INTERVAL_MONTHLY;
+                                    // Складываем 4 недельных бакета (а не запрашиваем месяц целиком!)
+                                    interval = UsageStatsManager.INTERVAL_WEEKLY; 
                                     break;
                                 default: // Год
                                     cal.add(Calendar.YEAR, -1);
                                     startTime = cal.getTimeInMillis();
-                                    interval = UsageStatsManager.INTERVAL_YEARLY;
+                                    // Складываем 12 месячных бакетов
+                                    interval = UsageStatsManager.INTERVAL_MONTHLY; 
                                     break;
                             }
                             
@@ -179,7 +182,7 @@ public class StatsFragment extends Fragment {
         return view;
     }
 
-    // МЕТОД 1: Через события (для Сегодня/Вчера)
+    // МЕТОД 1: Через события (Идеально для Сегодня/Вчера)
     private Map<String, Long> calculateFromEvents(Context context, long start, long end) {
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
@@ -205,21 +208,19 @@ public class StatsFragment extends Fragment {
         return results;
     }
 
-    // МЕТОД 2: Через бакеты (для Недели/Месяца/Года)
+    // МЕТОД 2: Через суммирование "кирпичиков" (Для Недели, Месяца, Года)
     private Map<String, Long> calculateFromStats(Context context, int interval, long start, long end) {
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
         if (usm == null) return results;
 
-        // Запрашиваем статистику по конкретному интервалу (WEEKLY, MONTHLY или YEARLY)
         List<UsageStats> stats = usm.queryUsageStats(interval, start, end);
         if (stats != null) {
             for (UsageStats s : stats) {
                 long time = s.getTotalTimeInForeground();
                 if (time > 0) {
-                    // Важно: в списке могут быть дубли бакетов, мы берем МАКСИМАЛЬНОЕ значение для пакета
-                    // так как в WEEKLY/MONTHLY интервалах система сама накапливает сумму.
-                    results.put(s.getPackageName(), Math.max(results.getOrDefault(s.getPackageName(), 0L), time));
+                    // --- ИСПРАВЛЕНИЕ: МЫ СУММИРУЕМ, А НЕ ИСПОЛЬЗУЕМ Math.max ---
+                    results.put(s.getPackageName(), results.getOrDefault(s.getPackageName(), 0L) + time);
                 }
             }
         }
