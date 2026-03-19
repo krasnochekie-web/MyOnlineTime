@@ -131,8 +131,8 @@ public class StatsFragment extends Fragment {
                                 default: // Год
                                     cal.add(Calendar.YEAR, -1);
                                     startTime = cal.getTimeInMillis();
-                                    // Складываем 12 месячных бакетов
-                                    interval = UsageStatsManager.INTERVAL_MONTHLY; 
+                                    // ИСПОЛЬЗУЕМ НЕДЕЛИ! Складываем 52 надежных недельных бакета
+                                    interval = UsageStatsManager.INTERVAL_WEEKLY; 
                                     break;
                             }
                             
