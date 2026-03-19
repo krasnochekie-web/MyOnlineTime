@@ -12,7 +12,7 @@
         android:layout_height="wrap_content"
         android:paddingLeft="16dp"
         android:paddingRight="16dp"
-        android:paddingBottom="8dp">
+        android:paddingBottom="10dp">
 
         <!-- Вертикальный блок для кнопок (слева) -->
         <LinearLayout
