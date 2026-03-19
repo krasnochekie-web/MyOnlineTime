@@ -5,23 +5,22 @@
     android:orientation="vertical"
     android:background="@color/backgroundDark"
     android:paddingTop="@dimen/header_clearance">
-
-    <!-- НОВАЯ ВЕРХНЯЯ ПАНЕЛЬ (Кнопки и спиннер) -->
-    <RelativeLayout
+    <!-- НОВАЯ ВЕРХНЯЯ ПАНЕЛЬ (Без наложений) -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:orientation="horizontal"
         android:paddingLeft="16dp"
         android:paddingRight="16dp"
-        android:paddingBottom="10dp">
+        android:paddingBottom="16dp"
+        android:gravity="center_vertical">
 
         <!-- Вертикальный блок для кнопок (слева) -->
         <LinearLayout
             android:id="@+id/buttons_panel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_alignParentLeft="true"
-            android:layout_centerVertical="true">
+            android:orientation="vertical">
 
             <!-- Кнопка "График" -->
             <TextView
@@ -39,7 +38,7 @@
                 android:paddingRight="12dp"
                 android:paddingTop="6dp"
                 android:paddingBottom="6dp"
-                android:layout_marginBottom="4dp"
+                android:layout_marginBottom="8dp" 
                 android:gravity="center_vertical" />
 
             <!-- Кнопка "За все время" -->
@@ -61,20 +60,22 @@
                 android:gravity="center_vertical" />
         </LinearLayout>
 
+        <!-- Прозрачная пружина (выталкивает спиннер вправо) -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"/>
+
         <!-- Спиннер (справа) -->
         <Spinner
             android:id="@+id/spinner_period"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_alignParentRight="true"
-            android:layout_centerVertical="true"
             android:background="@null"
             android:padding="5dp"
             android:popupBackground="@drawable/bg_spinner_popup"
             android:spinnerMode="dropdown" />
-
-    </RelativeLayout>
-
+    </LinearLayout>
     <!-- ГЛАВНЫЙ СКРОЛЛ (Остается без изменений) -->
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
