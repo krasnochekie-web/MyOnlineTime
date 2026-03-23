@@ -23,11 +23,14 @@
             android:orientation="vertical">
 
             <!-- Кнопка "График" -->
-            <TextView
+<TextView
                 android:id="@+id/btn_chart"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_button_dark"
+                android:foreground="@drawable/ripple_button_grapefruit"
+                android:clickable="true"
+                android:focusable="true"
                 android:text="@string/btn_chart_text"
                 android:textColor="@color/textWhite"
                 android:textSize="14sp"
