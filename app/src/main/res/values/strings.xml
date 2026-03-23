@@ -73,4 +73,36 @@
     <string name="permission_rationale">Usage access is required to display your time. Tap the <font color="#FA8072">\"Enable access\"</font> button, select <font color="#FA8072">My Online Time</font> in the app list, and turn on the access.</string>
     <string name="btn_enable_access">Enable access</string>
     <string name="btn_grant_permission">Grant Permission</string>
+    <resources>
+    <string name="title_charts">Charts</string>
+    <string name="text_how_it_works">How it works</string>
+    <string name="text_chart_desc">All time, starting from each new week, will be shown in the chart and updated every day.</string>
+    
+    <string name="format_date_top">For %1$s, %2$d %3$s</string>
+    <string name="format_date_middle">%1$s, %2$d %3$s</string>
+    
+    <string-array name="days_short">
+        <item>Sun</item>
+        <item>Mon</item>
+        <item>Tue</item>
+        <item>Wed</item>
+        <item>Thu</item>
+        <item>Fri</item>
+        <item>Sat</item>
+    </string-array>
+
+    <string-array name="months_custom">
+        <item>Jan.</item>
+        <item>Feb.</item>
+        <item>March</item>
+        <item>Apr.</item>
+        <item>May</item>
+        <item>June</item>
+        <item>July</item>
+        <item>Aug.</item>
+        <item>Sept.</item>
+        <item>Oct.</item>
+        <item>Nov.</item>
+        <item>Dec.</item>
+    </string-array>
 </resources>
