@@ -68,12 +68,12 @@
     <string name="app_hidden">Hidden</string>
     <string name="user_hid_time">User hid their time</string>
     <string name="hidden_time_placeholder">XXXX</string>
-    <string name="btn_save">Save</string>
+<string name="btn_save">Save</string>
     <string name="permission_title">Enable access for My Online Time</string>
     <string name="permission_rationale">Usage access is required to display your time. Tap the <font color="#FA8072">\"Enable access\"</font> button, select <font color="#FA8072">My Online Time</font> in the app list, and turn on the access.</string>
     <string name="btn_enable_access">Enable access</string>
     <string name="btn_grant_permission">Grant Permission</string>
-    <resources>
+    
     <string name="title_charts">Charts</string>
     <string name="text_how_it_works">How it works</string>
     <string name="text_chart_desc">All time, starting from each new week, will be shown in the chart and updated every day.</string>
