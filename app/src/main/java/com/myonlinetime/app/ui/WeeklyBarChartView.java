@@ -88,8 +88,7 @@ public class WeeklyBarChartView extends View {
         });
         animator.start();
     }
-
-    @Override
+@Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         int width = getWidth();
@@ -97,12 +96,16 @@ public class WeeklyBarChartView extends View {
         
         float rightPadding = 100f; 
         float bottomPadding = 60f; 
+        float topPadding = 50f; // ДОБАВИЛИ: Зазор сверху для текста часов
+        
         float chartWidth = width - rightPadding;
-        float chartHeight = height - bottomPadding;
+        float chartHeight = height - bottomPadding - topPadding; // Уменьшили рабочую зону графика
 
         long maxHours = maxMillis / (1000 * 60 * 60);
+        
+        // Линии разметки
         for (int i = 0; i <= 2; i++) {
-            float y = chartHeight - (chartHeight / 2f * i);
+            float y = topPadding + chartHeight - (chartHeight / 2f * i); // Сдвинули всё вниз на topPadding
             canvas.drawLine(0, y, chartWidth, y, linePaint);
             
             String hourText = (maxHours / 2 * i) + " ч";
@@ -114,23 +117,25 @@ public class WeeklyBarChartView extends View {
         float spacing = chartWidth / 7f;
         textPaint.setTextAlign(Paint.Align.CENTER);
 
+        // Рисуем столбцы
         for (int i = 0; i < 7; i++) {
             float xCenter = (spacing * i) + (spacing / 2f);
             float barHeight = ((float) dataMillis[i] / maxMillis) * chartHeight * animationProgress;
             
             float left = xCenter - (barWidth / 2f);
             float right = xCenter + (barWidth / 2f);
-            float top = chartHeight - barHeight;
-            float bottom = chartHeight;
+            float top = topPadding + chartHeight - barHeight; // Сдвинули верх столбца
+            float bottom = topPadding + chartHeight; // Сдвинули низ столбца
 
             barRects[i].set(left, top, right, bottom);
 
             Paint currentPaint = (i == selectedIndex) ? barSelectedPaint : barPaint;
             canvas.drawRect(barRects[i], currentPaint);
+            
+            // Текст дней недели (остается в самом низу)
             canvas.drawText(labels[i], xCenter, height - 10, textPaint);
         }
     }
-
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (event.getAction() == MotionEvent.ACTION_DOWN) {
