@@ -11,5 +11,6 @@
 	<color name="borderSemiTransparent">#33FFFFFF</color>
 	<color name="hisaDark">#696969</color>
 	<color name="chartBarNormal">#FFB300</color> 
-	<color name="chartBarSelected">#FFE082</color> <color name="chartLine">#444444</color>
+	<color name="chartBarSelected">#FFE082</color>
+	<color name="chartLine">#444444</color>
 </resources>
