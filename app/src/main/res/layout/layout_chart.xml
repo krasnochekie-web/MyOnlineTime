@@ -3,21 +3,21 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/backgroundDark"
-    android:paddingTop="@dimen/header_clearance">
+    android:paddingTop="@dimen/header_clearance"
+    android:clipToPadding="false"
+    android:background="@color/backgroundDark">
 
-    <androidx.core.widget.NestedScrollView
+    <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:clipToPadding="false"
-        android:overScrollMode="never"
-        android:scrollbars="none"
-        android:paddingBottom="@dimen/bottom_nav_clearance">
+        android:fillViewport="true"
+        android:scrollbars="none">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:paddingBottom="@dimen/bottom_nav_clearance">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -136,5 +136,5 @@
                 android:clipToPadding="false" />
 
         </LinearLayout>
-    </androidx.core.widget.NestedScrollView>
+    </ScrollView>
 </LinearLayout>
