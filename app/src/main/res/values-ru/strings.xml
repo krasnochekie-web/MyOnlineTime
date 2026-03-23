@@ -73,4 +73,34 @@
     <string name="permission_rationale">Для отображения времени требуется доступ к статистике. Нажмите кнопку <font color="#FA8072">\"Включить доступ\"</font>, выберите <font color="#FA8072">My Online Time</font> в списке приложений и включите доступ.</string>
     <string name="btn_enable_access">Включить доступ</string>
     <string name="btn_grant_permission">Дать разрешение</string>
+	<string name="title_charts">Графики</string>
+    <string name="text_how_it_works">Как это работает</string>
+    <string name="text_chart_desc">Все время, начиная с каждой новой недели, будет показываться в графике и обновляться каждый день.</string>
+    <string name="format_date_top">За %1$s, %2$d %3$s</string>
+    <string name="format_date_middle">%1$s, %2$d %3$s</string>
+    
+    <string-array name="days_short">
+        <item>вс</item>
+        <item>пн</item>
+        <item>вт</item>
+        <item>ср</item>
+        <item>чт</item>
+        <item>пт</item>
+        <item>сб</item>
+    </string-array>
+
+    <string-array name="months_custom">
+        <item>янв.</item>
+        <item>фев.</item>
+        <item>марта</item>
+        <item>апр.</item>
+        <item>мая</item>
+        <item>июня</item>
+        <item>июля</item>
+        <item>авг.</item>
+        <item>сентября</item>
+        <item>октября</item>
+        <item>ноября</item>
+        <item>дек.</item>
+    </string-array>
 </resources>
