@@ -4,13 +4,13 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@color/backgroundDark"
-    android:clipToPadding="false"
     android:paddingTop="@dimen/header_clearance">
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
+        android:overScrollMode="never"
         android:scrollbars="none"
         android:paddingBottom="@dimen/bottom_nav_clearance">
 
@@ -22,9 +22,7 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginLeft="16dp"
-                android:layout_marginRight="16dp"
-                android:layout_marginBottom="16dp"
+                android:layout_margin="16dp"
                 android:background="@drawable/bg_app_card"
                 android:orientation="horizontal"
                 android:padding="20dp"
