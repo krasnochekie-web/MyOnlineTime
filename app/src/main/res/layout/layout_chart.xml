@@ -82,7 +82,8 @@
                 android:layout_height="200dp"
                 android:layout_marginHorizontal="16dp"
                 android:layout_marginBottom="24dp"/>
-<LinearLayout
+
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
@@ -123,5 +124,15 @@
                     android:rotation="180"
                     android:tint="@color/textWhite" />
             </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/chart_apps_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:nestedScrollingEnabled="false"
+                android:clipToPadding="false" />
+
+        </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>
