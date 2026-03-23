@@ -61,10 +61,15 @@ public class StatsFragment extends Fragment {
         final RecyclerView recyclerView = view.findViewById(R.id.apps_list);
         final Spinner spinner = view.findViewById(R.id.spinner_period);
         final TextView totalTimeText = view.findViewById(R.id.text_total_time_sum);
-        final TextView btnChart = view.findViewById(R.id.btn_chart);
+final TextView btnChart = view.findViewById(R.id.btn_chart);
         final TextView btnAllTime = view.findViewById(R.id.btn_all_time);
 
-        btnChart.setOnClickListener(v -> { /* Логика графика */ });
+        btnChart.setOnClickListener(v -> {
+            if (activity != null && activity.navigator != null) {
+                activity.navigator.openSubScreen(new ChartFragment());
+            }
+        });
+        
         btnAllTime.setOnClickListener(v -> { /* Логика "за всё время" */ });
         
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
