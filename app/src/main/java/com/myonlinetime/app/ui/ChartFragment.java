@@ -3,6 +3,9 @@ package com.myonlinetime.app.ui;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -24,8 +27,10 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -56,7 +61,6 @@ public class ChartFragment extends Fragment {
 
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
-            // Берем название из strings.xml
             activity.headerTitle.setText(getString(R.string.title_charts));
             activity.headerBackBtn.setVisibility(View.VISIBLE);
         }
@@ -112,14 +116,20 @@ public class ChartFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (activity == null || !isAdded()) return;
 
-            // Загружаем массивы строк для текущего языка приложения
+            PackageManager pm = activity.getPackageManager();
+            Set<String> userApps = getUserApps(pm);
+            String launcherPkg = getLauncherPackage(pm);
+
             String[] daysArray = getResources().getStringArray(R.array.days_short);
             String[] monthsArray = getResources().getStringArray(R.array.months_custom);
 
             long[] barMillis = new long[7];
             String[] dayLabels = new String[7];
 
-            for (int i = 6; i >= 0; i--) {
+            weeklyData.clear();
+
+            // Идем слева направо (от старого к новому)
+            for (int i = 0; i < 7; i++) {
                 Calendar cal = Calendar.getInstance();
                 cal.add(Calendar.DAY_OF_YEAR, -(6 - i)); 
                 
@@ -130,7 +140,6 @@ public class ChartFragment extends Fragment {
                 int monthNum = cal.get(Calendar.MONTH);
                 String monthStr = monthsArray[monthNum];
 
-                // Форматируем строки (например: "За сб, 24 авг.")
                 String topFormatted = getString(R.string.format_date_top, dayShort, dayNum, monthStr);
                 String middleFormatted = getString(R.string.format_date_middle, dayShort, dayNum, monthStr);
 
@@ -144,9 +153,16 @@ public class ChartFragment extends Fragment {
                 long dailyTotal = 0;
                 List<String> apps = new ArrayList<>();
                 for (Map.Entry<String, Long> entry : times.entrySet()) {
-                    if (entry.getValue() > 1000) { 
-                        apps.add(entry.getKey());
-                        dailyTotal += entry.getValue();
+                    String pkg = entry.getKey();
+                    long time = entry.getValue();
+                    
+                    boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || 
+                                            pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || 
+                                            pkg.equals(launcherPkg);
+                                            
+                    if (time > 1000 && userApps.contains(pkg) && !isSystemTrash) { 
+                        apps.add(pkg);
+                        dailyTotal += time;
                     }
                 }
                 Collections.sort(apps, (left, right) -> Long.compare(times.get(right), times.get(left)));
@@ -159,17 +175,15 @@ public class ChartFragment extends Fragment {
                 dayData.appList = apps;
                 dayData.appTimes = times;
                 
-                weeklyData.add(0, dayData); 
+                weeklyData.add(dayData); 
                 barMillis[i] = dailyTotal;
                 dayLabels[i] = dayShort;
             }
 
-            Collections.reverse(weeklyData);
-
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
                 barChart.setData(barMillis, dayLabels);
-                selectDay(6); 
+                selectDay(6); // Сразу выбираем сегодняшний день
             });
         });
     }
@@ -197,5 +211,21 @@ public class ChartFragment extends Fragment {
             }
         }
         return results;
+    }
+
+    private Set<String> getUserApps(PackageManager pm) {
+        Set<String> apps = new HashSet<>();
+        Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
+        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+        List<ResolveInfo> resolvedInfos = pm.queryIntentActivities(mainIntent, 0);
+        for (ResolveInfo info : resolvedInfos) { apps.add(info.activityInfo.packageName); }
+        return apps;
+    }
+    
+    private String getLauncherPackage(PackageManager pm) {
+        Intent homeIntent = new Intent(Intent.ACTION_MAIN);
+        homeIntent.addCategory(Intent.CATEGORY_HOME);
+        ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
+        return defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
     }
 }
