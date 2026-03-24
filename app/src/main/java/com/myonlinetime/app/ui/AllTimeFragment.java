@@ -107,12 +107,10 @@ public class AllTimeFragment extends Fragment {
             yesterdayStart.add(Calendar.DAY_OF_YEAR, -1);
             long yesterdayStartMillis = yesterdayStart.getTimeInMillis();
 
-            // 1. ИНИЦИАЛИЗАЦИЯ (если открыли первый раз)
             if (startDate == 0) {
                 Calendar oneYearAgo = Calendar.getInstance();
                 oneYearAgo.add(Calendar.YEAR, -1);
                 
-                // Запрашиваем YEARLY для формирования базового кэша
                 UsageStatsManager usm = (UsageStatsManager) activity.getSystemService(Context.USAGE_STATS_SERVICE);
                 List<UsageStats> yearlyStats = usm.queryUsageStats(UsageStatsManager.INTERVAL_YEARLY, oneYearAgo.getTimeInMillis(), System.currentTimeMillis());
                 
@@ -143,12 +141,10 @@ public class AllTimeFragment extends Fragment {
                 
                 for (long t : appsMap.values()) totalMillis += t;
                 startDate = earliestStart;
-                lastUpdate = todayStartMillis; // Обновили базу на сегодня
+                lastUpdate = todayStartMillis;
                 saveToCache(startDate, lastUpdate, totalMillis, appsMap);
             } 
-            // 2. ДОБАВЛЕНИЕ НОВЫХ ДНЕЙ (если наступил новый день)
             else if (lastUpdate < todayStartMillis) {
-                // Плюсуем всё, что накопилось с момента последнего обновления
                 Map<String, Long> gapTimes = calculateExactTimes(activity, lastUpdate, todayStartMillis);
                 
                 Set<String> userApps = getUserApps(activity.getPackageManager());
@@ -170,7 +166,6 @@ public class AllTimeFragment extends Fragment {
                 saveToCache(startDate, lastUpdate, totalMillis, appsMap);
             }
 
-            // 3. СТАТИСТИКА ЗА ВЧЕРА (для плашки +XXч XXм)
             Map<String, Long> yesterdayTimes = calculateExactTimes(activity, yesterdayStartMillis, todayStartMillis);
             long yesterdayTotal = 0;
             Set<String> uApps = getUserApps(activity.getPackageManager());
@@ -181,7 +176,7 @@ public class AllTimeFragment extends Fragment {
                 }
             }
 
-            // Форматируем список для адаптера
+            // Честно берем все приложения
             List<String> sortedApps = new ArrayList<>(appsMap.keySet());
             Collections.sort(sortedApps, (left, right) -> Long.compare(appsMap.get(right), appsMap.get(left)));
 
@@ -192,26 +187,38 @@ public class AllTimeFragment extends Fragment {
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
                 
-                adapter.updateData(sortedApps, appsMap);
+                // --- МАГИЯ ОТ ЛАГОВ ---
+                // Берем только первые 15 приложений. 
+                // Их отрисовка занимает миллисекунды, и анимация выезда экрана проходит идеально плавно.
+                List<String> topApps = sortedApps.size() > 15 ? new ArrayList<>(sortedApps.subList(0, 15)) : sortedApps;
+                
+                adapter.updateData(topApps, appsMap);
                 updateUIWithAnimation(finalTotalMillis, finalYesterdayTotal, finalStartDate);
+
+                // Если приложений больше 15, тихонько догружаем остальные через 400мс
+                // В этот момент анимация открытия уже закончится, и пользователь ничего не заметит.
+                if (sortedApps.size() > 15) {
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        if (isAdded()) {
+                            adapter.updateData(sortedApps, appsMap);
+                        }
+                    }, 400); 
+                }
             });
         });
     }
 
     private void updateUIWithAnimation(long totalMillis, long yesterdayTotal, long startDate) {
-        // Форматируем дату начала (полное название месяца автоматически подхватится системой)
         SimpleDateFormat sdf = new SimpleDateFormat("d MMMM yyyy", Locale.getDefault());
         String dateStr = sdf.format(startDate);
         descTxt.setText(getString(R.string.text_all_time_desc, dateStr));
 
-        // Вчерашнее время
         long yHours = yesterdayTotal / (1000 * 60 * 60);
         long yMins = (yesterdayTotal / (1000 * 60)) % 60;
         yesterdayValTxt.setText(getString(R.string.format_plus_hours_mins, yHours, yMins));
 
-        // Анимация главного числа
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(1200); // 1.2 секунды бегут цифры
+        animator.setDuration(1200); 
         animator.setInterpolator(new DecelerateInterpolator());
         animator.addUpdateListener(animation -> {
             float fraction = (float) animation.getAnimatedValue();
@@ -229,7 +236,6 @@ public class AllTimeFragment extends Fragment {
         animator.start();
     }
 
-    // --- РАБОТА С КЭШЕМ (JSON) ---
     private Map<String, Long> loadAppsFromCache() {
         Map<String, Long> map = new HashMap<>();
         String jsonStr = prefs.getString(KEY_APPS_JSON, "{}");
@@ -259,7 +265,6 @@ public class AllTimeFragment extends Fragment {
         } catch (Exception e) { e.printStackTrace(); }
     }
 
-    // --- ФИЛЬТРЫ И ТОЧНЫЙ ПОДСЧЕТ (как в графиках) ---
     private Map<String, Long> calculateExactTimes(Context context, long start, long end) {
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
