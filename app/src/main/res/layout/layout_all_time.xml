@@ -4,6 +4,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@color/backgroundDark"
+    android:clipToPadding="false"
     android:paddingTop="@dimen/header_clearance"
     android:paddingBottom="@dimen/bottom_nav_clearance">
 
@@ -73,44 +74,58 @@
             android:textColor="@color/textGray"
             android:textSize="12sp"
             android:layout_marginBottom="24dp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="16dp"
-            android:layout_marginBottom="16dp"
-            android:background="@drawable/bg_app_card"
-            android:orientation="horizontal"
-            android:padding="20dp"
-            android:gravity="center_vertical">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/text_yesterday"
-                android:textColor="@color/textWhite"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/all_time_yesterday_val"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="+0ч 0м"
-                android:textColor="@color/burgundyRed"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-        </LinearLayout>
     </LinearLayout>
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/all_time_apps_list"
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:paddingHorizontal="16dp"
         android:clipToPadding="false"
-        android:scrollbars="vertical" />
+        android:overScrollMode="never" 
+        android:scrollbars="none"> 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_app_card"
+                android:orientation="horizontal"
+                android:padding="20dp"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/text_yesterday"
+                    android:textColor="@color/textWhite"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/all_time_yesterday_val"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="+0ч 0м"
+                    android:textColor="@color/burgundyRed"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/all_time_apps_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:nestedScrollingEnabled="false"
+                android:clipToPadding="false" />
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 
 </LinearLayout>
