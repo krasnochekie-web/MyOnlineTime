@@ -5,12 +5,13 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/backgroundDark"
-    android:paddingTop="@dimen/header_clearance">
+    android:paddingTop="@dimen/header_clearance"
+    android:nestedScrollingEnabled="true"> 
 
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@android:color/transparent"
+        android:background="@color/backgroundDark" 
         app:elevation="0dp">
 
         <LinearLayout
@@ -112,7 +113,6 @@
                 android:textSize="18sp"
                 android:textStyle="bold" />
         </LinearLayout>
-
     </com.google.android.material.appbar.AppBarLayout>
 
     <androidx.recyclerview.widget.RecyclerView
