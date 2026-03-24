@@ -78,6 +78,14 @@
     <string name="text_chart_desc">Все время, начиная с каждой новой недели, будет показываться в графике и обновляться каждый день.</string>
     <string name="format_date_top">За %1$s, %2$d %3$s</string>
     <string name="format_date_middle">%1$s, %2$d %3$s</string>
+	<string name="title_all_time">Общее время</string>
+    <string name="title_total_time_header">Общее время</string>
+    <string name="text_all_time_desc">Всё время, начиная с %1$s, сохраняется и накапливается в статистике.</string>
+    <string name="text_yesterday">Вчера</string>
+    
+    <string name="format_days_hours">%1$dд %2$dч</string>
+    <string name="format_total_hours_mins">%1$dч %2$dм</string>
+    <string name="format_plus_hours_mins">+%1$dч %2$dм</string>
     
     <string-array name="days_short">
         <item>вс</item>
