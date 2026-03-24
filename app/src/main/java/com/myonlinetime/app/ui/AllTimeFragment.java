@@ -76,15 +76,17 @@ public class AllTimeFragment extends Fragment {
         adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
         recyclerView.setAdapter(adapter);
 
+        // Запускаем сбор мгновенно, без задержек!
         loadAndCalculateStats();
 
         return view;
     }
 
     private void loadAndCalculateStats() {
-        mainValTxt.setText("...");
-        subValTxt.setText("Загрузка...");
-        yesterdayValTxt.setText("...");
+        // Убрали надписи "Загрузка...". Оставляем стартовые нули для красоты до начала анимации.
+        mainValTxt.setText("0д 0ч");
+        subValTxt.setText("0ч 0м");
+        yesterdayValTxt.setText("+0ч 0м");
 
         ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
@@ -107,6 +109,7 @@ public class AllTimeFragment extends Fragment {
             yesterdayStart.add(Calendar.DAY_OF_YEAR, -1);
             long yesterdayStartMillis = yesterdayStart.getTimeInMillis();
 
+            // 1. Создаем базу за год (только при первом запуске)
             if (startDate == 0) {
                 Calendar oneYearAgo = Calendar.getInstance();
                 oneYearAgo.add(Calendar.YEAR, -1);
@@ -144,6 +147,7 @@ public class AllTimeFragment extends Fragment {
                 lastUpdate = todayStartMillis;
                 saveToCache(startDate, lastUpdate, totalMillis, appsMap);
             } 
+            // 2. Добавляем новые дни к кэшу
             else if (lastUpdate < todayStartMillis) {
                 Map<String, Long> gapTimes = calculateExactTimes(activity, lastUpdate, todayStartMillis);
                 
@@ -166,6 +170,7 @@ public class AllTimeFragment extends Fragment {
                 saveToCache(startDate, lastUpdate, totalMillis, appsMap);
             }
 
+            // 3. Вычисляем только "вчера"
             Map<String, Long> yesterdayTimes = calculateExactTimes(activity, yesterdayStartMillis, todayStartMillis);
             long yesterdayTotal = 0;
             Set<String> uApps = getUserApps(activity.getPackageManager());
@@ -176,7 +181,7 @@ public class AllTimeFragment extends Fragment {
                 }
             }
 
-            // Честно берем все приложения
+            // Честно собираем и сортируем ВСЕ приложения
             List<String> sortedApps = new ArrayList<>(appsMap.keySet());
             Collections.sort(sortedApps, (left, right) -> Long.compare(appsMap.get(right), appsMap.get(left)));
 
@@ -184,26 +189,11 @@ public class AllTimeFragment extends Fragment {
             final long finalYesterdayTotal = yesterdayTotal;
             final long finalStartDate = startDate;
 
+            // Мгновенно передаем готовые данные на экран
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
-                
-                // --- МАГИЯ ОТ ЛАГОВ ---
-                // Берем только первые 15 приложений. 
-                // Их отрисовка занимает миллисекунды, и анимация выезда экрана проходит идеально плавно.
-                List<String> topApps = sortedApps.size() > 15 ? new ArrayList<>(sortedApps.subList(0, 15)) : sortedApps;
-                
-                adapter.updateData(topApps, appsMap);
+                adapter.updateData(sortedApps, appsMap);
                 updateUIWithAnimation(finalTotalMillis, finalYesterdayTotal, finalStartDate);
-
-                // Если приложений больше 15, тихонько догружаем остальные через 400мс
-                // В этот момент анимация открытия уже закончится, и пользователь ничего не заметит.
-                if (sortedApps.size() > 15) {
-                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                        if (isAdded()) {
-                            adapter.updateData(sortedApps, appsMap);
-                        }
-                    }, 400); 
-                }
             });
         });
     }
