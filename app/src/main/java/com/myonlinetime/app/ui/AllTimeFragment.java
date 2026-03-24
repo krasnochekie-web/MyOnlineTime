@@ -70,20 +70,29 @@ public class AllTimeFragment extends Fragment {
         subValTxt = view.findViewById(R.id.all_time_sub_val);
         descTxt = view.findViewById(R.id.all_time_desc);
         yesterdayValTxt = view.findViewById(R.id.all_time_yesterday_val);
+        
+        // МАГИЯ СЛИЯНИЯ: Достаем плашку из разметки и удаляем её с экрана
+        View headerWrapper = view.findViewById(R.id.yesterday_banner_wrapper);
+        ViewGroup parent = (ViewGroup) headerWrapper.getParent();
+        if (parent != null) {
+            parent.removeView(headerWrapper);
+        }
+
         recyclerView = view.findViewById(R.id.all_time_apps_list);
-
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
+        
         adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
-        recyclerView.setAdapter(adapter);
+        
+        // Оборачиваем твой адаптер вместе с плашкой и отдаем списку
+        HeaderWrapperAdapter wrapperAdapter = new HeaderWrapperAdapter(headerWrapper, adapter);
+        recyclerView.setAdapter(wrapperAdapter);
 
-        // Запускаем сбор мгновенно, без задержек!
         loadAndCalculateStats();
 
         return view;
     }
 
     private void loadAndCalculateStats() {
-        // Убрали надписи "Загрузка...". Оставляем стартовые нули для красоты до начала анимации.
         mainValTxt.setText("0д 0ч");
         subValTxt.setText("0ч 0м");
         yesterdayValTxt.setText("+0ч 0м");
@@ -109,7 +118,6 @@ public class AllTimeFragment extends Fragment {
             yesterdayStart.add(Calendar.DAY_OF_YEAR, -1);
             long yesterdayStartMillis = yesterdayStart.getTimeInMillis();
 
-            // 1. Создаем базу за год (только при первом запуске)
             if (startDate == 0) {
                 Calendar oneYearAgo = Calendar.getInstance();
                 oneYearAgo.add(Calendar.YEAR, -1);
@@ -147,7 +155,6 @@ public class AllTimeFragment extends Fragment {
                 lastUpdate = todayStartMillis;
                 saveToCache(startDate, lastUpdate, totalMillis, appsMap);
             } 
-            // 2. Добавляем новые дни к кэшу
             else if (lastUpdate < todayStartMillis) {
                 Map<String, Long> gapTimes = calculateExactTimes(activity, lastUpdate, todayStartMillis);
                 
@@ -170,7 +177,6 @@ public class AllTimeFragment extends Fragment {
                 saveToCache(startDate, lastUpdate, totalMillis, appsMap);
             }
 
-            // 3. Вычисляем только "вчера"
             Map<String, Long> yesterdayTimes = calculateExactTimes(activity, yesterdayStartMillis, todayStartMillis);
             long yesterdayTotal = 0;
             Set<String> uApps = getUserApps(activity.getPackageManager());
@@ -181,7 +187,6 @@ public class AllTimeFragment extends Fragment {
                 }
             }
 
-            // Честно собираем и сортируем ВСЕ приложения
             List<String> sortedApps = new ArrayList<>(appsMap.keySet());
             Collections.sort(sortedApps, (left, right) -> Long.compare(appsMap.get(right), appsMap.get(left)));
 
@@ -189,9 +194,9 @@ public class AllTimeFragment extends Fragment {
             final long finalYesterdayTotal = yesterdayTotal;
             final long finalStartDate = startDate;
 
-            // Мгновенно передаем готовые данные на экран
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
+                
                 adapter.updateData(sortedApps, appsMap);
                 updateUIWithAnimation(finalTotalMillis, finalYesterdayTotal, finalStartDate);
             });
@@ -294,5 +299,55 @@ public class AllTimeFragment extends Fragment {
         homeIntent.addCategory(Intent.CATEGORY_HOME);
         ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
         return defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
+    }
+
+    // --- НАШ КЛАСС-ОБЕРТКА ---
+    // Он вставляет плашку нулевым элементом прямо в RecyclerView
+    private class HeaderWrapperAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+        private final View headerView;
+        private final RecyclerView.Adapter innerAdapter;
+
+        public HeaderWrapperAdapter(View headerView, RecyclerView.Adapter innerAdapter) {
+            this.headerView = headerView;
+            this.innerAdapter = innerAdapter;
+
+            // Передаем обновления данных от твоего адаптера к нашему
+            this.innerAdapter.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
+                @Override public void onChanged() { notifyDataSetChanged(); }
+                @Override public void onItemRangeChanged(int positionStart, int itemCount) { notifyItemRangeChanged(positionStart + 1, itemCount); }
+                @Override public void onItemRangeInserted(int positionStart, int itemCount) { notifyItemRangeInserted(positionStart + 1, itemCount); }
+                @Override public void onItemRangeRemoved(int positionStart, int itemCount) { notifyItemRangeRemoved(positionStart + 1, itemCount); }
+                @Override public void onItemRangeMoved(int fromPosition, int toPosition, int itemCount) { notifyDataSetChanged(); }
+            });
+        }
+
+        @Override
+        public int getItemViewType(int position) {
+            if (position == 0) return 99999;
+            return innerAdapter.getItemViewType(position - 1);
+        }
+
+        @Override
+        public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            if (viewType == 99999) {
+                headerView.setLayoutParams(new RecyclerView.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT));
+                return new RecyclerView.ViewHolder(headerView) {};
+            }
+            return innerAdapter.onCreateViewHolder(parent, viewType);
+        }
+
+        @Override
+        public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
+            if (position > 0) {
+                innerAdapter.onBindViewHolder(holder, position - 1);
+            }
+        }
+
+        @Override
+        public int getItemCount() {
+            return innerAdapter.getItemCount() + 1; // +1 место для плашки
+        }
     }
 }
