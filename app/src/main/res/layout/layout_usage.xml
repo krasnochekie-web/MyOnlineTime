@@ -45,11 +45,14 @@
                 android:gravity="center_vertical" />
 
             <!-- Кнопка "За все время" -->
-            <TextView
+<TextView
                 android:id="@+id/btn_all_time"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_button_dark"
+                android:foreground="@drawable/ripple_button_grapefruit"
+                android:clickable="true"
+                android:focusable="true"
                 android:text="@string/btn_all_time_text"
                 android:textColor="@color/textWhite"
                 android:textSize="14sp"
