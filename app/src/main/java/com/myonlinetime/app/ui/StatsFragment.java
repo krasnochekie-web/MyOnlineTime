@@ -64,13 +64,18 @@ public class StatsFragment extends Fragment {
 final TextView btnChart = view.findViewById(R.id.btn_chart);
         final TextView btnAllTime = view.findViewById(R.id.btn_all_time);
 
-        btnChart.setOnClickListener(v -> {
+btnChart.setOnClickListener(v -> {
             if (activity != null && activity.navigator != null) {
                 activity.navigator.openSubScreen(new ChartFragment());
             }
         });
-        
-        btnAllTime.setOnClickListener(v -> { /* Логика "за всё время" */ });
+
+        // ВОТ ЭТО ДОБАВЛЯЕМ ДЛЯ НОВОГО ЭКРАНА:
+        btnAllTime.setOnClickListener(v -> {
+            if (activity != null && activity.navigator != null) {
+                activity.navigator.openSubScreen(new AllTimeFragment());
+            }
+        });
         
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
