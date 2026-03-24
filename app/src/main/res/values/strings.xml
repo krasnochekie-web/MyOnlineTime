@@ -80,6 +80,14 @@
     
     <string name="format_date_top">For %1$s, %2$d %3$s</string>
     <string name="format_date_middle">%1$s, %2$d %3$s</string>
+    <string name="title_all_time">Total time</string>
+    <string name="title_total_time_header">Total time</string>
+    <string name="text_all_time_desc">All time starting %1$s. Time is accumulated and updated every day.</string>
+    <string name="text_yesterday">Yesterday</string>
+    
+    <string name="format_days_hours">%1$dd %2$dh</string>
+    <string name="format_total_hours_mins">%1$dh %2$dm</string>
+    <string name="format_plus_hours_mins">+%1$dh %2$dm</string>
     
     <string-array name="days_short">
         <item>Sun</item>
