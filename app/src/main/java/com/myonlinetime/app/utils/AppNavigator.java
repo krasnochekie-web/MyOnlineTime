@@ -8,6 +8,7 @@ import androidx.fragment.app.FragmentTransaction;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.ui.ProfileFragment;
 import com.myonlinetime.app.ui.SearchFragment;
+import com.myonlinetime.app.ui.SettingsFragment; // <-- ДОБАВИЛ ИМПОРТ
 import com.myonlinetime.app.ui.StatsFragment;
 
 public class AppNavigator {
@@ -20,6 +21,7 @@ public class AppNavigator {
     private SearchFragment searchFragment;
     private StatsFragment statsFragment;
     private ProfileFragment profileFragment;
+    private SettingsFragment settingsFragment; // <-- ДОБАВИЛ ПЕРЕМЕННУЮ
 
     // Второстепенный экран (Саб-скрин)
     private Fragment currentSubScreen;
@@ -31,72 +33,50 @@ public class AppNavigator {
         this.containerId = containerId;
     }
 
-    // --- 1. ОТКРЫТИЕ РЕДАКТОРА / ПОДПИСЧИКОВ (Всплытие снизу) ---
     public void openSubScreen(Fragment fragment) {
         FragmentTransaction ft = fm.beginTransaction();
-        
-        // Красивое появление снизу
         ft.setCustomAnimations(R.anim.slide_in_up, android.R.anim.fade_out);
-
-        // Прячем абсолютно все текущие экраны
         hideAll(ft);
 
-        // Если у нас уже был какой-то саб-скрин в памяти (например, старый редактор) - прячем и его
         if (currentSubScreen != null) {
             ft.hide(currentSubScreen);
         }
 
-        // Создаем новый
         currentSubScreen = fragment;
         ft.add(containerId, currentSubScreen, "SUB_SCREEN");
         ft.commit();
     }
 
-    // --- 2. ЗАКРЫТИЕ РЕДАКТОРА (По кнопке НАЗАД) ---
     public boolean closeSubScreen() {
         if (currentSubScreen != null) {
             FragmentTransaction ft = fm.beginTransaction();
-            
-            // Анимация ухода вниз
             ft.setCustomAnimations(android.R.anim.fade_in, R.anim.slide_out_down);
-            
-            // МАГИЯ ЗДЕСЬ: Мы ПРОСТО ПРЯЧЕМ редактор, а не убиваем его!
             ft.hide(currentSubScreen); 
-            currentSubScreen = null; // Забываем про него
-            
-            // Возвращаем на экран ту вкладку, откуда мы пришли
+            currentSubScreen = null; 
             showMainTab(currentTabIndex, ft);
-            
             ft.commit();
             return true;
         }
         return false;
     }
 
-    // --- 3. ПЕРЕКЛЮЧЕНИЕ ГЛАВНЫХ ВКЛАДОК (Нижнее меню) ---
     public void switchScreen(int tabIndex, String uid) {
         FragmentTransaction ft = fm.beginTransaction();
 
-        // МАГИЯ ЗДЕСЬ: Если мы переключаемся на Ленту/Поиск, а открыт Редактор:
-        // Мы ПРОСТО ПРЯЧЕМ Редактор! Никаких remove(), никаких конфликтов.
         if (currentSubScreen != null) {
             ft.hide(currentSubScreen);
             currentSubScreen = null;
         }
 
-        // Возвращаем умную анимацию ПЕРЕЛИСТЫВАНИЯ (Сдвиг)
         if (currentTabIndex != -1 && currentTabIndex != tabIndex) {
             if (tabIndex > currentTabIndex) {
-                // Идем ВПРАВО (например, с Ленты на Поиск) -> Выезжает справа
                 ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left);
             } else {
-                // Идем ВЛЕВО (например, с Профиля на Время) -> Выезжает слева
                 ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
             }
         }
         currentTabIndex = tabIndex;
 
-        // Прячем всё
         hideAll(ft);
 
         // Показываем или создаем нужную вкладку
@@ -128,23 +108,32 @@ public class AppNavigator {
             }
             ft.show(profileFragment);
         }
+        // <-- НАЧАЛО НОВОГО БЛОКА ДЛЯ НАСТРОЕК -->
+        else if (tabIndex == 5) {
+            if (settingsFragment == null) {
+                settingsFragment = new SettingsFragment();
+                ft.add(containerId, settingsFragment, "SETTINGS");
+            }
+            ft.show(settingsFragment);
+        }
+        // <-- КОНЕЦ НОВОГО БЛОКА -->
 
         ft.commit();
     }
 
-    // --- Вспомогательный метод: Прячет ВСЁ на экране ---
     private void hideAll(FragmentTransaction ft) {
         if (feedFragment != null) ft.hide(feedFragment);
         if (searchFragment != null) ft.hide(searchFragment);
         if (statsFragment != null) ft.hide(statsFragment);
         if (profileFragment != null) ft.hide(profileFragment);
+        if (settingsFragment != null) ft.hide(settingsFragment); // <-- ДОБАВИЛ СКРЫТИЕ НАСТРОЕК
     }
 
-    // --- Вспомогательный метод: Показывает конкретную вкладку ---
     private void showMainTab(int index, FragmentTransaction ft) {
         if (index == 0 && feedFragment != null) ft.show(feedFragment);
         if (index == 1 && searchFragment != null) ft.show(searchFragment);
         if (index == 3 && statsFragment != null) ft.show(statsFragment);
         if (index == 4 && profileFragment != null) ft.show(profileFragment);
+        if (index == 5 && settingsFragment != null) ft.show(settingsFragment); // <-- ДОБАВИЛ ПОКАЗ НАСТРОЕК
     }
 }
