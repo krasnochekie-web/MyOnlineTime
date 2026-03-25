@@ -150,14 +150,15 @@ public class MainActivity extends AppCompatActivity {
             navigator.switchScreen(3, null);
             resetHeader();
         });
-
         // Вкладка 5: Настройки
         findViewById(R.id.nav_settings).setOnClickListener(v -> {
+            hideLoginScreen(); // Настройки доступны без заглушки входа
             updateNavState(5);
-            Toast.makeText(MainActivity.this, "Раздел настроек", Toast.LENGTH_SHORT).show();
-            // TODO: navigator.switchScreen(5, null);
+            
+            // Вызываем через твой навигатор для правильной анимации перелистывания!
+            // Никаких изменений шапки здесь не делаем.
+            navigator.switchScreen(5, null);
         });
-
         headerBackBtn.setOnClickListener(v -> handleBackNavigation());
 
         updateNavState(0);
