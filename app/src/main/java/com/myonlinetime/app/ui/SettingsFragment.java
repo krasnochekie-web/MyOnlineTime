@@ -68,18 +68,25 @@ public class SettingsFragment extends Fragment {
                 });
             }
         });
-        
-        // --- ЛОГИКА ВЫХОДА ИЗ АККАУНТА ---
+// --- ЛОГИКА ВЫХОДА ИЗ АККАУНТА ---
         view.findViewById(R.id.btn_sign_out).setOnClickListener(v -> {
             if (activity != null && activity.mGoogleSignInClient != null) {
-                activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
-                    activity.vpsToken = null; // Очищаем токен
-                    activity.showLoginScreen(); // Моментально показываем заглушку неавторизованности
-                    Toast.makeText(getContext(), "Вы вышли из аккаунта", Toast.LENGTH_SHORT).show();
-                });
+                GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
+                
+                if (account != null) {
+                    // 1. Пользователь авторизован -> Выходим
+                    activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
+                        activity.vpsToken = null; // Очищаем токен
+                        loadUserData(view); // Сбрасываем визуал до Guest
+                        Toast.makeText(getContext(), "Вы вышли из аккаунта", Toast.LENGTH_SHORT).show();
+                    });
+                } else {
+                    // 2. Пользователь НЕ авторизован -> Открываем окно выбора Google-аккаунта
+                    Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
+                    activity.startActivityForResult(signInIntent, 9001); 
+                }
             }
         });
-
         // Кнопки Оформления
         themeAuto = view.findViewById(R.id.theme_auto);
         themeLight = view.findViewById(R.id.theme_light);
@@ -104,7 +111,7 @@ public class SettingsFragment extends Fragment {
         return view;
     }
 
-    // --- НОВЫЙ МЕТОД: Загрузка аватарки и данных пользователя ---
+// --- Загрузка аватарки и данных пользователя ---
     private void loadUserData(View view) {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
@@ -113,18 +120,20 @@ public class SettingsFragment extends Fragment {
         TextView nicknameView = view.findViewById(R.id.settings_nickname);
 
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
+        
         if (account != null) {
-            // Устанавливаем имя и ID
+            // ЕСЛИ АВТОРИЗОВАН: Устанавливаем имя и ID
             if (nicknameView != null) {
                 nicknameView.setText(account.getDisplayName() != null ? account.getDisplayName() : "Пользователь");
             }
             if (accountIdTxt != null) {
                 accountIdTxt.setText("ID аккаунта: " + account.getId());
+                accountIdTxt.setVisibility(View.VISIBLE);
             }
 
             // Загружаем аватарку
             if (avatarView != null) {
-                Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + account.getId());
+                android.graphics.Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + account.getId());
                 if (cachedAvatar != null) {
                     Glide.with(this).load(cachedAvatar).circleCrop().into(avatarView);
                 } else {
@@ -136,6 +145,21 @@ public class SettingsFragment extends Fragment {
                     }
                 }
             }
+        } else {
+            // ЕСЛИ НЕ АВТОРИЗОВАН (Гость): Сбрасываем данные
+            if (nicknameView != null) {
+                nicknameView.setText("Guest");
+            }
+            if (accountIdTxt != null) {
+                accountIdTxt.setText(""); 
+                accountIdTxt.setVisibility(View.GONE); // Скрываем строку ID, чтобы не висела пустой
+            }
+            if (avatarView != null) {
+                // Возвращаем стандартную картинку
+                avatarView.setImageResource(R.drawable.ic_profile_placeholder); 
+            }
+        }
+    }
         }
     }
 
