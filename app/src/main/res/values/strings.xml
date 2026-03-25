@@ -88,6 +88,30 @@
     <string name="format_days_hours">%1$dd %2$dh</string>
     <string name="format_total_hours_mins">%1$dh %2$dm</string>
     <string name="format_plus_hours_mins">+%1$dh %2$dm</string>
+        <string name="settings_reg_date">Account registration date: %1$s</string>
+    <string name="settings_account_id">Account ID: %1$s</string>
+    
+    <string name="settings_section_account">Account</string>
+    <string name="settings_change_email">Change email</string>
+    <string name="settings_switch_account">Switch account</string>
+    <string name="settings_sign_out">Sign out</string>
+    <string name="settings_delete_account">Delete account</string>
+    
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_theme_auto">Auto</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    
+    <string name="settings_section_general">General settings</string>
+    <string name="settings_notifications">Notification settings</string>
+    <string name="settings_saved">Saved</string>
+    <string name="settings_clear_cache">Clear cache data</string>
+    
+    <string name="settings_section_other">Other</string>
+    <string name="settings_share_app">Share app</string>
+    <string name="settings_write_review">Write a review</string>
+
+    <string name="toast_cache_cleared">Cleared %1$s MB of cache.</string>
     
     <string-array name="days_short">
         <item>Sun</item>
