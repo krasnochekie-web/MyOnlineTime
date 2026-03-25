@@ -3,17 +3,22 @@ package com.myonlinetime.app.ui;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.fragment.app.Fragment;
 
+import com.bumptech.glide.Glide;
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 
@@ -35,30 +40,44 @@ public class SettingsFragment extends Fragment {
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
             prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-            // Прячем общую шапку (если нужно, чтобы аватарка была самой верхней)
-            // activity.mainHeader.setVisibility(View.GONE); 
         }
 
         // Инициализация текстов
         regDateTxt = view.findViewById(R.id.settings_reg_date_txt);
         accountIdTxt = view.findViewById(R.id.settings_account_id_txt);
         
-        // Пока оставляем пустыми, как договаривались
+        // Пока оставляем дату пустой, как договаривались
         regDateTxt.setText(getString(R.string.settings_reg_date, ""));
-        accountIdTxt.setText(getString(R.string.settings_account_id, ""));
+        
+        // ЗАГРУЖАЕМ ДАННЫЕ ПРОФИЛЯ (Аватарка, Никнейм, ID)
+        loadUserData(view);
 
         // Кнопки Аккаунта
         view.findViewById(R.id.btn_change_email).setOnClickListener(v -> { /* Пока пусто */ });
         view.findViewById(R.id.btn_delete_account).setOnClickListener(v -> { /* Пока пусто */ });
         
+        // --- ЛОГИКА СМЕНЫ АККАУНТА ---
         view.findViewById(R.id.btn_switch_account).setOnClickListener(v -> {
-            // TODO: Вызов Google Sign In Client для выбора аккаунта
-            Toast.makeText(getContext(), "Выбор аккаунта Google", Toast.LENGTH_SHORT).show();
+            if (activity != null && activity.mGoogleSignInClient != null) {
+                // Сначала выходим, чтобы Google показал окно выбора аккаунта
+                activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
+                    activity.vpsToken = null;
+                    // Вызываем интент входа через MainActivity
+                    Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
+                    activity.startActivityForResult(signInIntent, 9001); 
+                });
+            }
         });
         
+        // --- ЛОГИКА ВЫХОДА ИЗ АККАУНТА ---
         view.findViewById(R.id.btn_sign_out).setOnClickListener(v -> {
-            // TODO: Вызов Google Sign Out
-            Toast.makeText(getContext(), "Выход из аккаунта", Toast.LENGTH_SHORT).show();
+            if (activity != null && activity.mGoogleSignInClient != null) {
+                activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
+                    activity.vpsToken = null; // Очищаем токен
+                    activity.showLoginScreen(); // Моментально показываем заглушку неавторизованности
+                    Toast.makeText(getContext(), "Вы вышли из аккаунта", Toast.LENGTH_SHORT).show();
+                });
+            }
         });
 
         // Кнопки Оформления
@@ -85,8 +104,42 @@ public class SettingsFragment extends Fragment {
         return view;
     }
 
+    // --- НОВЫЙ МЕТОД: Загрузка аватарки и данных пользователя ---
+    private void loadUserData(View view) {
+        MainActivity activity = (MainActivity) getActivity();
+        if (activity == null) return;
+
+        ImageView avatarView = view.findViewById(R.id.settings_avatar);
+        TextView nicknameView = view.findViewById(R.id.settings_nickname);
+
+        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
+        if (account != null) {
+            // Устанавливаем имя и ID
+            if (nicknameView != null) {
+                nicknameView.setText(account.getDisplayName() != null ? account.getDisplayName() : "Пользователь");
+            }
+            if (accountIdTxt != null) {
+                accountIdTxt.setText("ID аккаунта: " + account.getId());
+            }
+
+            // Загружаем аватарку
+            if (avatarView != null) {
+                Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + account.getId());
+                if (cachedAvatar != null) {
+                    Glide.with(this).load(cachedAvatar).circleCrop().into(avatarView);
+                } else {
+                    File file = new File(activity.getFilesDir(), "avatar_" + account.getId() + ".png");
+                    if (file.exists()) {
+                        Glide.with(this).load(file).circleCrop().into(avatarView);
+                    } else if (account.getPhotoUrl() != null) {
+                        Glide.with(this).load(account.getPhotoUrl()).circleCrop().into(avatarView);
+                    }
+                }
+            }
+        }
+    }
+
     private void setupThemeButtons() {
-        // Читаем сохраненную тему (по умолчанию Темная, как у тебя)
         int currentTheme = prefs.getInt(KEY_THEME, AppCompatDelegate.MODE_NIGHT_YES);
         updateThemeUI(currentTheme);
 
@@ -102,12 +155,10 @@ public class SettingsFragment extends Fragment {
     }
 
     private void updateThemeUI(int mode) {
-        // Сбрасываем цвета кнопок
         themeAuto.setBackgroundResource(R.drawable.bg_button_dark);
         themeLight.setBackgroundResource(R.drawable.bg_button_dark);
         themeDark.setBackgroundResource(R.drawable.bg_button_dark);
 
-        // Подсвечиваем активную (укажи свой drawable для выделенной кнопки, например bg_button_active)
         if (mode == AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM) {
             themeAuto.setBackgroundResource(R.drawable.bg_button_active);
         } else if (mode == AppCompatDelegate.MODE_NIGHT_NO) {
@@ -123,15 +174,12 @@ public class SettingsFragment extends Fragment {
             Context context = requireContext();
             long sizeBefore = getDirSize(context.getCacheDir());
             
-            // Удаляем внутренний кэш
             deleteDir(context.getCacheDir());
-            // Если нужно, удаляем и внешний кэш (картинки, файлы)
             if (context.getExternalCacheDir() != null) {
                 sizeBefore += getDirSize(context.getExternalCacheDir());
                 deleteDir(context.getExternalCacheDir());
             }
 
-            // Переводим байты в мегабайты (формат с 2 знаками после запятой)
             double sizeInMb = (double) sizeBefore / (1024 * 1024);
             String formattedSize = String.format(Locale.getDefault(), "%.2f", sizeInMb);
             
@@ -179,5 +227,4 @@ public class SettingsFragment extends Fragment {
         }
         return size;
     }
-          }
-          
+}
