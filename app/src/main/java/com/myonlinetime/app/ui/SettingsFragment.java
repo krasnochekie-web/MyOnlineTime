@@ -46,48 +46,49 @@ public class SettingsFragment extends Fragment {
         regDateTxt = view.findViewById(R.id.settings_reg_date_txt);
         accountIdTxt = view.findViewById(R.id.settings_account_id_txt);
         
-        // Пока оставляем дату пустой, как договаривались
-        regDateTxt.setText(getString(R.string.settings_reg_date, ""));
+        if (regDateTxt != null) {
+            regDateTxt.setText(getString(R.string.settings_reg_date, ""));
+        }
         
-        // ЗАГРУЖАЕМ ДАННЫЕ ПРОФИЛЯ (Аватарка, Никнейм, ID)
+        // Загружаем данные пользователя
         loadUserData(view);
 
         // Кнопки Аккаунта
         view.findViewById(R.id.btn_change_email).setOnClickListener(v -> { /* Пока пусто */ });
         view.findViewById(R.id.btn_delete_account).setOnClickListener(v -> { /* Пока пусто */ });
         
-        // --- ЛОГИКА СМЕНЫ АККАУНТА ---
+        // Смена аккаунта
         view.findViewById(R.id.btn_switch_account).setOnClickListener(v -> {
             if (activity != null && activity.mGoogleSignInClient != null) {
-                // Сначала выходим, чтобы Google показал окно выбора аккаунта
                 activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
                     activity.vpsToken = null;
-                    // Вызываем интент входа через MainActivity
                     Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
                     activity.startActivityForResult(signInIntent, 9001); 
                 });
             }
         });
-// --- ЛОГИКА ВЫХОДА ИЗ АККАУНТА ---
+        
+        // Умный выход из аккаунта
         view.findViewById(R.id.btn_sign_out).setOnClickListener(v -> {
             if (activity != null && activity.mGoogleSignInClient != null) {
                 GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
                 
                 if (account != null) {
-                    // 1. Пользователь авторизован -> Выходим
+                    // Авторизован -> Выходим и сбрасываем визуал
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
-                        activity.vpsToken = null; // Очищаем токен
-                        loadUserData(view); // Сбрасываем визуал до Guest
+                        activity.vpsToken = null; 
+                        loadUserData(view); 
                         Toast.makeText(getContext(), "Вы вышли из аккаунта", Toast.LENGTH_SHORT).show();
                     });
                 } else {
-                    // 2. Пользователь НЕ авторизован -> Открываем окно выбора Google-аккаунта
+                    // НЕ авторизован -> Открываем окно входа
                     Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
                     activity.startActivityForResult(signInIntent, 9001); 
                 }
             }
         });
-        // Кнопки Оформления
+
+        // Оформление
         themeAuto = view.findViewById(R.id.theme_auto);
         themeLight = view.findViewById(R.id.theme_light);
         themeDark = view.findViewById(R.id.theme_dark);
@@ -97,7 +98,6 @@ public class SettingsFragment extends Fragment {
         // Общие настройки
         view.findViewById(R.id.btn_notifications).setOnClickListener(v -> { /* Пока пусто */ });
         view.findViewById(R.id.btn_saved).setOnClickListener(v -> { /* Пока пусто */ });
-        
         view.findViewById(R.id.btn_clear_cache).setOnClickListener(v -> clearAppCache());
 
         // Прочее
@@ -111,7 +111,6 @@ public class SettingsFragment extends Fragment {
         return view;
     }
 
-// --- Загрузка аватарки и данных пользователя ---
     private void loadUserData(View view) {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
@@ -122,7 +121,6 @@ public class SettingsFragment extends Fragment {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         
         if (account != null) {
-            // ЕСЛИ АВТОРИЗОВАН: Устанавливаем имя и ID
             if (nicknameView != null) {
                 nicknameView.setText(account.getDisplayName() != null ? account.getDisplayName() : "Пользователь");
             }
@@ -130,10 +128,8 @@ public class SettingsFragment extends Fragment {
                 accountIdTxt.setText("ID аккаунта: " + account.getId());
                 accountIdTxt.setVisibility(View.VISIBLE);
             }
-
-            // Загружаем аватарку
             if (avatarView != null) {
-                android.graphics.Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + account.getId());
+                Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + account.getId());
                 if (cachedAvatar != null) {
                     Glide.with(this).load(cachedAvatar).circleCrop().into(avatarView);
                 } else {
@@ -146,20 +142,15 @@ public class SettingsFragment extends Fragment {
                 }
             }
         } else {
-            // ЕСЛИ НЕ АВТОРИЗОВАН (Гость): Сбрасываем данные
-            if (nicknameView != null) {
-                nicknameView.setText("Guest");
-            }
+            // Гость: Сбрасываем данные
+            if (nicknameView != null) nicknameView.setText("Guest");
             if (accountIdTxt != null) {
                 accountIdTxt.setText(""); 
-                accountIdTxt.setVisibility(View.GONE); // Скрываем строку ID, чтобы не висела пустой
+                accountIdTxt.setVisibility(View.GONE); 
             }
             if (avatarView != null) {
-                // Возвращаем стандартную картинку
                 avatarView.setImageResource(R.drawable.ic_profile_placeholder); 
             }
-        }
-    }
         }
     }
 
@@ -192,7 +183,6 @@ public class SettingsFragment extends Fragment {
         }
     }
 
-    // --- ЛОГИКА ОЧИСТКИ КЭША ---
     private void clearAppCache() {
         try {
             Context context = requireContext();
@@ -228,9 +218,8 @@ public class SettingsFragment extends Fragment {
             return dir.delete();
         } else if (dir != null && dir.isFile()) {
             return dir.delete();
-        } else {
-            return false;
         }
+        return false;
     }
 
     private long getDirSize(File dir) {
