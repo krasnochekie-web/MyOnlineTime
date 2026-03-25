@@ -86,6 +86,30 @@
     <string name="format_days_hours">%1$dд %2$dч</string>
     <string name="format_total_hours_mins">%1$dч %2$dм</string>
     <string name="format_plus_hours_mins">+%1$dч %2$dм</string>
+	    <string name="settings_reg_date">Дата регистрации аккаунта: %1$s</string>
+    <string name="settings_account_id">ID аккаунта: %1$s</string>
+    
+    <string name="settings_section_account">Аккаунт</string>
+    <string name="settings_change_email">Изменить почту</string>
+    <string name="settings_switch_account">Сменить аккаунт</string>
+    <string name="settings_sign_out">Выйти с аккаунта</string>
+    <string name="settings_delete_account">Удалить аккаунт</string>
+    
+    <string name="settings_section_appearance">Оформление</string>
+    <string name="settings_theme_auto">Авто</string>
+    <string name="settings_theme_light">Светлое</string>
+    <string name="settings_theme_dark">Тёмное</string>
+    
+    <string name="settings_section_general">Общие настройки</string>
+    <string name="settings_notifications">Настройки уведомлений</string>
+    <string name="settings_saved">Сохранённое</string>
+    <string name="settings_clear_cache">Очистить кэш данные</string>
+    
+    <string name="settings_section_other">Прочее</string>
+    <string name="settings_share_app">Поделиться приложением</string>
+    <string name="settings_write_review">Написать отзыв</string>
+
+    <string name="toast_cache_cleared">Очищено %1$s мегабайт кэша.</string>
     
     <string-array name="days_short">
         <item>вс</item>
