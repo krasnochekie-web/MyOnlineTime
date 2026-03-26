@@ -26,7 +26,6 @@
             android:orientation="vertical"
             android:layout_marginLeft="16dp">
 
-            <!-- Горизонтальный контейнер для Названия и Замочка -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -40,26 +39,24 @@
                     android:text="App Name"
                     android:textSize="13sp"
                     android:textStyle="bold"
-                    android:textColor="@color/textWhite"/> 
+                    android:textColor="@color/textDynamic"/> 
 
-                <!-- Замочек (По умолчанию скрыт) -->
                 <ImageView
                     android:id="@+id/app_lock_icon"
                     android:layout_width="16dp"
                     android:layout_height="16dp"
                     android:layout_marginLeft="6dp"
                     android:src="@drawable/ic_lock"
-                    android:tint="@color/textWhite"
+                    android:tint="@color/textDynamic"
                     android:visibility="gone" />
             </LinearLayout>
 
-            <!-- Описание (По умолчанию скрыто, обрезается многоточием) -->
             <TextView
                 android:id="@+id/app_custom_description"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:textColor="@color/textGray"
+                android:textColor="@color/textGrayDynamic"
                 android:textSize="11sp"
                 android:maxLines="1"
                 android:ellipsize="end"
@@ -71,11 +68,10 @@
                 android:layout_height="wrap_content"
                 android:text="0m"
                 android:textSize="11sp"
-                android:textColor="@color/textGray" 
+                android:textColor="@color/textGrayDynamic" 
                 android:layout_marginTop="4dp"/>
         </LinearLayout>
         
-        <!-- Кнопка 3 точки (ic_more) с добавленным ID и подсветкой при нажатии -->
         <ImageView
             android:id="@+id/btn_app_options"
             android:layout_width="24dp"
