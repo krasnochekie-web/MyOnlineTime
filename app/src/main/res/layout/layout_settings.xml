@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/backgroundDark"
+    android:background="@color/bgDynamic"
     android:paddingTop="@dimen/header_clearance"
     android:paddingBottom="@dimen/bottom_nav_clearance"
     android:clipToPadding="false"
@@ -36,7 +36,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:text="Guest"
-                android:textColor="@color/textWhite"
+                android:textColor="@color/textDynamic"
                 android:textSize="20sp"
                 android:textStyle="bold" />
 
@@ -45,7 +45,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:textColor="@color/textGray"
+                android:textColor="@color/textGrayDynamic"
                 android:textSize="14sp" />
 
             <TextView
@@ -53,7 +53,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:textColor="@color/textGray"
+                android:textColor="@color/textGrayDynamic"
                 android:textSize="14sp" />
         </LinearLayout>
 
@@ -62,7 +62,7 @@
             android:layout_height="1dp"
             android:layout_marginHorizontal="24dp"
             android:layout_marginBottom="24dp"
-            android:background="#333333" />
+            android:background="@color/chartLineDynamic" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -70,7 +70,7 @@
             android:layout_marginHorizontal="24dp"
             android:layout_marginBottom="8dp"
             android:text="@string/settings_section_account"
-            android:textColor="@color/textGray"
+            android:textColor="@color/textGrayDynamic"
             android:textSize="14sp"
             android:textStyle="bold" />
 
@@ -112,7 +112,7 @@
             android:layout_height="1dp"
             android:layout_marginHorizontal="24dp"
             android:layout_marginVertical="24dp"
-            android:background="#333333" />
+            android:background="@color/chartLineDynamic" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -120,7 +120,7 @@
             android:layout_marginHorizontal="24dp"
             android:layout_marginBottom="8dp"
             android:text="@string/settings_section_appearance"
-            android:textColor="@color/textGray"
+            android:textColor="@color/textGrayDynamic"
             android:textSize="14sp"
             android:textStyle="bold" />
 
@@ -140,7 +140,7 @@
                 android:gravity="center"
                 android:paddingVertical="10dp"
                 android:text="@string/settings_theme_auto"
-                android:textColor="@color/textWhite" />
+                android:textColor="@color/textWhiteStatic" />
 
             <TextView
                 android:id="@+id/theme_light"
@@ -152,7 +152,7 @@
                 android:gravity="center"
                 android:paddingVertical="10dp"
                 android:text="@string/settings_theme_light"
-                android:textColor="@color/textWhite" />
+                android:textColor="@color/textWhiteStatic" />
 
             <TextView
                 android:id="@+id/theme_dark"
@@ -163,7 +163,7 @@
                 android:gravity="center"
                 android:paddingVertical="10dp"
                 android:text="@string/settings_theme_dark"
-                android:textColor="@color/textWhite" />
+                android:textColor="@color/textWhiteStatic" />
         </LinearLayout>
 
         <View
@@ -171,7 +171,7 @@
             android:layout_height="1dp"
             android:layout_marginHorizontal="24dp"
             android:layout_marginVertical="24dp"
-            android:background="#333333" />
+            android:background="@color/chartLineDynamic" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -179,7 +179,7 @@
             android:layout_marginHorizontal="24dp"
             android:layout_marginBottom="8dp"
             android:text="@string/settings_section_general"
-            android:textColor="@color/textGray"
+            android:textColor="@color/textGrayDynamic"
             android:textSize="14sp"
             android:textStyle="bold" />
 
@@ -215,7 +215,7 @@
             android:layout_height="1dp"
             android:layout_marginHorizontal="24dp"
             android:layout_marginVertical="24dp"
-            android:background="#333333" />
+            android:background="@color/chartLineDynamic" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -223,7 +223,7 @@
             android:layout_marginHorizontal="24dp"
             android:layout_marginBottom="8dp"
             android:text="@string/settings_section_other"
-            android:textColor="@color/textGray"
+            android:textColor="@color/textGrayDynamic"
             android:textSize="14sp"
             android:textStyle="bold" />
 
