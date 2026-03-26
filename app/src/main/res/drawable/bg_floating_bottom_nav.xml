@@ -2,7 +2,7 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     
     <!-- Основной цвет панели: твой красивый темно-серый cardDark -->
-    <solid android:color="@color/cardDark" /> 
+<solid android:color="@color/cardDynamic" />
     
     <!-- Закругление углов (оставляем мягким) -->
     <corners android:radius="16dp" /> 
