@@ -1,6 +1,7 @@
 package com.myonlinetime.app;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate; // <-- ДОБАВЛЕН ИМПОРТ
 
 import com.myonlinetime.app.utils.StatsHelper;
 
@@ -71,6 +72,12 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // --- ПРОВЕРКА ТЕМЫ ДО ОТРИСОВКИ ИНТЕРФЕЙСА ---
+        SharedPreferences appPrefs = getSharedPreferences("AppPrefs", MODE_PRIVATE);
+        int savedTheme = appPrefs.getInt("selected_theme", AppCompatDelegate.MODE_NIGHT_YES);
+        AppCompatDelegate.setDefaultNightMode(savedTheme);
+        // ----------------------------------------------
+
         super.onCreate(savedInstanceState);
         
         Window window = getWindow();
@@ -170,7 +177,7 @@ public class MainActivity extends AppCompatActivity {
             loadUserAvatarToBottomNav(); 
         });
 
-    } // <-- ВОТ ЗДЕСЬ ИДЕАЛЬНО ЗАКРЫВАЕТСЯ МЕТОД onCreate
+    } 
 
     // --- СРАЗУ ПОСЛЕ НЕГО ИДЕТ МЕТОД ЗАГРУЗКИ АВАТАРКИ ---
     private void loadUserAvatarToBottomNav() {
