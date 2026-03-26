@@ -1,43 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Главная тема приложения. Наследуется от современного AppCompat без заголовка -->
     <style name="Theme.MyNewTime" parent="Theme.AppCompat.DayNight.NoActionBar">
         
-        <!-- Основной цвет приложения (используется для кнопок, тумблеров по умолчанию) -->
         <item name="colorPrimary">@color/burgundyRed</item>
         
-        <!-- Цвет верхней системной панели (где часы и батарея) -->
-        <item name="colorPrimaryDark">@color/backgroundDark</item>
+        <item name="colorPrimaryDark">@color/bgDynamic</item>
+        <item name="android:windowBackground">@color/bgDynamic</item>
         
-        <!-- Цвет акцента (ползунки, чекбоксы, курсор в текстовых полях) -->
         <item name="colorAccent">@color/burgundyRed</item>
         
-        <!-- Цвет фона окон по умолчанию -->
-        <item name="android:windowBackground">@color/backgroundDark</item>
-
-        <!-- Отключаем системную подсветку при нажатии (так как мы делали свою в ripple) -->
-        <item name="colorControlHighlight">#33FFFFFF</item>
+        <item name="colorControlHighlight">#33888888</item>
     </style>
-    <!-- Тема специально для выпадающего окна Спиннера -->
+
     <style name="MySpinnerPopupTheme" parent="ThemeOverlay.AppCompat.Light">
-        <!-- 1. Задаем ВАШ закругленный фон для самого окна -->
         <item name="android:popupBackground">@drawable/bg_spinner_popup</item>
-        
-        <!-- 2. ГЛАВНОЕ: Меняем цвет системного выделения на ПРОЗРАЧНЫЙ! -->
-        <!-- Это полностью убьет тот самый "старый квадратный риппл", который вам мешал -->
         <item name="colorControlHighlight">@android:color/transparent</item>
     </style>
-        <style name="SettingsItemStyle">
+    
+    <style name="SettingsItemStyle">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:paddingHorizontal">20dp</item>
         <item name="android:paddingVertical">16dp</item>
         <item name="android:drawablePadding">16dp</item>
-        <item name="android:textColor">@color/textWhite</item>
+        
+        <item name="android:textColor">@color/textDynamic</item>
+        
         <item name="android:textSize">16sp</item>
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
         <item name="android:background">?attr/selectableItemBackground</item>
     </style>
 </resources>
-
