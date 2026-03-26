@@ -5,33 +5,28 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center"
-    android:background="@color/backgroundDark"
+    android:background="@color/bgDynamic"
     android:clickable="true"
     android:focusable="true"
     android:elevation="20dp"
     android:padding="24dp">
 
-    <!-- Главный заголовок сверху -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/permission_title"
-        android:textColor="@color/textWhite"
+        android:textColor="@color/textDynamic"
         android:textSize="20sp"
         android:textStyle="bold"
         android:gravity="center"
         android:layout_marginBottom="32dp"/>
 
-    <!-- Контейнер для 100% идеальных скруглений и обводки -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="32dp"
         android:background="@drawable/bg_image_border"
-        android:padding="1dp"> <!-- Отступ ровно в 1dp, чтобы картинка не налезла на обводку -->
-
-        <!-- CardView аппаратно срезает углы картинки намертво -->
-        <androidx.cardview.widget.CardView xmlns:app="http://schemas.android.com/apk/res-auto"
+        android:padding="1dp"> <androidx.cardview.widget.CardView xmlns:app="http://schemas.android.com/apk/res-auto"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             app:cardCornerRadius="11dp" 
@@ -48,18 +43,16 @@
         </androidx.cardview.widget.CardView>
     </FrameLayout>
 
-    <!-- Текст с выделенными красным фразами -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/permission_rationale"
-        android:textColor="@color/textWhite"
+        android:textColor="@color/textDynamic"
         android:textSize="14sp"
         android:gravity="center"
         android:lineSpacingExtra="4dp"
         android:layout_marginBottom="32dp"/>
 
-    <!-- Кнопка Включить доступ -->
     <Button
         android:id="@+id/btn_grant_permission"
         android:layout_width="match_parent"
@@ -69,7 +62,7 @@
         android:clickable="true"
         android:focusable="true"
         android:foreground="@drawable/ripple_button_grapefruit"
-        android:textColor="@color/textWhite"
+        android:textColor="@color/textWhiteStatic"
         android:textStyle="bold"
         android:textSize="14sp"/>
 
