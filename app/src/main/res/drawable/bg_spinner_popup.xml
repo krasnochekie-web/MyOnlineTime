@@ -3,7 +3,7 @@
     android:shape="rectangle">
     
     <!-- Это цвет фона вашего выпадающего списка (cardDark) -->
-    <solid android:color="@color/cardDark" /> 
+    <solid android:color="@color/cardDynamic" /> 
     
     <!-- Радиус скругления всех углов окна -->
     <corners android:radius="16dp" /> 
