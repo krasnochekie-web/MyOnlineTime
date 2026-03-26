@@ -4,18 +4,14 @@
     android:id="@+id/main_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/backgroundDark">
+    android:background="@color/bgDynamic">
 
-    <!-- КОНТЕЙНЕР ДЛЯ ФРАГМЕНТОВ -->
-    <!-- app:layout_behavior связывает прокрутку фрагментов с системой -->
     <FrameLayout
         android:id="@+id/fragment_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
-    <!-- ШАПКА -->
-    <!-- app:layout_dodgeInsetEdges="top" гарантирует, что она всегда сверху -->
     <LinearLayout
         android:id="@+id/app_header"
         android:clipToOutline="true"
@@ -42,7 +38,7 @@
                 android:layout_height="24dp"
                 android:layout_marginRight="10dp"
                 android:src="@drawable/ic_math_arrow"
-                android:tint="@color/textWhite"
+                android:tint="@color/textWhiteStatic"
                 android:visibility="gone"
                 android:clickable="true"
                 android:background="?android:attr/selectableItemBackgroundBorderless"/>
@@ -55,12 +51,10 @@
                 android:text="@string/app_name"
                 android:textSize="20sp"
                 android:textStyle="bold"
-                android:textColor="@color/textWhite"/>
+                android:textColor="@color/textWhiteStatic"/>
         </LinearLayout>
     </LinearLayout>
 
-    <!-- ПЛАВАЮЩЕЕ НИЖНЕЕ МЕНЮ НАВИГАЦИИ -->
-    <!-- Вот эта строчка app:layout_behavior="..." творит магию! -->
     <LinearLayout
         android:id="@+id/bottom_nav_container"
         android:layout_width="match_parent"
@@ -103,7 +97,6 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Экран разрешений -->
     <include 
         layout="@layout/layout_permission_required"
         android:layout_width="match_parent"
