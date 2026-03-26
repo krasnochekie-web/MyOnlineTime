@@ -136,11 +136,11 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="8dp"
-                android:background="@drawable/bg_button_dark"
+                android:background="@drawable/bg_theme_toggle_inactive"
                 android:gravity="center"
                 android:paddingVertical="10dp"
                 android:text="@string/settings_theme_auto"
-                android:textColor="@color/textWhiteStatic" />
+                android:textColor="@color/textDynamic" />
 
             <TextView
                 android:id="@+id/theme_light"
@@ -148,11 +148,11 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="8dp"
-                android:background="@drawable/bg_button_dark"
+                android:background="@drawable/bg_theme_toggle_inactive"
                 android:gravity="center"
                 android:paddingVertical="10dp"
                 android:text="@string/settings_theme_light"
-                android:textColor="@color/textWhiteStatic" />
+                android:textColor="@color/textDynamic" />
 
             <TextView
                 android:id="@+id/theme_dark"
@@ -163,7 +163,7 @@
                 android:gravity="center"
                 android:paddingVertical="10dp"
                 android:text="@string/settings_theme_dark"
-                android:textColor="@color/textWhiteStatic" />
+                android:textColor="@color/textDynamic" />
         </LinearLayout>
 
         <View
