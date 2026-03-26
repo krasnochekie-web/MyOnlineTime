@@ -71,11 +71,11 @@
         app:layout_behavior="com.google.android.material.behavior.HideBottomViewOnScrollBehavior">
 
         <LinearLayout android:id="@+id/nav_feed" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_circle_dark">
-            <ImageView android:id="@+id/icon_feed" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_nav_feed" android:tint="@color/selector_grapefruit_white"/>
+            <ImageView android:id="@+id/icon_feed" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_nav_feed" android:tint="@color/nav_icon_selector"/>
         </LinearLayout>
 
         <LinearLayout android:id="@+id/nav_search" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_circle_dark">
-            <ImageView android:id="@+id/icon_search" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_nav_search" android:tint="@color/selector_grapefruit_white"/>
+            <ImageView android:id="@+id/icon_search" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_nav_search" android:tint="@color/nav_icon_selector"/>
         </LinearLayout>
 
         <LinearLayout android:id="@+id/nav_profile" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true">
@@ -89,11 +89,11 @@
         </LinearLayout>
 
         <LinearLayout android:id="@+id/nav_usage" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_circle_dark">
-            <ImageView android:id="@+id/icon_usage" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_nav_time" android:tint="@color/selector_grapefruit_white"/>
+            <ImageView android:id="@+id/icon_usage" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_nav_time" android:tint="@color/nav_icon_selector"/>
         </LinearLayout>
 
         <LinearLayout android:id="@+id/nav_settings" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_circle_dark">
-            <ImageView android:id="@+id/icon_settings" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_settings" android:tint="@color/selector_grapefruit_white"/>
+            <ImageView android:id="@+id/icon_settings" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_settings" android:tint="@color/nav_icon_selector"/>
         </LinearLayout>
     </LinearLayout>
 
