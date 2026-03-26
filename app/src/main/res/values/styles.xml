@@ -22,7 +22,9 @@
         <item name="android:paddingVertical">16dp</item>
         <item name="android:drawablePadding">16dp</item>
         
-        <item name="android:textColor">@color/textWhiteStatic</item>
+        <item name="android:textColor">@color/textDynamic</item> 
+        
+        <item name="drawableTint">@color/iconTintDynamic</item>
         
         <item name="android:textSize">16sp</item>
         <item name="android:clickable">true</item>
