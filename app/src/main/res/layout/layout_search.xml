@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/backgroundDark"
+    android:background="@color/bgDynamic"
     android:paddingTop="@dimen/header_clearance"
     android:clipToPadding="false"
     android:nestedScrollingEnabled="true">
@@ -13,8 +13,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="@string/hint_search_friends"
-        android:textColorHint="@color/textGray"
-        android:textColor="@color/textWhite"
+        android:textColorHint="@color/textGrayDynamic"
+        android:textColor="@color/textDynamic"
         android:background="@drawable/bg_input_field"
         android:paddingLeft="16dp"
         android:paddingRight="16dp"
@@ -26,7 +26,6 @@
         android:drawablePadding="10dp"
         android:singleLine="true"/>
 
-    <!-- Наш умный список! -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/search_results_list"
         android:layout_width="match_parent"
