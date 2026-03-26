@@ -170,10 +170,12 @@ public class SettingsFragment extends Fragment {
     }
 
     private void updateThemeUI(int mode) {
-        themeAuto.setBackgroundResource(R.drawable.bg_button_dark);
-        themeLight.setBackgroundResource(R.drawable.bg_button_dark);
-        themeDark.setBackgroundResource(R.drawable.bg_button_dark);
+        // Ставим всем неактивный динамический фон
+        themeAuto.setBackgroundResource(R.drawable.bg_theme_toggle_inactive);
+        themeLight.setBackgroundResource(R.drawable.bg_theme_toggle_inactive);
+        themeDark.setBackgroundResource(R.drawable.bg_theme_toggle_inactive);
 
+        // Ставим бордовый фон только выбранной теме
         if (mode == AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM) {
             themeAuto.setBackgroundResource(R.drawable.bg_button_active);
         } else if (mode == AppCompatDelegate.MODE_NIGHT_NO) {
