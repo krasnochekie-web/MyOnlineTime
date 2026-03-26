@@ -1,16 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Добавлены paddingTop="86dp" и clipToPadding="false" -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/backgroundDark"
+    android:background="@color/bgDynamic"
     android:scrollbars="none"
     android:paddingTop="@dimen/header_clearance"
     android:clipToPadding="false"
     android:nestedScrollingEnabled="true">
     
-    <!-- Контейнер с вкладками (Подписчики / Подписки) ОСТАЛСЯ БЕЗ ИЗМЕНЕНИЙ -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="50dp"
@@ -41,7 +39,7 @@
                     android:layout_width="wrap_content" 
                     android:layout_height="wrap_content" 
                     android:text="0" 
-                    android:textColor="@color/textWhite" 
+                    android:textColor="@color/textWhiteStatic" 
                     android:textSize="9sp" 
                     android:layout_marginStart="8dp" 
                     android:paddingStart="6dp" 
@@ -81,7 +79,7 @@
                     android:layout_width="wrap_content" 
                     android:layout_height="wrap_content" 
                     android:text="0" 
-                    android:textColor="@color/textWhite" 
+                    android:textColor="@color/textWhiteStatic" 
                     android:textSize="9sp" 
                     android:layout_marginStart="8dp" 
                     android:paddingStart="6dp" 
@@ -100,9 +98,8 @@
     <View 
         android:layout_width="match_parent" 
         android:layout_height="1dp" 
-        android:background="#333333" /> 
+        android:background="@color/chartLineDynamic" /> 
 
-    <!-- А ВОТ ТУТ ТЕПЕРЬ VIEWPAGER ВМЕСТО СПИСКА -->
     <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/follows_view_pager"
         android:layout_width="match_parent"
