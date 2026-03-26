@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="24dp"
-    app:cardBackgroundColor="@color/bgDialogDark"
+    app:cardBackgroundColor="@color/bgDialogStatic"
     app:cardCornerRadius="16dp"
     app:cardElevation="0dp">
 
@@ -13,24 +13,21 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- Шапка без градиента (прозрачная/в цвет диалога) -->
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="50dp"
             android:paddingHorizontal="16dp">
 
-            <!-- Заголовок по центру -->
             <TextView
                 android:id="@+id/dialog_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_centerInParent="true"
                 android:text="@string/action_description"
-                android:textColor="@color/textWhite"
+                android:textColor="@color/textWhiteStatic"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
-            <!-- Крестик справа (Фон 25dp, иконка 18dp) -->
             <ImageView
                 android:id="@+id/dialog_close_btn"
                 android:layout_width="25dp" 
@@ -43,10 +40,9 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:src="@android:drawable/ic_menu_close_clear_cancel"
-                android:tint="@color/textWhite" />
+                android:tint="@color/textWhiteStatic" />
         </RelativeLayout>
 
-        <!-- Поле ввода -->
         <EditText
             android:id="@+id/dialog_edit_description"
             android:layout_width="match_parent"
@@ -54,11 +50,10 @@
             android:layout_margin="16dp"
             android:backgroundTint="@color/selector_grapefruit_white"
             android:hint="@string/enter_description"
-            android:textColor="@color/textWhite"
-            android:textColorHint="@color/textGray"
+            android:textColor="@color/textWhiteStatic"
+            android:textColorHint="@color/textGrayDynamic"
             android:textSize="14sp" />
 
-        <!-- Кнопка сохранить -->
         <Button
             android:id="@+id/dialog_save_btn"
             android:layout_width="match_parent"
@@ -70,10 +65,7 @@
             android:focusable="true"
             android:foreground="@drawable/ripple_button_grapefruit"
             android:text="@string/btn_save"
-            android:textColor="@color/textWhite"
+            android:textColor="@color/textWhiteStatic"
             android:textStyle="bold" />
     </LinearLayout>
 </androidx.cardview.widget.CardView>
-
-
-
