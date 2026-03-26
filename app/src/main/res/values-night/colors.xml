@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primaryGrapefruit">#FA8072</color>
+    <color name="burgundyRed">#FA8072</color>        <color name="textWhiteStatic">#FFFFFF</color>   <color name="cardDarkStatic">#1E1E1E</color>    <color name="bgDialogStatic">#2C2C2C</color>
+    <color name="borderSemiTransparent">#33FFFFFF</color>
+    <color name="hisaStatic">#696969</color>
+    <color name="chartBarNormal">#FFB300</color> 
+    <color name="chartBarSelected">#FFE082</color>
+    <color name="header_grad_start">#FF5252</color> 
+  <color name="header_grad_end">#FA8072</color>   
+  <color name="bgDynamic">#121212</color>         
+  <color name="textDynamic">#FFFFFF</color>       
+  <color name="textGrayDynamic">#AAAAAA</color>  
+  <color name="bgExclamationDynamic">#B3B3B3</color>
+    <color name="chartLineDynamic">#444444</color>   </resources>
