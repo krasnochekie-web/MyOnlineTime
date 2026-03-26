@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/backgroundDark"
+    android:background="@color/bgDynamic"
     android:paddingTop="@dimen/header_clearance"
     android:clipToPadding="false"
     android:scrollbars="none"
@@ -16,14 +16,12 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"> 
 
-        <!-- ВЕРХНИЙ БЛОК: Кнопка назад, Аватарка и Карандашик -->
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:paddingHorizontal="16dp">
 
-            <!-- Кнопка НАЗАД -->
             <ImageView
                 android:id="@+id/profile_back_btn"
                 android:layout_width="24dp"
@@ -32,10 +30,9 @@
                 android:layout_alignParentLeft="true"
                 android:layout_centerVertical="true"
                 android:src="@drawable/ic_math_arrow"
-                android:tint="@color/textWhite"
+                android:tint="@color/textWhiteStatic"
                 android:visibility="gone" />
 
-            <!-- АВАТАРКА (Строго по центру) -->
             <ImageView
                 android:id="@+id/profile_avatar"
                 android:layout_width="90dp"
@@ -44,7 +41,6 @@
                 android:background="@drawable/bg_edit_circle"
                 android:scaleType="centerCrop" />
 
-            <!-- КАРАНДАШИК (Симметрично справа вверху) -->
             <ImageView
                 android:id="@+id/btn_edit_profile"
                 android:layout_width="32dp"
@@ -59,10 +55,9 @@
                 android:foreground="@drawable/ripple_circle"
                 android:padding="6dp"
                 android:src="@drawable/ic_edit"
-                android:tint="@color/textWhite" />
+                android:tint="@color/textWhiteStatic" />
         </RelativeLayout>
 
-        <!-- НИКНЕЙМ -->
         <TextView
             android:id="@+id/profile_name"
             android:layout_width="match_parent"
@@ -70,11 +65,10 @@
             android:layout_marginTop="12dp"
             android:gravity="center"
             android:text="@string/guest"
-            android:textColor="@color/textWhite"
+            android:textColor="@color/textDynamic"
             android:textSize="24sp"
             android:textStyle="bold" />
 
-        <!-- СТАТИСТИКА: 3 ОТДЕЛЬНЫЕ ПОДЛОЖКИ В ОДИН РЯД -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -83,7 +77,6 @@
             android:layout_marginTop="16dp"
             android:baselineAligned="false">
 
-            <!-- ВРЕМЯ ЗА НЕДЕЛЮ -->
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -97,7 +90,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="За неделю"
-                    android:textColor="@color/textGray"
+                    android:textColor="@color/textGrayDynamic"
                     android:textSize="11sp" />
                 <TextView
                     android:id="@+id/profile_week_time"
@@ -105,12 +98,11 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:text="..."
-                    android:textColor="@color/textWhite"
+                    android:textColor="@color/textDynamic"
                     android:textSize="14sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <!-- ПОДПИСЧИКИ -->
             <LinearLayout
                 android:id="@+id/container_followers"
                 android:layout_width="0dp"
@@ -126,7 +118,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/followers"
-                    android:textColor="@color/textGray"
+                    android:textColor="@color/textGrayDynamic"
                     android:textSize="11sp" />
                 <TextView
                     android:id="@+id/txt_followers_count"
@@ -134,12 +126,11 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:text="0"
-                    android:textColor="@color/textWhite"
+                    android:textColor="@color/textDynamic"
                     android:textSize="14sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <!-- ПОДПИСКИ -->
             <LinearLayout
                 android:id="@+id/container_following"
                 android:layout_width="0dp"
@@ -155,7 +146,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/following"
-                    android:textColor="@color/textGray"
+                    android:textColor="@color/textGrayDynamic"
                     android:textSize="11sp" />
                 <TextView
                     android:id="@+id/txt_following_count"
@@ -163,13 +154,12 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:text="0"
-                    android:textColor="@color/textWhite"
+                    android:textColor="@color/textDynamic"
                     android:textSize="14sp"
                     android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
 
-        <!-- О СЕБЕ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -182,13 +172,12 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:textColor="@color/textGray"
+                android:textColor="@color/textDynamic"
                 android:textSize="13sp"
                 android:maxLines="6"
                 android:ellipsize="end" />
         </LinearLayout>
 
-        <!-- КНОПКИ ДЕЙСТВИЙ -->
         <Button
             android:id="@+id/btn_follow"
             android:layout_width="match_parent"
@@ -213,7 +202,6 @@
             android:textStyle="bold"
             android:visibility="gone" />
 
-        <!-- ВКЛАДКИ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="48dp"
@@ -251,7 +239,6 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- СПИСОК ПРИЛОЖЕНИЙ (Топ-10) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -268,7 +255,6 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical" />
 
-            <!-- КНОПКА "РАЗВЕРНУТЬ" (3 полоски) -->
             <ImageView
                 android:id="@+id/btn_expand_apps"
                 android:layout_width="match_parent"
@@ -277,10 +263,9 @@
                 android:paddingTop="4dp"
                 android:paddingBottom="4dp"
                 android:src="@android:drawable/ic_menu_sort_by_size"
-                android:tint="@color/textGray"
+                android:tint="@color/textGrayDynamic"
                 android:visibility="gone" />
 
-            <!-- КНОПКА "СВЕРНУТЬ" (1 полоска / минус) -->
             <ImageView
                 android:id="@+id/btn_collapse_apps"
                 android:layout_width="match_parent"
@@ -289,7 +274,7 @@
                 android:paddingTop="4dp"
                 android:paddingBottom="4dp"
                 android:src="@android:drawable/btn_minus"
-                android:tint="@color/textGray"
+                android:tint="@color/textGrayDynamic"
                 android:visibility="gone" />
         </LinearLayout>
 
