@@ -2,26 +2,12 @@
 <resources>
     <color name="primaryGrapefruit">#FA8072</color>
     <color name="burgundyRed">#FA8072</color>
-    <color name="backgroundDark">#121212</color>
-    <color name="cardDark">#1E1E1E</color>
-    <color name="textWhite">#FFFFFF</color>
-    <color name="textGray">#AAAAAA</color>
-    <color name="bgDialogDark">#2C2C2C</color>
-    <color name="bgExclamationLightGray">#B3B3B3</color>
+    <color name="textWhiteStatic">#FFFFFF</color> 
+    <color name="cardDarkStatic">#1E1E1E</color> 
+    <color name="bgDialogStatic">#2C2C2C</color>
     <color name="borderSemiTransparent">#33FFFFFF</color>
-    <color name="hisaDark">#696969</color>
-    <color name="chartLine">#444444</color>
-    <color name="chartBarNormal">#FFB300</color> 
+    <color name="hisaStatic">#696969</color>
+    <color name="chartBarNormal">#FFB300</color>
     <color name="chartBarSelected">#FFE082</color>
 
-    <color name="textWhiteStatic">#FFFFFF</color> 
-    <color name="cardDarkStatic">#1E1E1E</color>  
-    <color name="bgDialogStatic">#2C2C2C</color>
-    <color name="hisaStatic">#696969</color>
-
-    <color name="bgDynamic">#121212</color>         
-    <color name="textDynamic">#FFFFFF</color>       
-    <color name="textGrayDynamic">#AAAAAA</color>   
-    <color name="chartLineDynamic">#444444</color>   
-    <color name="bgExclamationDynamic">#B3B3B3</color>
-</resources>
+    <color name="bgDynamic">#121212</color> <color name="cardDynamic">#1E1E1E</color> <color name="textDynamic">#FFFFFF</color> <color name="textGrayDynamic">#AAAAAA</color> <color name="chartLineDynamic">#444444</color> <color name="iconTintDynamic">#FFFFFF</color> <color name="btnInactiveDynamic">#2C2C2C</color> <color name="navIconInactive">#FFFFFF</color> </resources>
