@@ -5,7 +5,6 @@
     android:orientation="vertical"
     android:paddingBottom="8dp">
 
-    
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -14,14 +13,12 @@
         android:background="@drawable/bg_app_card"
         android:padding="16dp">
 
-        
         <ImageView
             android:id="@+id/app_icon"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:src="@android:drawable/sym_def_app_icon"/>
 
-        
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -36,7 +33,7 @@
                 android:text="App Name"
                 android:textSize="13sp"
                 android:textStyle="bold"
-                android:textColor="@color/textWhite"/> 
+                android:textColor="@color/textWhiteStatic"/> 
 
             <TextView
                 android:id="@+id/app_time"
@@ -44,7 +41,7 @@
                 android:layout_height="wrap_content"
                 android:text="0m"
                 android:textSize="11sp"
-                android:textColor="@color/textGray" 
+                android:textColor="@color/textGrayDynamic" 
                 android:layout_marginTop="4dp"/>
         </LinearLayout>
    </LinearLayout>
