@@ -7,4 +7,4 @@
     android:textStyle="bold"
     android:padding="16dp"
     android:gravity="center_vertical"
-    android:textColor="@color/textDynamic" />
+    android:textColor="@color/selector_spinner_dropdown" />
