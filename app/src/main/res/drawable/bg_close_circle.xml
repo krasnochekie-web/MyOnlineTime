@@ -3,7 +3,7 @@
     android:color="#4DFFFFFF"> <!-- Белая полупрозрачная волна при нажатии -->
     <item>
         <shape android:shape="oval">
-            <solid android:color="#404040" /> <!-- Красивый темно-серый цвет круга -->
+            <solid android:color="@color/cardDynamic" /> <!-- Красивый темно-серый цвет круга -->
         </shape>
     </item>
 </ripple>
