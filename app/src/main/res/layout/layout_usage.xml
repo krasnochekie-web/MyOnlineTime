@@ -30,7 +30,7 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:text="@string/btn_chart_text"
-                android:textColor="@color/textWhiteStatic"
+                android:textColor="@color/textDynamic"
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:drawableLeft="@drawable/ic_chart_yellow"
@@ -51,7 +51,7 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:text="@string/btn_all_time_text"
-                android:textColor="@color/textWhiteStatic"
+                android:textColor="@color/textDynamic"
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:drawableLeft="@drawable/ic_star_yellow"
@@ -101,7 +101,7 @@
 
                 <TextView
                     android:text="@string/total_time"
-                    android:textColor="@color/textWhiteStatic"
+                    android:textColor="@color/textDynamic"
                     android:textSize="15sp"
                     android:textStyle="bold"
                     android:layout_width="wrap_content"
