@@ -73,8 +73,7 @@
             android:textSize="12sp"
             android:layout_marginBottom="24dp" />
     </LinearLayout>
-
-    <FrameLayout
+<FrameLayout
         android:id="@+id/yesterday_banner_wrapper"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
@@ -93,8 +92,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/text_yesterday"
-                android:textColor="@color/textWhiteStatic"
-                android:textSize="18sp"
+                android:textColor="@color/textDynamic" android:textSize="18sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -107,7 +105,6 @@
                 android:textStyle="bold" />
         </LinearLayout>
     </FrameLayout>
-
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/all_time_apps_list"
         android:layout_width="match_parent"
