@@ -2,13 +2,23 @@
 <resources>
     <color name="primaryGrapefruit">#FA8072</color>
     <color name="burgundyRed">#FA8072</color>
-    <color name="textWhiteStatic">#FFFFFF</color> <color name="cardDarkStatic">#1E1E1E</color> <color name="bgDialogStatic">#2C2C2C</color>
+    <color name="textWhiteStatic">#FFFFFF</color> 
+    <color name="cardDarkStatic">#1E1E1E</color> 
+    <color name="bgDialogStatic">#2C2C2C</color>
     <color name="borderSemiTransparent">#33FFFFFF</color>
     <color name="hisaStatic">#696969</color>
     <color name="chartBarNormal">#FFB300</color>
     <color name="chartBarSelected">#FFE082</color>
 
-    <color name="bgDynamic">#F5F5F5</color> <color name="cardDynamic">#FFFFFF</color> <color name="textDynamic">#000000</color> <color name="textGrayDynamic">#888888</color> <color name="chartLineDynamic">#E0E0E0</color> <color name="iconTintDynamic">#333333</color> <color name="btnInactiveDynamic">#EBEBEB</color> <color name="navIconInactive">#AAAAAA</color> </resources>
-<color name="rippleDynamic">#33000000</color> 
-<color name="tabTextInactive">#888888</color>
+    <color name="bgDynamic">#F5F5F5</color> 
+    <color name="cardDynamic">#FFFFFF</color> 
+    <color name="textDynamic">#000000</color> 
+    <color name="textGrayDynamic">#888888</color> 
+    <color name="chartLineDynamic">#E0E0E0</color> 
+    <color name="iconTintDynamic">#333333</color> 
+    <color name="btnInactiveDynamic">#EBEBEB</color> 
+    <color name="navIconInactive">#AAAAAA</color> 
+
+    <color name="rippleDynamic">#33000000</color> 
+    <color name="tabTextInactive">#888888</color>
 </resources>
