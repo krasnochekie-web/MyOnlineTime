@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_margin="24dp"
-    app:cardBackgroundColor="@color/bgDialogStatic"
+    app:cardBackgroundColor="@color/cardDynamic"
     app:cardCornerRadius="16dp"
     app:cardElevation="0dp">
 
@@ -24,7 +24,7 @@
                 android:layout_height="wrap_content"
                 android:layout_centerInParent="true"
                 android:text="@string/action_description"
-                android:textColor="@color/textWhiteStatic"
+                android:textColor="@color/textDynamic"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
@@ -40,7 +40,7 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:src="@android:drawable/ic_menu_close_clear_cancel"
-                android:tint="@color/textWhiteStatic" />
+                android:tint="@color/textDynamic" />
         </RelativeLayout>
 
         <EditText
@@ -48,9 +48,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_margin="16dp"
-            android:backgroundTint="@color/selector_grapefruit_white"
+            android:backgroundTint="@color/textGrayDynamic"
             android:hint="@string/enter_description"
-            android:textColor="@color/textWhiteStatic"
+            android:textColor="@color/textDynamic"
             android:textColorHint="@color/textGrayDynamic"
             android:textSize="14sp" />
 
