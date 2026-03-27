@@ -9,3 +9,5 @@
     <color name="chartBarSelected">#FFE082</color>
 
     <color name="bgDynamic">#F5F5F5</color> <color name="cardDynamic">#FFFFFF</color> <color name="textDynamic">#000000</color> <color name="textGrayDynamic">#888888</color> <color name="chartLineDynamic">#E0E0E0</color> <color name="iconTintDynamic">#333333</color> <color name="btnInactiveDynamic">#EBEBEB</color> <color name="navIconInactive">#AAAAAA</color> </resources>
+<color name="rippleDynamic">#33000000</color> 
+</resources>
