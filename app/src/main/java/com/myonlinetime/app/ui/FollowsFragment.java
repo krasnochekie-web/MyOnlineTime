@@ -6,6 +6,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
 import androidx.viewpager2.widget.ViewPager2;
@@ -71,7 +72,7 @@ public class FollowsFragment extends Fragment {
             public int getItemCount() { return 2; }
         });
 
-        // Слушаем СВАЙПЫ
+        // Слушаем СВАЙПЫ И КЛИКИ
         viewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
@@ -81,7 +82,14 @@ public class FollowsFragment extends Fragment {
                 // Обновляем шапку
                 activity.headerTitle.setText(activity.getString(isFollowers ? R.string.followers : R.string.following));
                 
-                // Обновляем UI ваших кастомных вкладок
+                // Умная смена цвета текста: бордовый для активной, серый для неактивной
+                int activeColor = ContextCompat.getColor(activity, R.color.burgundyRed);
+                int inactiveColor = ContextCompat.getColor(activity, R.color.tabTextInactive);
+                
+                txtFollowers.setTextColor(isFollowers ? activeColor : inactiveColor);
+                txtFollowing.setTextColor(!isFollowers ? activeColor : inactiveColor);
+
+                // Обновляем остальной UI ваших кастомных вкладок
                 txtFollowers.setSelected(isFollowers);
                 txtFollowing.setSelected(!isFollowers);
                 lineFollowers.setSelected(isFollowers);
