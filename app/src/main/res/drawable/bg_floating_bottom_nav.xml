@@ -1,15 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     
-    <!-- Основной цвет панели: твой красивый темно-серый cardDark -->
-<solid android:color="@color/cardDynamic" />
+    <solid android:color="@color/cardDynamic" />
     
-    <!-- Закругление углов (оставляем мягким) -->
     <corners android:radius="16dp" /> 
     
-    <!-- ТА САМАЯ ОБВОДКА (как на экране разрешений) -->
     <stroke 
         android:width="1dp" 
-        android:color="@color/borderSemiTransparent" /> 
+        android:color="@color/chartLineDynamic" /> 
 
 </shape>
