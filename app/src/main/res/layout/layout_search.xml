@@ -23,6 +23,7 @@
         android:layout_marginLeft="16dp"
         android:layout_marginRight="16dp"
         android:drawableLeft="@drawable/ic_nav_search"
+        android:drawableTint="@color/textDynamic"
         android:drawablePadding="10dp"
         android:singleLine="true"/>
 
