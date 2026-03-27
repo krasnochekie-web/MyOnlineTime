@@ -32,7 +32,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:textColor="@color/textWhiteStatic"
+                    android:textColor="@color/textDynamic" 
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
@@ -101,7 +101,7 @@
                     android:clickable="true"
                     android:focusable="true"
                     android:src="@drawable/ic_math_arrow"
-                    android:tint="@color/textWhiteStatic" />
+                    android:tint="@color/textDynamic" /> 
 
                 <TextView
                     android:id="@+id/chart_middle_date"
@@ -123,7 +123,7 @@
                     android:focusable="true"
                     android:src="@drawable/ic_math_arrow"
                     android:rotation="180"
-                    android:tint="@color/textWhiteStatic" />
+                    android:tint="@color/textDynamic" /> 
             </LinearLayout>
 
             <androidx.recyclerview.widget.RecyclerView
