@@ -43,12 +43,12 @@ public class WeeklyBarChartView extends View {
         barSelectedPaint.setStyle(Paint.Style.FILL);
 
         textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        textPaint.setColor(ContextCompat.getColor(context, R.color.textGray));
+        textPaint.setColor(ContextCompat.getColor(context, R.color.textGrayDynamic));
         textPaint.setTextSize(36f); 
         textPaint.setTextAlign(Paint.Align.CENTER);
 
         linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        linePaint.setColor(ContextCompat.getColor(context, R.color.chartLine));
+        linePaint.setColor(ContextCompat.getColor(context, R.color.chartLineDynamic));
         linePaint.setStrokeWidth(2f);
 
         for (int i = 0; i < 7; i++) barRects[i] = new RectF();
