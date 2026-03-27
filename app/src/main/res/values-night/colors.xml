@@ -12,3 +12,4 @@
 
     <color name="bgDynamic">#121212</color> <color name="cardDynamic">#1E1E1E</color> <color name="textDynamic">#FFFFFF</color> <color name="textGrayDynamic">#AAAAAA</color> <color name="chartLineDynamic">#444444</color> <color name="iconTintDynamic">#FFFFFF</color> <color name="btnInactiveDynamic">#2C2C2C</color> <color name="navIconInactive">#FFFFFF</color> </resources>
 <color name="rippleDynamic">#33FFFFFF</color>
+<color name="tabTextInactive">@color/nav_color</color>
