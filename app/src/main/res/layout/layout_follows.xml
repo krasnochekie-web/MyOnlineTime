@@ -32,7 +32,7 @@
                     android:layout_width="wrap_content" 
                     android:layout_height="wrap_content" 
                     android:text="Подписчики" 
-                    android:textColor="@color/nav_color" 
+                    android:textColor="@color/tabTextInactive" 
                     android:textStyle="bold" />
                 <TextView 
                     android:id="@+id/tab_count_followers" 
@@ -72,7 +72,7 @@
                     android:layout_width="wrap_content" 
                     android:layout_height="wrap_content" 
                     android:text="Подписки" 
-                    android:textColor="@color/nav_color" 
+                    android:textColor="@color/tabTextInactive" 
                     android:textStyle="bold" />
                 <TextView 
                     android:id="@+id/tab_count_following" 
