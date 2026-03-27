@@ -55,7 +55,7 @@
                 android:foreground="@drawable/ripple_circle"
                 android:padding="6dp"
                 android:src="@drawable/ic_edit"
-                android:tint="@color/textWhiteStatic" />
+                android:tint="@color/textDynamic" />
         </RelativeLayout>
 
         <TextView
