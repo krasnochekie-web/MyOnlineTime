@@ -548,11 +548,11 @@ public class ProfileFragment extends Fragment {
         if (isFollowing) {
             btnFollow.setText(btnFollow.getContext().getString(R.string.btn_unfollow));
             btnFollow.setBackgroundResource(R.drawable.bg_button_gray);
-            btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textGray));
+            btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textGrayDynamic));
         } else {
             btnFollow.setText("Подписаться"); // Или R.string.btn_follow, как было
             btnFollow.setBackgroundResource(R.drawable.bg_button_grapefruit);
-            btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textWhite));
+            btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textDynamic));
         }
     }
 }
