@@ -165,6 +165,7 @@ public class MainActivity extends AppCompatActivity {
             // Вызываем через твой навигатор для правильной анимации перелистывания!
             // Никаких изменений шапки здесь не делаем.
             navigator.switchScreen(5, null);
+            resetHeader();
         });
         headerBackBtn.setOnClickListener(v -> handleBackNavigation());
 
