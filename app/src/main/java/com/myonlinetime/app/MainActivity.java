@@ -180,17 +180,32 @@ public class MainActivity extends AppCompatActivity {
     } 
 
     // --- СРАЗУ ПОСЛЕ НЕГО ИДЕТ МЕТОД ЗАГРУЗКИ АВАТАРКИ ---
-    private void loadUserAvatarToBottomNav() {
+private void loadUserAvatarToBottomNav() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
-        if (account != null && iconProfile != null) {
+        
+        // --- Добавим обработку для гостя (когда account == null) ---
+        if (account == null) {
+            if (iconProfile != null) {
+                // Красим иконку-заглушку в цвета нижнего меню (серая/бордовая)
+                iconProfile.setImageTintList(androidx.core.content.ContextCompat.getColorStateList(this, R.color.nav_icon_selector));
+                iconProfile.setImageResource(R.drawable.ic_nav_profile);
+            }
+            return;
+        }
+
+        if (iconProfile != null) {
             Bitmap cachedAvatar = mMemoryCache.get("avatar_" + account.getId());
             if (cachedAvatar != null) {
+                iconProfile.setImageTintList(null); // УБИРАЕМ краску для реального фото!
                 Glide.with(this).load(cachedAvatar).circleCrop().into(iconProfile);
             } else {
                 File file = new File(getFilesDir(), "avatar_" + account.getId() + ".png");
                 if (file.exists()) {
+                    iconProfile.setImageTintList(null); // УБИРАЕМ краску для реального фото!
                     Glide.with(this).load(file).circleCrop().into(iconProfile);
                 } else {
+                    // Если фото нет, красим стандартную иконку-заглушку
+                    iconProfile.setImageTintList(androidx.core.content.ContextCompat.getColorStateList(this, R.color.nav_icon_selector));
                     iconProfile.setImageResource(R.drawable.ic_nav_profile); 
                 }
             }
