@@ -6,7 +6,7 @@ import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
 import com.myonlinetime.app.R;
-import com.myonlinetime.app.ui.FeedFragment; // <-- ДОБАВИЛИ ИМПОРТ ЛЕНТЫ
+import com.myonlinetime.app.ui.FeedFragment;
 import com.myonlinetime.app.ui.ProfileFragment;
 import com.myonlinetime.app.ui.SearchFragment;
 import com.myonlinetime.app.ui.SettingsFragment; 
@@ -18,7 +18,7 @@ public class AppNavigator {
     private final int containerId;
 
     // Главные вкладки
-    private FeedFragment feedFragment; // <-- ИЗМЕНИЛИ ТИП НА НАШ ФРАГМЕНТ
+    private FeedFragment feedFragment; 
     private SearchFragment searchFragment;
     private StatsFragment statsFragment;
     private ProfileFragment profileFragment;
@@ -32,6 +32,16 @@ public class AppNavigator {
     public AppNavigator(AppCompatActivity activity, int containerId) {
         this.fm = activity.getSupportFragmentManager();
         this.containerId = containerId;
+
+        // --- ЛЕКАРСТВО ОТ ФАНТОМНЫХ ФРАГМЕНТОВ ---
+        // Восстанавливаем ссылки на фрагменты, если система пересоздала их после смены темы
+        feedFragment = (FeedFragment) fm.findFragmentByTag("FEED");
+        searchFragment = (SearchFragment) fm.findFragmentByTag("SEARCH");
+        statsFragment = (StatsFragment) fm.findFragmentByTag("STATS");
+        profileFragment = (ProfileFragment) fm.findFragmentByTag("PROFILE");
+        settingsFragment = (SettingsFragment) fm.findFragmentByTag("SETTINGS");
+        currentSubScreen = fm.findFragmentByTag("SUB_SCREEN");
+        // -----------------------------------------
     }
 
     public void openSubScreen(Fragment fragment) {
@@ -83,7 +93,7 @@ public class AppNavigator {
         // Показываем или создаем нужную вкладку
         if (tabIndex == 0) {
             if (feedFragment == null) {
-                feedFragment = new FeedFragment(); // <-- ИСПОЛЬЗУЕМ НАШУ ЗАГЛУШКУ
+                feedFragment = new FeedFragment(); 
                 ft.add(containerId, feedFragment, "FEED");
             }
             ft.show(feedFragment);
@@ -135,4 +145,5 @@ public class AppNavigator {
         if (index == 4 && profileFragment != null) ft.show(profileFragment);
         if (index == 5 && settingsFragment != null) ft.show(settingsFragment); 
     }
-}
+            }
+
