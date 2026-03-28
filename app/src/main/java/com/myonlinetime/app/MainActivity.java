@@ -171,6 +171,7 @@ public class MainActivity extends AppCompatActivity {
 
         updateNavState(0);
         resetHeader();
+        navigator.switchScreen(0, null);
         
         // --- КОНЕЦ МЕТОДА onCreate ---
         mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
