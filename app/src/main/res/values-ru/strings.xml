@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="feed_placeholder_title">Лента скоро появится</string>
+    <string name="feed_placeholder_desc">Мы активно работаем над этим разделом.\nОставайтесь с нами!</string>
     <!-- Базовые строки -->
     <string name="app_name">My Online Time</string>
     <string name="feed">Лента</string>
