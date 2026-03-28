@@ -6,9 +6,10 @@ import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
 import com.myonlinetime.app.R;
+import com.myonlinetime.app.ui.FeedFragment; // <-- ДОБАВИЛИ ИМПОРТ ЛЕНТЫ
 import com.myonlinetime.app.ui.ProfileFragment;
 import com.myonlinetime.app.ui.SearchFragment;
-import com.myonlinetime.app.ui.SettingsFragment; // <-- ДОБАВИЛ ИМПОРТ
+import com.myonlinetime.app.ui.SettingsFragment; 
 import com.myonlinetime.app.ui.StatsFragment;
 
 public class AppNavigator {
@@ -17,11 +18,11 @@ public class AppNavigator {
     private final int containerId;
 
     // Главные вкладки
-    private Fragment feedFragment;
+    private FeedFragment feedFragment; // <-- ИЗМЕНИЛИ ТИП НА НАШ ФРАГМЕНТ
     private SearchFragment searchFragment;
     private StatsFragment statsFragment;
     private ProfileFragment profileFragment;
-    private SettingsFragment settingsFragment; // <-- ДОБАВИЛ ПЕРЕМЕННУЮ
+    private SettingsFragment settingsFragment; 
 
     // Второстепенный экран (Саб-скрин)
     private Fragment currentSubScreen;
@@ -82,7 +83,7 @@ public class AppNavigator {
         // Показываем или создаем нужную вкладку
         if (tabIndex == 0) {
             if (feedFragment == null) {
-                feedFragment = new Fragment(); 
+                feedFragment = new FeedFragment(); // <-- ИСПОЛЬЗУЕМ НАШУ ЗАГЛУШКУ
                 ft.add(containerId, feedFragment, "FEED");
             }
             ft.show(feedFragment);
@@ -108,7 +109,6 @@ public class AppNavigator {
             }
             ft.show(profileFragment);
         }
-        // <-- НАЧАЛО НОВОГО БЛОКА ДЛЯ НАСТРОЕК -->
         else if (tabIndex == 5) {
             if (settingsFragment == null) {
                 settingsFragment = new SettingsFragment();
@@ -116,7 +116,6 @@ public class AppNavigator {
             }
             ft.show(settingsFragment);
         }
-        // <-- КОНЕЦ НОВОГО БЛОКА -->
 
         ft.commit();
     }
@@ -126,7 +125,7 @@ public class AppNavigator {
         if (searchFragment != null) ft.hide(searchFragment);
         if (statsFragment != null) ft.hide(statsFragment);
         if (profileFragment != null) ft.hide(profileFragment);
-        if (settingsFragment != null) ft.hide(settingsFragment); // <-- ДОБАВИЛ СКРЫТИЕ НАСТРОЕК
+        if (settingsFragment != null) ft.hide(settingsFragment); 
     }
 
     private void showMainTab(int index, FragmentTransaction ft) {
@@ -134,6 +133,6 @@ public class AppNavigator {
         if (index == 1 && searchFragment != null) ft.show(searchFragment);
         if (index == 3 && statsFragment != null) ft.show(statsFragment);
         if (index == 4 && profileFragment != null) ft.show(profileFragment);
-        if (index == 5 && settingsFragment != null) ft.show(settingsFragment); // <-- ДОБАВИЛ ПОКАЗ НАСТРОЕК
+        if (index == 5 && settingsFragment != null) ft.show(settingsFragment); 
     }
 }
