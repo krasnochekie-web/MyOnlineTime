@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="feed_placeholder_title">Feed coming soon</string>
+    <string name="feed_placeholder_desc">We are actively working on this section.\nStay tuned!</string>
     <!-- Твои старые строки -->
     <string name="app_name">My Online Time</string>
     <string name="feed">Feed</string>
