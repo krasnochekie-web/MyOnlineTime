@@ -1,7 +1,7 @@
 package com.myonlinetime.app;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.app.AppCompatDelegate; // <-- ДОБАВЛЕН ИМПОРТ
+import androidx.appcompat.app.AppCompatDelegate;
 
 import com.myonlinetime.app.utils.StatsHelper;
 
@@ -145,7 +145,6 @@ public class MainActivity extends AppCompatActivity {
             checkAuthAndLoad(1); 
         });
         
-        // Вкладка 3: Профиль (Центральная) - индекс 4 остался старым, чтобы не ломать твой код
         findViewById(R.id.nav_profile).setOnClickListener(v -> { 
             updateNavState(4); 
             checkAuthAndLoad(4); 
@@ -157,21 +156,25 @@ public class MainActivity extends AppCompatActivity {
             navigator.switchScreen(3, null);
             resetHeader();
         });
-        // Вкладка 5: Настройки
+
         findViewById(R.id.nav_settings).setOnClickListener(v -> {
-            hideLoginScreen(); // Настройки доступны без заглушки входа
+            hideLoginScreen(); 
             updateNavState(5);
-            
-            // Вызываем через твой навигатор для правильной анимации перелистывания!
-            // Никаких изменений шапки здесь не делаем.
             navigator.switchScreen(5, null);
             resetHeader();
         });
+        
         headerBackBtn.setOnClickListener(v -> handleBackNavigation());
 
-        updateNavState(0);
+        // --- УМНЫЙ ЗАПУСК ИЛИ ВОССТАНОВЛЕНИЕ ---
+        int tabToOpen = 0; // По умолчанию Лента
+        if (savedInstanceState != null) {
+            tabToOpen = savedInstanceState.getInt("SAVED_TAB", 0);
+        }
+
+        updateNavState(tabToOpen);
         resetHeader();
-        navigator.switchScreen(0, null);
+        navigator.switchScreen(tabToOpen, null);
         
         // --- КОНЕЦ МЕТОДА onCreate ---
         mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
@@ -181,14 +184,20 @@ public class MainActivity extends AppCompatActivity {
 
     } 
 
-    // --- СРАЗУ ПОСЛЕ НЕГО ИДЕТ МЕТОД ЗАГРУЗКИ АВАТАРКИ ---
-private void loadUserAvatarToBottomNav() {
+    // --- СОХРАНЕНИЕ СОСТОЯНИЯ ПРИ СМЕНЕ ТЕМЫ ---
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putInt("SAVED_TAB", currentTab); 
+    }
+    // -------------------------------------------
+
+    private void loadUserAvatarToBottomNav() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         
         // --- Добавим обработку для гостя (когда account == null) ---
         if (account == null) {
             if (iconProfile != null) {
-                // Красим иконку-заглушку в цвета нижнего меню (серая/бордовая)
                 iconProfile.setImageTintList(androidx.core.content.ContextCompat.getColorStateList(this, R.color.nav_icon_selector));
                 iconProfile.setImageResource(R.drawable.ic_nav_profile);
             }
@@ -198,15 +207,14 @@ private void loadUserAvatarToBottomNav() {
         if (iconProfile != null) {
             Bitmap cachedAvatar = mMemoryCache.get("avatar_" + account.getId());
             if (cachedAvatar != null) {
-                iconProfile.setImageTintList(null); // УБИРАЕМ краску для реального фото!
+                iconProfile.setImageTintList(null); 
                 Glide.with(this).load(cachedAvatar).circleCrop().into(iconProfile);
             } else {
                 File file = new File(getFilesDir(), "avatar_" + account.getId() + ".png");
                 if (file.exists()) {
-                    iconProfile.setImageTintList(null); // УБИРАЕМ краску для реального фото!
+                    iconProfile.setImageTintList(null); 
                     Glide.with(this).load(file).circleCrop().into(iconProfile);
                 } else {
-                    // Если фото нет, красим стандартную иконку-заглушку
                     iconProfile.setImageTintList(androidx.core.content.ContextCompat.getColorStateList(this, R.color.nav_icon_selector));
                     iconProfile.setImageResource(R.drawable.ic_nav_profile); 
                 }
@@ -227,7 +235,7 @@ private void loadUserAvatarToBottomNav() {
     @Override
     protected void onResume() {
         super.onResume();
-        loadUserAvatarToBottomNav(); // Обновляем картинку при возвращении
+        loadUserAvatarToBottomNav(); 
         if (permissionOverlay != null) {
             if (hasPermission()) {
                 permissionOverlay.setVisibility(View.GONE);
@@ -279,15 +287,10 @@ private void loadUserAvatarToBottomNav() {
         }
     } 
 
-    // ==========================================================
-    // ЗДЕСЬ ИЗМЕНЕНИЯ АНИМАЦИИ ДЛЯ ЭКРАНА ВХОДА
-    // ==========================================================
-    
     public void hideLoginScreen() {
         final View loginView = container.findViewWithTag("login_screen_overlay");
         if (loginView != null) {
             int screenWidth = getResources().getDisplayMetrics().widthPixels;
-            // Анимация уезжания вправо
             loginView.animate()
                     .translationX(screenWidth)
                     .setDuration(300)
@@ -308,18 +311,15 @@ private void loadUserAvatarToBottomNav() {
         Button btn = view.findViewById(R.id.btn_login_center);
         btn.setOnClickListener(v -> startActivityForResult(mGoogleSignInClient.getSignInIntent(), RC_SIGN_IN));
         
-        // Готовим анимацию: ставим экран за правый край
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
         view.setTranslationX(screenWidth);
         container.addView(view);
         
-        // Запускаем выезд справа налево
         view.animate()
                 .translationX(0)
                 .setDuration(300)
                 .start();
     }
-    // ==========================================================
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -333,7 +333,7 @@ private void loadUserAvatarToBottomNav() {
                     @Override
                     public void onSuccess(String ourServerToken) {
                         vpsToken = ourServerToken;
-                        loadUserAvatarToBottomNav(); // Загружаем картинку после входа
+                        loadUserAvatarToBottomNav(); 
                         updateNavState(4);
                         StatsHelper.syncUserProfile(MainActivity.this);
                         navigator.switchScreen(4, acct.getId()); 
@@ -363,7 +363,7 @@ private void loadUserAvatarToBottomNav() {
                 inputStream.close();
                 
                 mMemoryCache.put("avatar_" + acct.getId(), scaled);
-                loadUserAvatarToBottomNav(); // Обновляем картинку меню сразу после выбора!
+                loadUserAvatarToBottomNav(); 
                 
                 ImageView preview = findViewById(R.id.edit_avatar_preview);
                 if (preview != null) Glide.with(MainActivity.this).load(scaled).circleCrop().into(preview);
@@ -397,13 +397,13 @@ private void loadUserAvatarToBottomNav() {
         }
 
         bottomNav.setVisibility(View.VISIBLE);
-        showBottomNav(); // Принудительно показываем меню при переключении вкладок
+        showBottomNav();
 
         iconFeed.setSelected(index == 0);
         iconSearch.setSelected(index == 1);
-        iconProfile.setSelected(index == 4); // Центральная вкладка профиля
+        iconProfile.setSelected(index == 4); 
         iconUsage.setSelected(index == 3);
-        iconSettings.setSelected(index == 5); // Вкладка настроек
+        iconSettings.setSelected(index == 5); 
     }
 
     private boolean hasPermission() {
@@ -411,4 +411,5 @@ private void loadUserAvatarToBottomNav() {
         int mode = appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), getPackageName());
         return mode == AppOpsManager.MODE_ALLOWED;
     }
-}
+                                               }
+                                                 
