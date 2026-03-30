@@ -20,23 +20,27 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-// Наследуемся от мощного RecyclerView
 public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder> {
     private Context context;
     private List<String> packageNames = new ArrayList<>();
     private Map<String, Long> exactTimes = new HashMap<>();
     private PackageManager pm;
     
-    private int itemLayoutId; // НОВАЯ ПЕРЕМЕННАЯ ДЛЯ ДИЗАЙНА
+    private int itemLayoutId; 
+    private boolean isExpanded = false; // <-- ФЛАГ ДЛЯ КНОПКИ "ПОКАЗАТЬ БОЛЬШЕ"
 
-    // Теперь адаптер требует передать ему файл дизайна при создании
     public AppsAdapter(Context context, int itemLayoutId) {
         this.context = context;
         this.pm = context.getPackageManager();
         this.itemLayoutId = itemLayoutId; 
     }
 
-    // Метод для обновления данных (вызывается из StatsFragment)
+    // Метод для переключения состояния списка
+    public void setExpanded(boolean expanded) {
+        this.isExpanded = expanded;
+        notifyDataSetChanged();
+    }
+
     public void updateData(List<String> newPackages, Map<String, Long> newTimes) {
         this.packageNames = newPackages != null ? newPackages : new ArrayList<String>();
         this.exactTimes = newTimes != null ? newTimes : new HashMap<String, Long>();
@@ -46,7 +50,6 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     @NonNull
     @Override
     public AppViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        // Заменили R.layout.item_app_usage на нашу переменную itemLayoutId
         View view = LayoutInflater.from(context).inflate(itemLayoutId, parent, false);
         return new AppViewHolder(view);
     }
@@ -56,26 +59,28 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         String pkg = packageNames.get(position);
         Long exactTime = exactTimes.get(pkg);
         
-        // Форматируем время (с учетом нашего нового метода с контекстом!)
         holder.timeView.setText(Utils.formatTime(context, exactTime != null ? exactTime : 0L));
 
-        // Пытаемся получить иконку и нормальное имя приложения
         try {
             ApplicationInfo appInfo = pm.getApplicationInfo(pkg, 0);
             holder.nameView.setText(pm.getApplicationLabel(appInfo));
             holder.iconView.setImageDrawable(pm.getApplicationIcon(appInfo));
         } catch (Exception e) {
-            holder.nameView.setText(pkg); // Если не вышло, показываем имя пакета
+            holder.nameView.setText(pkg); 
             holder.iconView.setImageResource(android.R.drawable.sym_def_app_icon);
         }
     }
 
     @Override
     public int getItemCount() {
-        return packageNames.size();
+        // <-- УМНЫЙ ЛИМИТ ЭЛЕМЕНТОВ -->
+        if (isExpanded) {
+            return packageNames.size(); // Показываем все
+        } else {
+            return Math.min(5, packageNames.size()); // Показываем только 5
+        }
     }
 
-    // Тот самый холдер ссылок
     static class AppViewHolder extends RecyclerView.ViewHolder {
         ImageView iconView;
         TextView nameView;
