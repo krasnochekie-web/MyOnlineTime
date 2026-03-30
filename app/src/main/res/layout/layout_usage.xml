@@ -15,8 +15,7 @@
         android:paddingBottom="16dp"
         android:weightSum="3"
         android:baselineAligned="false">
-
-        <LinearLayout
+<LinearLayout
             android:id="@+id/tab_time"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -28,8 +27,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/tab_time"
-                android:textColor="@color/burgundyRed"
+                android:text="@string/time" android:textColor="@color/burgundyRed"
                 android:textSize="16sp"
                 android:textStyle="bold" />
             <View
@@ -51,8 +49,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/tab_chart"
-                android:textColor="@color/textGrayDynamic"
+                android:text="@string/btn_chart_text" android:textColor="@color/textGrayDynamic"
                 android:textSize="16sp"
                 android:textStyle="bold" />
             <View
@@ -74,8 +71,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/tab_all_time"
-                android:textColor="@color/textGrayDynamic"
+                android:text="@string/btn_all_time_text" android:textColor="@color/textGrayDynamic"
                 android:textSize="16sp"
                 android:textStyle="bold" />
             <View
