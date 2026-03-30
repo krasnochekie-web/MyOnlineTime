@@ -46,3 +46,4 @@ jobs:
       with:
         name: MyOnlineTime-Official-APK
         path: app-release-signed.apk
+        retention-days: 10
