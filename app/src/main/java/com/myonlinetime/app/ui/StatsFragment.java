@@ -50,7 +50,8 @@ public class StatsFragment extends Fragment {
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        final View view = inflater.inflate(R.layout.layout_usage, container, false);
+        // ЗАМЕНИЛИ ИМЯ ЛАЙАУТА НА НОВЫЙ layout_time
+        final View view = inflater.inflate(R.layout.layout_time, container, false);
         
         final MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
@@ -58,20 +59,33 @@ public class StatsFragment extends Fragment {
             activity.resetHeader();
         }
 
+        // --- ИНИЦИАЛИЗАЦИЯ НОВЫХ UI ЭЛЕМЕНТОВ ---
         final RecyclerView recyclerView = view.findViewById(R.id.apps_list);
         final Spinner spinner = view.findViewById(R.id.spinner_period);
         final TextView totalTimeText = view.findViewById(R.id.text_total_time_sum);
-final TextView btnChart = view.findViewById(R.id.btn_chart);
-        final TextView btnAllTime = view.findViewById(R.id.btn_all_time);
+        
+        // Вкладки
+        final View tabChart = view.findViewById(R.id.tab_chart);
+        final View tabAllTime = view.findViewById(R.id.tab_all_time);
+        
+        // Кнопка и разделитель "Показать больше"
+        final View dividerShowMore = view.findViewById(R.id.divider_show_more);
+        final TextView btnShowMore = view.findViewById(R.id.btn_show_more);
 
-btnChart.setOnClickListener(v -> {
+        // Нижние карточки
+        final TextView textWeek = view.findViewById(R.id.text_time_week);
+        final TextView textMonth = view.findViewById(R.id.text_time_month);
+        final TextView textYear = view.findViewById(R.id.text_time_year);
+        // ----------------------------------------
+
+        // КЛИКИ ПО ВКЛАДКАМ
+        tabChart.setOnClickListener(v -> {
             if (activity != null && activity.navigator != null) {
                 activity.navigator.openSubScreen(new ChartFragment());
             }
         });
 
-        // ВОТ ЭТО ДОБАВЛЯЕМ ДЛЯ НОВОГО ЭКРАНА:
-        btnAllTime.setOnClickListener(v -> {
+        tabAllTime.setOnClickListener(v -> {
             if (activity != null && activity.navigator != null) {
                 activity.navigator.openSubScreen(new AllTimeFragment());
             }
@@ -81,6 +95,13 @@ btnChart.setOnClickListener(v -> {
         final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
         recyclerView.setAdapter(adapter);
 
+        // КЛИК "ПОКАЗАТЬ БОЛЬШЕ"
+        btnShowMore.setOnClickListener(v -> {
+            adapter.setExpanded(true); // Разворачиваем список
+            btnShowMore.setVisibility(View.GONE); // Прячем кнопку
+            dividerShowMore.setVisibility(View.GONE); // Прячем полосу
+        });
+
         totalTimeText.setText(getString(R.string.loading));
 
         String[] periods = getResources().getStringArray(R.array.periods_array);
@@ -88,16 +109,37 @@ btnChart.setOnClickListener(v -> {
         spinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
         spinner.setAdapter(spinnerAdapter);
 
+        // Запускаем расчет данных для нижних карточек
+        loadBottomCardsData(activity, textWeek, textMonth, textYear);
+
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (!isAdded() || activity == null) return;
 
             spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                 @Override
                 public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
-                    if (statsCache.containsKey(position)) {
+                    
+                    // Общая функция для обновления UI списка
+                    Runnable updateUI = () -> {
                         CachedStats cached = statsCache.get(position);
+                        if (cached == null || !isAdded()) return;
+                        
                         totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
                         adapter.updateData(cached.list, cached.times);
+                        
+                        // Логика отображения кнопки "Показать больше"
+                        adapter.setExpanded(false); // При смене периода всегда сворачиваем
+                        if (cached.list.size() > 5) {
+                            btnShowMore.setVisibility(View.VISIBLE);
+                            dividerShowMore.setVisibility(View.VISIBLE);
+                        } else {
+                            btnShowMore.setVisibility(View.GONE);
+                            dividerShowMore.setVisibility(View.GONE);
+                        }
+                    };
+
+                    if (statsCache.containsKey(position)) {
+                        updateUI.run();
                         return;
                     }
 
@@ -112,36 +154,32 @@ btnChart.setOnClickListener(v -> {
                             long startTime;
                             int interval;
                             
-                            // --- ИСПОЛЬЗУЕМ "КИРПИЧИКИ" ДЛЯ ИДЕАЛЬНОЙ СБОРКИ ПЕРИОДОВ ---
                             switch (position) {
                                 case 0: // Сегодня
                                     cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0);
                                     startTime = cal.getTimeInMillis();
-                                    interval = -1; // Используем события
+                                    interval = -1;
                                     break;
                                 case 1: // Вчера
                                     cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0);
                                     endTime = cal.getTimeInMillis();
                                     cal.add(Calendar.DAY_OF_YEAR, -1);
                                     startTime = cal.getTimeInMillis();
-                                    interval = -1; // Используем события
+                                    interval = -1;
                                     break;
                                 case 2: // Неделя
                                     cal.add(Calendar.DAY_OF_YEAR, -7);
                                     startTime = cal.getTimeInMillis();
-                                    // Складываем 7 ежедневных бакетов
                                     interval = UsageStatsManager.INTERVAL_DAILY; 
                                     break;
                                 case 3: // Месяц
                                     cal.add(Calendar.MONTH, -1);
                                     startTime = cal.getTimeInMillis();
-                                    // Складываем 4 недельных бакета (а не запрашиваем месяц целиком!)
                                     interval = UsageStatsManager.INTERVAL_WEEKLY; 
                                     break;
                                 default: // Год
                                     cal.add(Calendar.YEAR, -1);
                                     startTime = cal.getTimeInMillis();
-                                    // ВОЗВРАЩАЕМ YEARLY, чтобы достать старые данные из системного архива!
                                     interval = UsageStatsManager.INTERVAL_YEARLY; 
                                     break;
                             }
@@ -173,11 +211,8 @@ btnChart.setOnClickListener(v -> {
                             final long finalTotalMillis = tempTotalMillis;
                             
                             new Handler(Looper.getMainLooper()).post(() -> {
-                                if (isAdded()) {
-                                    statsCache.put(position, new CachedStats(finalList, exactTimes, finalTotalMillis));
-                                    totalTimeText.setText(Utils.formatTime(activity, finalTotalMillis));
-                                    adapter.updateData(finalList, exactTimes);
-                                }
+                                statsCache.put(position, new CachedStats(finalList, exactTimes, finalTotalMillis));
+                                updateUI.run();
                             });
                         }); 
                     }, 300);
@@ -192,7 +227,55 @@ btnChart.setOnClickListener(v -> {
         return view;
     }
 
-    // МЕТОД 1: Через события (Идеально для Сегодня/Вчера)
+    // --- ФОНОВЫЙ ЗАГРУЗЧИК ДЛЯ НИЖНИХ КАРТОЧЕК ---
+    private void loadBottomCardsData(Context context, TextView txtWeek, TextView txtMonth, TextView txtYear) {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        executor.execute(() -> {
+            long now = System.currentTimeMillis();
+            
+            // За неделю
+            Calendar calW = Calendar.getInstance();
+            calW.add(Calendar.DAY_OF_YEAR, -7);
+            long weekTotal = filterAndSumUserApps(context, calculateFromStats(context, UsageStatsManager.INTERVAL_DAILY, calW.getTimeInMillis(), now));
+
+            // За месяц
+            Calendar calM = Calendar.getInstance();
+            calM.add(Calendar.MONTH, -1);
+            long monthTotal = filterAndSumUserApps(context, calculateFromStats(context, UsageStatsManager.INTERVAL_WEEKLY, calM.getTimeInMillis(), now));
+
+            // За год
+            Calendar calY = Calendar.getInstance();
+            calY.add(Calendar.YEAR, -1);
+            long yearTotal = filterAndSumUserApps(context, calculateFromStats(context, UsageStatsManager.INTERVAL_YEARLY, calY.getTimeInMillis(), now));
+
+            new Handler(Looper.getMainLooper()).post(() -> {
+                if (isAdded()) {
+                    txtWeek.setText(Utils.formatTime(context, weekTotal));
+                    txtMonth.setText(Utils.formatTime(context, monthTotal));
+                    txtYear.setText(Utils.formatTime(context, yearTotal));
+                }
+            });
+        });
+    }
+
+    // Хелпер для подсчета времени без системного мусора
+    private long filterAndSumUserApps(Context context, Map<String, Long> exactTimes) {
+        long total = 0;
+        PackageManager pm = context.getPackageManager();
+        Set<String> userApps = getUserApps(pm);
+        String launcherPkg = getLauncherPackage(pm);
+        for (Map.Entry<String, Long> entry : exactTimes.entrySet()) {
+            String pkg = entry.getKey();
+            long time = entry.getValue();
+            boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || pkg.equals(launcherPkg);
+            if (time > 1000 && userApps.contains(pkg) && !isSystemTrash) {
+                total += time;
+            }
+        }
+        return total;
+    }
+    // ----------------------------------------------
+
     private Map<String, Long> calculateFromEvents(Context context, long start, long end) {
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
@@ -218,7 +301,6 @@ btnChart.setOnClickListener(v -> {
         return results;
     }
 
-    // МЕТОД 2: Гибридный (суммирование для месяца, Math.max для года)
     private Map<String, Long> calculateFromStats(Context context, int interval, long start, long end) {
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
@@ -230,10 +312,8 @@ btnChart.setOnClickListener(v -> {
                 long time = s.getTotalTimeInForeground();
                 if (time > 0) {
                     if (interval == UsageStatsManager.INTERVAL_YEARLY) {
-                        // ДЛЯ ГОДА: Используем Math.max, как в вашем стабильном коде, чтобы не было дублей!
                         results.put(s.getPackageName(), Math.max(results.getOrDefault(s.getPackageName(), 0L), time));
                     } else {
-                        // ДЛЯ МЕСЯЦА: Суммируем "кирпичики", чтобы получить идеальную точность
                         results.put(s.getPackageName(), results.getOrDefault(s.getPackageName(), 0L) + time);
                     }
                 }
