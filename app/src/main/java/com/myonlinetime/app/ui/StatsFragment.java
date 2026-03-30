@@ -51,7 +51,7 @@ public class StatsFragment extends Fragment {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         // ЗАМЕНИЛИ ИМЯ ЛАЙАУТА НА НОВЫЙ layout_time
-        final View view = inflater.inflate(R.layout.layout_time, container, false);
+        final View view = inflater.inflate(R.layout.layout_usage, container, false);
         
         final MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
