@@ -1,7 +1,12 @@
 name: Purge All Artifacts
 
 on:
-  workflow_dispatch: # Эта строчка создает кнопку "Запустить вручную" в интерфейсе GitHub
+  workflow_dispatch:
+
+# --- ВОТ ЭТОТ БЛОК ДАЕТ РАЗРЕШЕНИЕ НА УДАЛЕНИЕ ---
+permissions:
+  actions: write
+# -------------------------------------------------
 
 jobs:
   delete-artifacts:
