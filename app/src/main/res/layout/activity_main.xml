@@ -93,7 +93,8 @@
         </LinearLayout>
 
         <LinearLayout android:id="@+id/nav_settings" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:clickable="true" android:background="@drawable/bg_ripple_circle_dark">
-            <ImageView android:id="@+id/icon_settings" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_settings" android:tint="@color/nav_icon_selector"/>
+            <ImageView android:id="@+id/icon_settings" android:layout_width="24dp" android:layout_height="24dp"
+                android:src="@drawable/ic_settings" android:tint="@color/nav_icon_selector"/>
         </LinearLayout>
     </LinearLayout>
 
