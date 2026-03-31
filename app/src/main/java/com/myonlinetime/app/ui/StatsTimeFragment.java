@@ -42,13 +42,17 @@ public class StatsTimeFragment extends Fragment {
             this.list = l; this.times = t; this.totalMillis = tm;
         }
     }
-    private final Map<Integer, CachedStats> statsCache = new HashMap<>();
+    
+    // ВЕЧНЫЙ КЭШ: Данные сохраняются до полного закрытия (выгрузки) приложения из памяти
+    private static final Map<Integer, CachedStats> statsCache = new HashMap<>();
+    private static long cachedWeek = -1;
+    private static long cachedMonth = -1;
+    private static long cachedYear = -1;
     
     public StatsTimeFragment() {}
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        // Твой родной макет
         final View view = inflater.inflate(R.layout.layout_time_tab, container, false); 
         
         final MainActivity activity = (MainActivity) getActivity();
@@ -62,10 +66,6 @@ public class StatsTimeFragment extends Fragment {
         final Spinner spinner = view.findViewById(R.id.spinner_period);
         final TextView totalTimeText = view.findViewById(R.id.text_total_time_sum);
         
-        // Твои родные вкладки
-        final View tabChart = view.findViewById(R.id.tab_chart);
-        final View tabAllTime = view.findViewById(R.id.tab_all_time);
-        
         final View dividerShowMore = view.findViewById(R.id.divider_show_more);
         final TextView btnShowMore = view.findViewById(R.id.btn_show_more);
 
@@ -73,21 +73,11 @@ public class StatsTimeFragment extends Fragment {
         final TextView textMonth = view.findViewById(R.id.text_time_month);
         final TextView textYear = view.findViewById(R.id.text_time_year);
 
-        tabChart.setOnClickListener(v -> {
-            if (activity != null && activity.navigator != null) activity.navigator.openSubScreen(new ChartFragment());
-        });
-
-        tabAllTime.setOnClickListener(v -> {
-            if (activity != null && activity.navigator != null) activity.navigator.openSubScreen(new AllTimeFragment());
-        });
-        
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         
-        // ВАЖНО: TRUE - включаем лимит для красивого дизайна!
         final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, true);
         recyclerView.setAdapter(adapter);
 
-        // УМНАЯ КНОПКА: Подгружает порциями, не вешает телефон
         btnShowMore.setOnClickListener(v -> {
             if (adapter.isFullyExpanded()) {
                 adapter.collapse();
@@ -104,7 +94,6 @@ public class StatsTimeFragment extends Fragment {
             }
         });
 
-        // СЛУШАТЕЛЬ СКРОЛЛА: Подгружаем приложения, когда листаешь вниз
         if (scrollView != null) {
             scrollView.setOnScrollChangeListener((androidx.core.widget.NestedScrollView.OnScrollChangeListener) 
                 (v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
@@ -143,7 +132,6 @@ public class StatsTimeFragment extends Fragment {
                         totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
                         adapter.updateData(cached.list, cached.times);
                         
-                        // Сброс кнопки при переключении (ошибки больше нет)
                         adapter.collapse();
                         btnShowMore.setText(R.string.show_more);
                         if (cached.list.size() > 3) {
@@ -157,7 +145,7 @@ public class StatsTimeFragment extends Fragment {
 
                     if (statsCache.containsKey(position)) {
                         updateUI.run();
-                        return;
+                        return; // Загружено из статического кэша мгновенно
                     }
 
                     new Handler(Looper.getMainLooper()).postDelayed(() -> {
@@ -214,6 +202,14 @@ public class StatsTimeFragment extends Fragment {
     }
 
     private void loadBottomCardsData(Context context, TextView txtWeek, TextView txtMonth, TextView txtYear) {
+        // КЭШ НИЖНИХ КАРТОЧЕК: Если данные уже есть, вставляем их мгновенно
+        if (cachedWeek != -1) {
+            txtWeek.setText(Utils.formatTime(context, cachedWeek));
+            txtMonth.setText(Utils.formatTime(context, cachedMonth));
+            txtYear.setText(Utils.formatTime(context, cachedYear));
+            return;
+        }
+
         ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
             long now = System.currentTimeMillis();
@@ -225,6 +221,10 @@ public class StatsTimeFragment extends Fragment {
 
             Calendar calY = Calendar.getInstance(); calY.add(Calendar.YEAR, -1);
             long yearTotal = filterAndSumUserApps(context, calculateFromStats(context, UsageStatsManager.INTERVAL_YEARLY, calY.getTimeInMillis(), now));
+
+            cachedWeek = weekTotal;
+            cachedMonth = monthTotal;
+            cachedYear = yearTotal;
 
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (isAdded()) {
