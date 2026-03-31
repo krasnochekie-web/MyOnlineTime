@@ -79,7 +79,8 @@ public class AllTimeFragment extends Fragment {
         recyclerView = view.findViewById(R.id.all_time_apps_list);
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         
-        adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
+        // ВОТ ЗДЕСЬ ДОБАВЛЕН ФЛАГ false, ЧТОБЫ КОМПИЛЯТОР НЕ РУГАЛСЯ!
+        adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, false);
         
         // Оборачиваем твой адаптер вместе с плашкой и отдаем списку
         HeaderWrapperAdapter wrapperAdapter = new HeaderWrapperAdapter(headerWrapper, adapter);
