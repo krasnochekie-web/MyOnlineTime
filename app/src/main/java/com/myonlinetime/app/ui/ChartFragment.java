@@ -59,11 +59,8 @@ public class ChartFragment extends Fragment {
         View view = inflater.inflate(R.layout.layout_chart, container, false);
         final MainActivity activity = (MainActivity) getActivity();
 
-        if (activity != null) {
-            activity.mainHeader.setVisibility(View.VISIBLE);
-            activity.headerTitle.setText(getString(R.string.title_charts));
-            activity.headerBackBtn.setVisibility(View.VISIBLE);
-        }
+        // УБРАЛИ НАСТРОЙКУ ШАПКИ И СТРЕЛОЧКИ!
+        // Теперь навигацией управляет StatsHostFragment через табы.
 
         barChart = view.findViewById(R.id.weekly_bar_chart);
         topDateTxt = view.findViewById(R.id.chart_top_date);
@@ -74,7 +71,9 @@ public class ChartFragment extends Fragment {
         recyclerView = view.findViewById(R.id.chart_apps_list);
 
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
-        adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
+        
+        // ВАЖНО: Передаем FALSE, чтобы список не обрезался до 3 элементов!
+        adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, false);
         recyclerView.setAdapter(adapter);
 
         barChart.setListener(this::selectDay);
@@ -128,7 +127,6 @@ public class ChartFragment extends Fragment {
 
             weeklyData.clear();
 
-            // Идем слева направо (от старого к новому)
             for (int i = 0; i < 7; i++) {
                 Calendar cal = Calendar.getInstance();
                 cal.add(Calendar.DAY_OF_YEAR, -(6 - i)); 
