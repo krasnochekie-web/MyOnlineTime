@@ -34,7 +34,6 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-// ИМЯ ПРАВИЛЬНОЕ: StatsTimeFragment
 public class StatsTimeFragment extends Fragment {
 
     private static class CachedStats {
@@ -45,7 +44,6 @@ public class StatsTimeFragment extends Fragment {
     }
     private final Map<Integer, CachedStats> statsCache = new HashMap<>();
     
-    // КОНСТРУКТОР ПРАВИЛЬНЫЙ: StatsTimeFragment
     public StatsTimeFragment() {}
 
     @Override
@@ -145,9 +143,8 @@ public class StatsTimeFragment extends Fragment {
                         totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
                         adapter.updateData(cached.list, cached.times);
                         
-                        // Сброс кнопки при переключении
+                        // Сброс кнопки при переключении (ошибки больше нет)
                         adapter.collapse();
-                        hasStartedExpanding = false;
                         btnShowMore.setText(R.string.show_more);
                         if (cached.list.size() > 3) {
                             btnShowMore.setVisibility(View.VISIBLE);
