@@ -85,9 +85,10 @@
     <string name="text_all_time_desc">Всё время, начиная с %1$s, сохраняется и накапливается в статистике.</string>
     <string name="text_yesterday">Вчера</string>
 	<string name="show_more">Показать больше</string>
-    <string name="period_week_label">За\nнеделю</string>
-    <string name="period_month_label">За\nмесяц</string>
-    <string name="period_year_label">За\nгод</string>
+    <string name="period_week_label">За неделю</string>
+    <string name="period_month_label">За месяц</string>
+    <string name="period_year_label">За год</string>
+	<string name="show_less">Свернуть список</string>
     
     <string name="format_days_hours">%1$dд %2$dч</string>
     <string name="format_total_hours_mins">%1$dч %2$dм</string>
