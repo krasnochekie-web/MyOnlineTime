@@ -27,23 +27,41 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     private PackageManager pm;
     
     private int itemLayoutId; 
-    private boolean isExpanded = false; // <-- ФЛАГ ДЛЯ КНОПКИ "ПОКАЗАТЬ БОЛЬШЕ"
+    private boolean isExpanded = false; 
+    private boolean isLimitEnabled; // Флаг: обрезать ли список?
 
-    public AppsAdapter(Context context, int itemLayoutId) {
+    // Обновленный конструктор: теперь он принимает флаг isLimitEnabled
+    public AppsAdapter(Context context, int itemLayoutId, boolean isLimitEnabled) {
         this.context = context;
         this.pm = context.getPackageManager();
         this.itemLayoutId = itemLayoutId; 
+        this.isLimitEnabled = isLimitEnabled;
     }
 
-    // Метод для переключения состояния списка
+    public boolean isExpanded() {
+        return isExpanded;
+    }
+
+    // Плавное переключение без лагов (анимация разворачивания/сворачивания)
     public void setExpanded(boolean expanded) {
+        if (this.isExpanded == expanded) return;
         this.isExpanded = expanded;
-        notifyDataSetChanged();
+        
+        int totalSize = packageNames.size();
+        if (totalSize > 3) { // Топ-3
+            if (expanded) {
+                // Добавляем элементы плавно
+                notifyItemRangeInserted(3, totalSize - 3);
+            } else {
+                // Удаляем элементы плавно
+                notifyItemRangeRemoved(3, totalSize - 3);
+            }
+        }
     }
 
     public void updateData(List<String> newPackages, Map<String, Long> newTimes) {
-        this.packageNames = newPackages != null ? newPackages : new ArrayList<String>();
-        this.exactTimes = newTimes != null ? newTimes : new HashMap<String, Long>();
+        this.packageNames = newPackages != null ? newPackages : new ArrayList<>();
+        this.exactTimes = newTimes != null ? newTimes : new HashMap<>();
         notifyDataSetChanged();
     }
 
@@ -73,12 +91,12 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
 
     @Override
     public int getItemCount() {
-        // <-- УМНЫЙ ЛИМИТ ЭЛЕМЕНТОВ -->
-        if (isExpanded) {
-            return packageNames.size(); // Показываем все
-        } else {
-            return Math.min(5, packageNames.size()); // Показываем только 5
+        // Если лимит выключен (для других экранов) — показываем весь список!
+        if (!isLimitEnabled) {
+            return packageNames.size();
         }
+        // Если лимит включен (для экрана "Время") — показываем топ-3 или всё
+        return isExpanded ? packageNames.size() : Math.min(3, packageNames.size());
     }
 
     static class AppViewHolder extends RecyclerView.ViewHolder {
