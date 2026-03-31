@@ -25,38 +25,13 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     private List<String> packageNames = new ArrayList<>();
     private Map<String, Long> exactTimes = new HashMap<>();
     private PackageManager pm;
-    
     private int itemLayoutId; 
-    private boolean isExpanded = false; 
-    private boolean isLimitEnabled; // Флаг: обрезать ли список?
 
-    // Обновленный конструктор: теперь он принимает флаг isLimitEnabled
-    public AppsAdapter(Context context, int itemLayoutId, boolean isLimitEnabled) {
+    // Конструктор стал проще: никаких флагов лимита!
+    public AppsAdapter(Context context, int itemLayoutId) {
         this.context = context;
         this.pm = context.getPackageManager();
         this.itemLayoutId = itemLayoutId; 
-        this.isLimitEnabled = isLimitEnabled;
-    }
-
-    public boolean isExpanded() {
-        return isExpanded;
-    }
-
-    // Плавное переключение без лагов (анимация разворачивания/сворачивания)
-    public void setExpanded(boolean expanded) {
-        if (this.isExpanded == expanded) return;
-        this.isExpanded = expanded;
-        
-        int totalSize = packageNames.size();
-        if (totalSize > 3) { // Топ-3
-            if (expanded) {
-                // Добавляем элементы плавно
-                notifyItemRangeInserted(3, totalSize - 3);
-            } else {
-                // Удаляем элементы плавно
-                notifyItemRangeRemoved(3, totalSize - 3);
-            }
-        }
     }
 
     public void updateData(List<String> newPackages, Map<String, Long> newTimes) {
@@ -91,12 +66,8 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
 
     @Override
     public int getItemCount() {
-        // Если лимит выключен (для других экранов) — показываем весь список!
-        if (!isLimitEnabled) {
-            return packageNames.size();
-        }
-        // Если лимит включен (для экрана "Время") — показываем топ-3 или всё
-        return isExpanded ? packageNames.size() : Math.min(3, packageNames.size());
+        // Больше никаких проверок флагов и лимитов! Показываем всё!
+        return packageNames.size();
     }
 
     static class AppViewHolder extends RecyclerView.ViewHolder {
