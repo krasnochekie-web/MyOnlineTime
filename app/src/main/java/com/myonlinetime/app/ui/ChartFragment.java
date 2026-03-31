@@ -59,9 +59,6 @@ public class ChartFragment extends Fragment {
         View view = inflater.inflate(R.layout.layout_chart, container, false);
         final MainActivity activity = (MainActivity) getActivity();
 
-        // УБРАЛИ НАСТРОЙКУ ШАПКИ И СТРЕЛОЧКИ!
-        // Теперь навигацией управляет StatsHostFragment через табы.
-
         barChart = view.findViewById(R.id.weekly_bar_chart);
         topDateTxt = view.findViewById(R.id.chart_top_date);
         topTimeTxt = view.findViewById(R.id.chart_top_time);
@@ -72,8 +69,8 @@ public class ChartFragment extends Fragment {
 
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         
-        // ВАЖНО: Передаем FALSE, чтобы список не обрезался до 3 элементов!
-        adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, false);
+        // ВАЖНО: Убрали флаг false! Адаптер теперь чистый.
+        adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
         recyclerView.setAdapter(adapter);
 
         barChart.setListener(this::selectDay);
