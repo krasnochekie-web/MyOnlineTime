@@ -79,7 +79,6 @@ public class AllTimeFragment extends Fragment {
         recyclerView = view.findViewById(R.id.all_time_apps_list);
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         
-        // ВАЖНО: Убрали флаг false! Адаптер теперь чистый.
         adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
         
         // Оборачиваем твой адаптер вместе с плашкой и отдаем списку
@@ -92,9 +91,10 @@ public class AllTimeFragment extends Fragment {
     }
 
     private void loadAndCalculateStats() {
-        mainValTxt.setText("0д 0ч");
-        subValTxt.setText("0ч 0м");
-        yesterdayValTxt.setText("+0ч 0м");
+        // УБРАЛИ ХАРДКОД! Используем твои готовые форматы из strings.xml
+        mainValTxt.setText(getString(R.string.format_days_hours, 0, 0));
+        subValTxt.setText(getString(R.string.format_total_hours_mins, 0, 0));
+        yesterdayValTxt.setText(getString(R.string.format_plus_hours_mins, 0, 0));
 
         ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
