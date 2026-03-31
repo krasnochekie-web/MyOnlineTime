@@ -118,7 +118,7 @@ public class WeeklyBarChartView extends View {
             float y = topPadding + chartHeight - (chartHeight / 2f * i); 
             canvas.drawLine(0, y, chartWidth, y, linePaint);
             
-            String hourText = (maxHours / 2 * i) + " ч";
+String hourText = getContext().getString(R.string.format_chart_hour, (maxHours / 2 * i));
             textPaint.setTextAlign(Paint.Align.LEFT);
             canvas.drawText(hourText, chartWidth + 15, y + 10, textPaint);
         }
