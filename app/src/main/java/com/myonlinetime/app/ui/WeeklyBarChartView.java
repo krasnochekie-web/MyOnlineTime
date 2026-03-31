@@ -78,17 +78,27 @@ public class WeeklyBarChartView extends View {
         }
     }
 
+    // --- ИСПРАВЛЕННЫЙ МЕТОД ---
     private void startAnimation() {
-        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(700);
-        animator.setInterpolator(new DecelerateInterpolator());
-        animator.addUpdateListener(animation -> {
-            animationProgress = (float) animation.getAnimatedValue();
-            invalidate();
-        });
-        animator.start();
+        // 1. Прячем графики до начала анимации
+        animationProgress = 0f;
+        invalidate();
+
+        // 2. Ждем 200 мс, пока Android отрисует список, и стартуем плавно
+        postDelayed(() -> {
+            ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+            animator.setDuration(700);
+            animator.setInterpolator(new DecelerateInterpolator());
+            animator.addUpdateListener(animation -> {
+                animationProgress = (float) animation.getAnimatedValue();
+                invalidate();
+            });
+            animator.start();
+        }, 200);
     }
-@Override
+    // --------------------------
+
+    @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         int width = getWidth();
@@ -96,16 +106,16 @@ public class WeeklyBarChartView extends View {
         
         float rightPadding = 100f; 
         float bottomPadding = 60f; 
-        float topPadding = 50f; // ДОБАВИЛИ: Зазор сверху для текста часов
+        float topPadding = 50f; 
         
         float chartWidth = width - rightPadding;
-        float chartHeight = height - bottomPadding - topPadding; // Уменьшили рабочую зону графика
+        float chartHeight = height - bottomPadding - topPadding; 
 
         long maxHours = maxMillis / (1000 * 60 * 60);
         
         // Линии разметки
         for (int i = 0; i <= 2; i++) {
-            float y = topPadding + chartHeight - (chartHeight / 2f * i); // Сдвинули всё вниз на topPadding
+            float y = topPadding + chartHeight - (chartHeight / 2f * i); 
             canvas.drawLine(0, y, chartWidth, y, linePaint);
             
             String hourText = (maxHours / 2 * i) + " ч";
@@ -124,8 +134,8 @@ public class WeeklyBarChartView extends View {
             
             float left = xCenter - (barWidth / 2f);
             float right = xCenter + (barWidth / 2f);
-            float top = topPadding + chartHeight - barHeight; // Сдвинули верх столбца
-            float bottom = topPadding + chartHeight; // Сдвинули низ столбца
+            float top = topPadding + chartHeight - barHeight; 
+            float bottom = topPadding + chartHeight; 
 
             barRects[i].set(left, top, right, bottom);
 
@@ -136,6 +146,7 @@ public class WeeklyBarChartView extends View {
             canvas.drawText(labels[i], xCenter, height - 10, textPaint);
         }
     }
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (event.getAction() == MotionEvent.ACTION_DOWN) {
