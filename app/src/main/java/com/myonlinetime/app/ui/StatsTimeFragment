@@ -34,7 +34,8 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class StatsFragment extends Fragment {
+// ПЕРЕИМЕНОВАЛИ КЛАСС
+public class StatsTimeFragment extends Fragment {
 
     private static class CachedStats {
         List<String> list;
@@ -46,60 +47,41 @@ public class StatsFragment extends Fragment {
     }
     private final Map<Integer, CachedStats> statsCache = new HashMap<>();
     
-    public StatsFragment() {}
+    public StatsTimeFragment() {}
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        // ЗАМЕНИЛИ ИМЯ ЛАЙАУТА НА НОВЫЙ layout_time
-        final View view = inflater.inflate(R.layout.layout_usage, container, false);
+        // ИСПОЛЬЗУЕМ НОВЫЙ МАКЕТ БЕЗ ВЕРХНИХ ВКЛАДОК
+        final View view = inflater.inflate(R.layout.layout_time_tab, container, false);
         
         final MainActivity activity = (MainActivity) getActivity();
-        if (activity != null) {
-            activity.mainHeader.setVisibility(View.VISIBLE);
-            activity.resetHeader();
-        }
 
-        // --- ИНИЦИАЛИЗАЦИЯ НОВЫХ UI ЭЛЕМЕНТОВ ---
         final RecyclerView recyclerView = view.findViewById(R.id.apps_list);
         final Spinner spinner = view.findViewById(R.id.spinner_period);
         final TextView totalTimeText = view.findViewById(R.id.text_total_time_sum);
         
-        // Вкладки
-        final View tabChart = view.findViewById(R.id.tab_chart);
-        final View tabAllTime = view.findViewById(R.id.tab_all_time);
-        
-        // Кнопка и разделитель "Показать больше"
         final View dividerShowMore = view.findViewById(R.id.divider_show_more);
         final TextView btnShowMore = view.findViewById(R.id.btn_show_more);
 
-        // Нижние карточки
         final TextView textWeek = view.findViewById(R.id.text_time_week);
         final TextView textMonth = view.findViewById(R.id.text_time_month);
         final TextView textYear = view.findViewById(R.id.text_time_year);
-        // ----------------------------------------
 
-        // КЛИКИ ПО ВКЛАДКАМ
-        tabChart.setOnClickListener(v -> {
-            if (activity != null && activity.navigator != null) {
-                activity.navigator.openSubScreen(new ChartFragment());
-            }
-        });
-
-        tabAllTime.setOnClickListener(v -> {
-            if (activity != null && activity.navigator != null) {
-                activity.navigator.openSubScreen(new AllTimeFragment());
-            }
-        });
+        // Вкладок tab_chart и tab_all_time тут больше нет, они переехали в HostFragment!
         
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
-        final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
+        
+        // ПЕРЕДАЕМ TRUE (включаем лимит топ-3 для этого экрана)
+        final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, true);
         recyclerView.setAdapter(adapter);
 
-        // КЛИК "ПОКАЗАТЬ БОЛЬШЕ"
+        // УМНАЯ КНОПКА "ПОКАЗАТЬ БОЛЬШЕ" / "СВЕРНУТЬ"
         btnShowMore.setOnClickListener(v -> {
-            adapter.setExpanded(true); // Разворачиваем список
-            btnShowMore.setVisibility(View.GONE); // Прячем кнопку
-            dividerShowMore.setVisibility(View.GONE); // Прячем полосу
+            boolean isExp = adapter.isExpanded();
+            adapter.setExpanded(!isExp); // Переключаем адаптер
+            
+            // Меняем текст кнопки
+            btnShowMore.setText(isExp ? R.string.show_more : R.string.show_less);
         });
 
         totalTimeText.setText(getString(R.string.loading));
@@ -127,9 +109,12 @@ public class StatsFragment extends Fragment {
                         totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
                         adapter.updateData(cached.list, cached.times);
                         
-                        // Логика отображения кнопки "Показать больше"
-                        adapter.setExpanded(false); // При смене периода всегда сворачиваем
-                        if (cached.list.size() > 5) {
+                        // Сбрасываем список в свернутое состояние при смене периода (например, с "За день" на "За месяц")
+                        adapter.setExpanded(false); 
+                        btnShowMore.setText(R.string.show_more);
+
+                        // Если элементов больше 3, показываем кнопку и разделитель
+                        if (cached.list.size() > 3) {
                             btnShowMore.setVisibility(View.VISIBLE);
                             dividerShowMore.setVisibility(View.VISIBLE);
                         } else {
@@ -274,7 +259,6 @@ public class StatsFragment extends Fragment {
         }
         return total;
     }
-    // ----------------------------------------------
 
     private Map<String, Long> calculateFromEvents(Context context, long start, long end) {
         Map<String, Long> results = new HashMap<>();
