@@ -16,7 +16,9 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Spinner;
 import android.widget.TextView;
+import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.ConcatAdapter;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.myonlinetime.app.MainActivity;
@@ -34,7 +36,6 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-// ПЕРЕИМЕНОВАЛИ КЛАСС
 public class StatsTimeFragment extends Fragment {
 
     private static class CachedStats {
@@ -51,38 +52,33 @@ public class StatsTimeFragment extends Fragment {
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        // ИСПОЛЬЗУЕМ НОВЫЙ МАКЕТ БЕЗ ВЕРХНИХ ВКЛАДОК
-        final View view = inflater.inflate(R.layout.layout_time_tab, container, false);
-        
         final MainActivity activity = (MainActivity) getActivity();
 
-        final RecyclerView recyclerView = view.findViewById(R.id.apps_list);
-        final Spinner spinner = view.findViewById(R.id.spinner_period);
-        final TextView totalTimeText = view.findViewById(R.id.text_total_time_sum);
-        
-        final View dividerShowMore = view.findViewById(R.id.divider_show_more);
-        final TextView btnShowMore = view.findViewById(R.id.btn_show_more);
-
-        final TextView textWeek = view.findViewById(R.id.text_time_week);
-        final TextView textMonth = view.findViewById(R.id.text_time_month);
-        final TextView textYear = view.findViewById(R.id.text_time_year);
-
-        // Вкладок tab_chart и tab_all_time тут больше нет, они переехали в HostFragment!
-        
+        // 1. Инфлейтим наш новый пустой экран с одним RecyclerView
+        final View view = inflater.inflate(R.layout.layout_time_tab, container, false);
+        final RecyclerView recyclerView = view.findViewById(R.id.stats_recycler_view);
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
-        
-        // ПЕРЕДАЕМ TRUE (включаем лимит топ-3 для этого экрана)
-        final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, true);
-        recyclerView.setAdapter(adapter);
 
-        // УМНАЯ КНОПКА "ПОКАЗАТЬ БОЛЬШЕ" / "СВЕРНУТЬ"
-        btnShowMore.setOnClickListener(v -> {
-            boolean isExp = adapter.isExpanded();
-            adapter.setExpanded(!isExp); // Переключаем адаптер
-            
-            // Меняем текст кнопки
-            btnShowMore.setText(isExp ? R.string.show_more : R.string.show_less);
-        });
+        // 2. Инфлейтим шапку и подвал из новых XML-файлов
+        View headerView = inflater.inflate(R.layout.layout_stats_header, recyclerView, false);
+        View footerView = inflater.inflate(R.layout.layout_stats_footer, recyclerView, false);
+
+        // 3. Ищем элементы ВНУТРИ шапки и подвала!
+        final Spinner spinner = headerView.findViewById(R.id.spinner_period);
+        final TextView totalTimeText = headerView.findViewById(R.id.text_total_time_sum);
+        final TextView textWeek = footerView.findViewById(R.id.text_time_week);
+        final TextView textMonth = footerView.findViewById(R.id.text_time_month);
+        final TextView textYear = footerView.findViewById(R.id.text_time_year);
+
+        // 4. Инициализируем 3 адаптера
+        SingleViewAdapter headerAdapter = new SingleViewAdapter(headerView);
+        // ВАЖНО: Никаких true/false в конце, используем наш обновленный тупой адаптер!
+        final AppsAdapter appsAdapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
+        SingleViewAdapter footerAdapter = new SingleViewAdapter(footerView);
+
+        // 5. СКЛЕИВАЕМ ИХ С ПОМОЩЬЮ ConcatAdapter
+        ConcatAdapter concatAdapter = new ConcatAdapter(headerAdapter, appsAdapter, footerAdapter);
+        recyclerView.setAdapter(concatAdapter);
 
         totalTimeText.setText(getString(R.string.loading));
 
@@ -101,26 +97,12 @@ public class StatsTimeFragment extends Fragment {
                 @Override
                 public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
                     
-                    // Общая функция для обновления UI списка
                     Runnable updateUI = () -> {
                         CachedStats cached = statsCache.get(position);
                         if (cached == null || !isAdded()) return;
                         
                         totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
-                        adapter.updateData(cached.list, cached.times);
-                        
-                        // Сбрасываем список в свернутое состояние при смене периода (например, с "За день" на "За месяц")
-                        adapter.setExpanded(false); 
-                        btnShowMore.setText(R.string.show_more);
-
-                        // Если элементов больше 3, показываем кнопку и разделитель
-                        if (cached.list.size() > 3) {
-                            btnShowMore.setVisibility(View.VISIBLE);
-                            dividerShowMore.setVisibility(View.VISIBLE);
-                        } else {
-                            btnShowMore.setVisibility(View.GONE);
-                            dividerShowMore.setVisibility(View.GONE);
-                        }
+                        appsAdapter.updateData(cached.list, cached.times); // Обновляем только средний адаптер!
                     };
 
                     if (statsCache.containsKey(position)) {
@@ -140,33 +122,11 @@ public class StatsTimeFragment extends Fragment {
                             int interval;
                             
                             switch (position) {
-                                case 0: // Сегодня
-                                    cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0);
-                                    startTime = cal.getTimeInMillis();
-                                    interval = -1;
-                                    break;
-                                case 1: // Вчера
-                                    cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0);
-                                    endTime = cal.getTimeInMillis();
-                                    cal.add(Calendar.DAY_OF_YEAR, -1);
-                                    startTime = cal.getTimeInMillis();
-                                    interval = -1;
-                                    break;
-                                case 2: // Неделя
-                                    cal.add(Calendar.DAY_OF_YEAR, -7);
-                                    startTime = cal.getTimeInMillis();
-                                    interval = UsageStatsManager.INTERVAL_DAILY; 
-                                    break;
-                                case 3: // Месяц
-                                    cal.add(Calendar.MONTH, -1);
-                                    startTime = cal.getTimeInMillis();
-                                    interval = UsageStatsManager.INTERVAL_WEEKLY; 
-                                    break;
-                                default: // Год
-                                    cal.add(Calendar.YEAR, -1);
-                                    startTime = cal.getTimeInMillis();
-                                    interval = UsageStatsManager.INTERVAL_YEARLY; 
-                                    break;
+                                case 0: cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); startTime = cal.getTimeInMillis(); interval = -1; break;
+                                case 1: cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); endTime = cal.getTimeInMillis(); cal.add(Calendar.DAY_OF_YEAR, -1); startTime = cal.getTimeInMillis(); interval = -1; break;
+                                case 2: cal.add(Calendar.DAY_OF_YEAR, -7); startTime = cal.getTimeInMillis(); interval = UsageStatsManager.INTERVAL_DAILY; break;
+                                case 3: cal.add(Calendar.MONTH, -1); startTime = cal.getTimeInMillis(); interval = UsageStatsManager.INTERVAL_WEEKLY; break;
+                                default: cal.add(Calendar.YEAR, -1); startTime = cal.getTimeInMillis(); interval = UsageStatsManager.INTERVAL_YEARLY; break;
                             }
                             
                             final Map<String, Long> exactTimes;
@@ -212,23 +172,19 @@ public class StatsTimeFragment extends Fragment {
         return view;
     }
 
-    // --- ФОНОВЫЙ ЗАГРУЗЧИК ДЛЯ НИЖНИХ КАРТОЧЕК ---
     private void loadBottomCardsData(Context context, TextView txtWeek, TextView txtMonth, TextView txtYear) {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
             long now = System.currentTimeMillis();
             
-            // За неделю
             Calendar calW = Calendar.getInstance();
             calW.add(Calendar.DAY_OF_YEAR, -7);
             long weekTotal = filterAndSumUserApps(context, calculateFromStats(context, UsageStatsManager.INTERVAL_DAILY, calW.getTimeInMillis(), now));
 
-            // За месяц
             Calendar calM = Calendar.getInstance();
             calM.add(Calendar.MONTH, -1);
             long monthTotal = filterAndSumUserApps(context, calculateFromStats(context, UsageStatsManager.INTERVAL_WEEKLY, calM.getTimeInMillis(), now));
 
-            // За год
             Calendar calY = Calendar.getInstance();
             calY.add(Calendar.YEAR, -1);
             long yearTotal = filterAndSumUserApps(context, calculateFromStats(context, UsageStatsManager.INTERVAL_YEARLY, calY.getTimeInMillis(), now));
@@ -243,7 +199,6 @@ public class StatsTimeFragment extends Fragment {
         });
     }
 
-    // Хелпер для подсчета времени без системного мусора
     private long filterAndSumUserApps(Context context, Map<String, Long> exactTimes) {
         long total = 0;
         PackageManager pm = context.getPackageManager();
@@ -320,5 +275,41 @@ public class StatsTimeFragment extends Fragment {
         homeIntent.addCategory(Intent.CATEGORY_HOME);
         android.content.pm.ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
         return defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
+    }
+
+    // --- УНИВЕРСАЛЬНЫЙ АДАПТЕР ДЛЯ ШАПКИ И ПОДВАЛА ---
+    private static class SingleViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+        private final View view;
+
+        public SingleViewAdapter(View view) {
+            this.view = view;
+        }
+
+        @Override
+        public int getItemCount() {
+            return 1;
+        }
+
+        @Override
+        public int getItemViewType(int position) {
+            return view.hashCode(); // Гарантирует уникальность типа для шапки и подвала
+        }
+
+        @NonNull
+        @Override
+        public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            // Задаем правильные параметры Layout, чтобы элемент растянулся по ширине
+            RecyclerView.LayoutParams layoutParams = new RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, 
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+            );
+            view.setLayoutParams(layoutParams);
+            return new RecyclerView.ViewHolder(view) {};
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+            // Ничего делать не нужно, так как данные мы обновляем напрямую во View
+        }
     }
 }
