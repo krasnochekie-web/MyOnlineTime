@@ -21,12 +21,17 @@
             android:layout_height="wrap_content"
             android:background="@null"
             android:spinnerMode="dropdown" />
-        <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
+        
+        <View 
+            android:layout_width="0dp" 
+            android:layout_height="1dp" 
+            android:layout_weight="1"/>
+        
         <TextView
             android:id="@+id/text_total_time_sum"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="--"
+            android:text="@string/placeholder_dashes"
             android:textColor="@color/burgundyRed"
             android:textSize="16sp"
             android:textStyle="bold"/>
