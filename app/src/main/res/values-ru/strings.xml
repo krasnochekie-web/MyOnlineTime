@@ -17,6 +17,8 @@
     <string name="liked">Понравилось</string>
     <string name="followers">Подписчики</string>
     <string name="following">Подписки</string>
+	<string name="placeholder_dashes">--</string>
+    <string name="placeholder_time_dashes">--ч --м</string>
 	<string name="btn_chart_text">График</string>
 	<string name="format_chart_hour">%1$d ч</string>
 	<string name="btn_all_time_text">За все время</string>
