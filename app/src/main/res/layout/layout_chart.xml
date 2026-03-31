@@ -10,7 +10,6 @@
         android:clipToPadding="false"
         android:overScrollMode="never"
         android:scrollbars="none"
-        android:paddingTop="@dimen/header_clearance"
         android:paddingBottom="@dimen/bottom_nav_clearance">
 
         <LinearLayout
