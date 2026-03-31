@@ -61,8 +61,6 @@ public class AllTimeFragment extends Fragment {
         final MainActivity activity = (MainActivity) getActivity();
 
         if (activity != null) {
-            // УБРАЛИ НАСТРОЙКУ ШАПКИ И СТРЕЛОЧКИ! 
-            // Теперь навигацией управляет StatsHostFragment через табы.
             prefs = activity.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         }
 
@@ -81,8 +79,8 @@ public class AllTimeFragment extends Fragment {
         recyclerView = view.findViewById(R.id.all_time_apps_list);
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         
-        // ВАЖНО: Передаем FALSE, чтобы список не обрезался!
-        adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, false);
+        // ВАЖНО: Убрали флаг false! Адаптер теперь чистый.
+        adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
         
         // Оборачиваем твой адаптер вместе с плашкой и отдаем списку
         HeaderWrapperAdapter wrapperAdapter = new HeaderWrapperAdapter(headerWrapper, adapter);
