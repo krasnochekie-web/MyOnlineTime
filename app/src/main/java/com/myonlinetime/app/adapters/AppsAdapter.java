@@ -24,38 +24,54 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     private PackageManager pm;
     
     private int itemLayoutId; 
-    private boolean isExpanded = false; 
     private boolean isLimitEnabled; 
+    
+    private int visibleLimit;
+    private boolean hasStartedExpanding = false;
 
     public AppsAdapter(Context context, int itemLayoutId, boolean isLimitEnabled) {
         this.context = context;
         this.pm = context.getPackageManager();
         this.itemLayoutId = itemLayoutId; 
         this.isLimitEnabled = isLimitEnabled;
-    }
-
-    public boolean isExpanded() {
-        return isExpanded;
-    }
-
-    public void setExpanded(boolean expanded) {
-        if (this.isExpanded == expanded) return;
-        this.isExpanded = expanded;
-        
-        int totalSize = packageNames.size();
-        if (totalSize > 3) {
-            if (expanded) {
-                notifyItemRangeInserted(3, totalSize - 3);
-            } else {
-                notifyItemRangeRemoved(3, totalSize - 3);
-            }
-        }
+        this.visibleLimit = isLimitEnabled ? 3 : -1;
     }
 
     public void updateData(List<String> newPackages, Map<String, Long> newTimes) {
         this.packageNames = newPackages != null ? newPackages : new ArrayList<>();
         this.exactTimes = newTimes != null ? newTimes : new HashMap<>();
+        this.visibleLimit = isLimitEnabled ? 3 : this.packageNames.size();
+        this.hasStartedExpanding = false;
         notifyDataSetChanged();
+    }
+
+    public boolean isFullyExpanded() {
+        return !isLimitEnabled || visibleLimit >= packageNames.size();
+    }
+    
+    public boolean hasStartedExpanding() {
+        return hasStartedExpanding;
+    }
+
+    // Загружает еще 15 элементов плавно
+    public boolean loadMoreChunk() {
+        if (isFullyExpanded()) return true;
+        hasStartedExpanding = true;
+        
+        int oldLimit = visibleLimit;
+        visibleLimit = Math.min(packageNames.size(), visibleLimit + 15);
+        notifyItemRangeInserted(oldLimit, visibleLimit - oldLimit);
+        
+        return isFullyExpanded(); 
+    }
+
+    // Сворачивает обратно в 3 элемента
+    public void collapse() {
+        if (!isLimitEnabled || visibleLimit <= 3) return;
+        int oldLimit = visibleLimit;
+        visibleLimit = 3;
+        hasStartedExpanding = false;
+        notifyItemRangeRemoved(3, oldLimit - 3);
     }
 
     @NonNull
@@ -69,7 +85,6 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     public void onBindViewHolder(@NonNull AppViewHolder holder, int position) {
         String pkg = packageNames.get(position);
         Long exactTime = exactTimes.get(pkg);
-        
         holder.timeView.setText(Utils.formatTime(context, exactTime != null ? exactTime : 0L));
 
         try {
@@ -85,7 +100,7 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     @Override
     public int getItemCount() {
         if (!isLimitEnabled) return packageNames.size();
-        return isExpanded ? packageNames.size() : Math.min(3, packageNames.size());
+        return Math.min(visibleLimit, packageNames.size());
     }
 
     static class AppViewHolder extends RecyclerView.ViewHolder {
