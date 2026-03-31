@@ -69,8 +69,8 @@ public class ChartFragment extends Fragment {
 
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         
-        // ВАЖНО: Убрали флаг false! Адаптер теперь чистый.
-        adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
+        // ВОТ ЗДЕСЬ ДОБАВЛЕН ФЛАГ false, ЧТОБЫ КОМПИЛЯТОР НЕ РУГАЛСЯ!
+        adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, false);
         recyclerView.setAdapter(adapter);
 
         barChart.setListener(this::selectDay);
