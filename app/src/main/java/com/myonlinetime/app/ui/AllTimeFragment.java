@@ -17,6 +17,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.TextView;
+import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -60,9 +61,8 @@ public class AllTimeFragment extends Fragment {
         final MainActivity activity = (MainActivity) getActivity();
 
         if (activity != null) {
-            activity.mainHeader.setVisibility(View.VISIBLE);
-            activity.headerTitle.setText(getString(R.string.title_all_time));
-            activity.headerBackBtn.setVisibility(View.VISIBLE);
+            // УБРАЛИ НАСТРОЙКУ ШАПКИ И СТРЕЛОЧКИ! 
+            // Теперь навигацией управляет StatsHostFragment через табы.
             prefs = activity.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         }
 
@@ -81,7 +81,8 @@ public class AllTimeFragment extends Fragment {
         recyclerView = view.findViewById(R.id.all_time_apps_list);
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         
-        adapter = new AppsAdapter(activity, R.layout.item_app_usage_time);
+        // ВАЖНО: Передаем FALSE, чтобы список не обрезался!
+        adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, false);
         
         // Оборачиваем твой адаптер вместе с плашкой и отдаем списку
         HeaderWrapperAdapter wrapperAdapter = new HeaderWrapperAdapter(headerWrapper, adapter);
@@ -327,8 +328,9 @@ public class AllTimeFragment extends Fragment {
             return innerAdapter.getItemViewType(position - 1);
         }
 
+        @NonNull
         @Override
-        public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             if (viewType == 99999) {
                 headerView.setLayoutParams(new RecyclerView.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -339,7 +341,7 @@ public class AllTimeFragment extends Fragment {
         }
 
         @Override
-        public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
+        public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
             if (position > 0) {
                 innerAdapter.onBindViewHolder(holder, position - 1);
             }
