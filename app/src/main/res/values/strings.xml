@@ -17,6 +17,8 @@
     <string name="liked">Liked</string>
     <string name="format_chart_hour">%1$d h</string>
     <string name="followers">Followers</string>
+    <string name="placeholder_dashes">--</string>
+    <string name="placeholder_time_dashes">--h --m</string>
     <string name="btn_chart_text">Chart</string>
     <string name="btn_all_time_text">All time</string>
     <string name="following">Following</string>
