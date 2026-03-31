@@ -8,13 +8,10 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
-
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
-
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.utils.Utils;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -25,13 +22,34 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     private List<String> packageNames = new ArrayList<>();
     private Map<String, Long> exactTimes = new HashMap<>();
     private PackageManager pm;
+    
     private int itemLayoutId; 
+    private boolean isExpanded = false; 
+    private boolean isLimitEnabled; 
 
-    // Конструктор стал проще: никаких флагов лимита!
-    public AppsAdapter(Context context, int itemLayoutId) {
+    public AppsAdapter(Context context, int itemLayoutId, boolean isLimitEnabled) {
         this.context = context;
         this.pm = context.getPackageManager();
         this.itemLayoutId = itemLayoutId; 
+        this.isLimitEnabled = isLimitEnabled;
+    }
+
+    public boolean isExpanded() {
+        return isExpanded;
+    }
+
+    public void setExpanded(boolean expanded) {
+        if (this.isExpanded == expanded) return;
+        this.isExpanded = expanded;
+        
+        int totalSize = packageNames.size();
+        if (totalSize > 3) {
+            if (expanded) {
+                notifyItemRangeInserted(3, totalSize - 3);
+            } else {
+                notifyItemRangeRemoved(3, totalSize - 3);
+            }
+        }
     }
 
     public void updateData(List<String> newPackages, Map<String, Long> newTimes) {
@@ -66,15 +84,12 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
 
     @Override
     public int getItemCount() {
-        // Больше никаких проверок флагов и лимитов! Показываем всё!
-        return packageNames.size();
+        if (!isLimitEnabled) return packageNames.size();
+        return isExpanded ? packageNames.size() : Math.min(3, packageNames.size());
     }
 
     static class AppViewHolder extends RecyclerView.ViewHolder {
-        ImageView iconView;
-        TextView nameView;
-        TextView timeView;
-
+        ImageView iconView; TextView nameView; TextView timeView;
         public AppViewHolder(@NonNull View itemView) {
             super(itemView);
             iconView = itemView.findViewById(R.id.app_icon);
