@@ -10,7 +10,7 @@ import com.myonlinetime.app.ui.FeedFragment;
 import com.myonlinetime.app.ui.ProfileFragment;
 import com.myonlinetime.app.ui.SearchFragment;
 import com.myonlinetime.app.ui.SettingsFragment; 
-import com.myonlinetime.app.ui.StatsFragment;
+import com.myonlinetime.app.ui.StatsHostFragment; // <-- ОБНОВИЛ ИМПОРТ
 
 public class AppNavigator {
 
@@ -20,7 +20,7 @@ public class AppNavigator {
     // Главные вкладки
     private FeedFragment feedFragment; 
     private SearchFragment searchFragment;
-    private StatsFragment statsFragment;
+    private StatsHostFragment statsFragment; // <-- ОБНОВИЛ КЛАСС (имя переменной оставил для удобства)
     private ProfileFragment profileFragment;
     private SettingsFragment settingsFragment; 
 
@@ -37,7 +37,7 @@ public class AppNavigator {
         // Восстанавливаем ссылки на фрагменты, если система пересоздала их после смены темы
         feedFragment = (FeedFragment) fm.findFragmentByTag("FEED");
         searchFragment = (SearchFragment) fm.findFragmentByTag("SEARCH");
-        statsFragment = (StatsFragment) fm.findFragmentByTag("STATS");
+        statsFragment = (StatsHostFragment) fm.findFragmentByTag("STATS"); // <-- ОБНОВИЛ КЛАСС
         profileFragment = (ProfileFragment) fm.findFragmentByTag("PROFILE");
         settingsFragment = (SettingsFragment) fm.findFragmentByTag("SETTINGS");
         currentSubScreen = fm.findFragmentByTag("SUB_SCREEN");
@@ -107,7 +107,7 @@ public class AppNavigator {
         } 
         else if (tabIndex == 3) {
             if (statsFragment == null) {
-                statsFragment = new StatsFragment();
+                statsFragment = new StatsHostFragment(); // <-- ОБНОВИЛ КЛАСС
                 ft.add(containerId, statsFragment, "STATS");
             }
             ft.show(statsFragment);
@@ -145,5 +145,4 @@ public class AppNavigator {
         if (index == 4 && profileFragment != null) ft.show(profileFragment);
         if (index == 5 && settingsFragment != null) ft.show(settingsFragment); 
     }
-            }
-
+}
