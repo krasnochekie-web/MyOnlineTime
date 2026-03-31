@@ -18,6 +18,7 @@
     <string name="followers">Подписчики</string>
     <string name="following">Подписки</string>
 	<string name="btn_chart_text">График</string>
+	<string name="format_chart_hour">%1$d ч</string>
 	<string name="btn_all_time_text">За все время</string>
     <string name="last_week">Прошлая неделя</string>
     <string name="unit_h">ч</string>
