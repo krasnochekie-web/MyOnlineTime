@@ -64,7 +64,7 @@ public class NotificationsFragment extends Fragment {
             
             // Показываем стрелку назад
             activity.headerBackBtn.setVisibility(View.VISIBLE);
-            activity.headerBackBtn.setImageResource(R.drawable.ic_back); // Замени на твою иконку стрелки
+activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow);
             
             // Клик по стрелке закрывает этот фрагмент
             activity.headerBackBtn.setOnClickListener(v -> {
