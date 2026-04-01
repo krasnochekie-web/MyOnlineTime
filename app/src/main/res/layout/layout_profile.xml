@@ -11,6 +11,12 @@
         android:scaleType="centerCrop"
         android:visibility="gone" />
 
+    <VideoView
+        android:id="@+id/profile_custom_background_video"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:visibility="gone" />
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
