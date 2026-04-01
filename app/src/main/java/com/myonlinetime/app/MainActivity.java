@@ -469,7 +469,7 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) { e.printStackTrace(); }
         }
 
-        // =====================================================================
+// =====================================================================
         // >>> 3. ИЗМЕНЕНИЕ ФОНА ПРОФИЛЯ (ФОТО/ВИДЕО/GIF ДО 30 МБ) <<<
         // =====================================================================
         if (requestCode == 9003 && resultCode == RESULT_OK && data != null && data.getData() != null) {
@@ -489,35 +489,43 @@ public class MainActivity extends AppCompatActivity {
 
                 // 30 МБ = 30 * 1024 * 1024 байт
                 long maxSize = 30 * 1024 * 1024;
-                
                 if (fileSize > maxSize) {
                     Toast.makeText(this, getString(R.string.toast_file_too_large), Toast.LENGTH_LONG).show();
-                    return; // Прерываем сохранение
+                    return; 
                 }
 
-                // Определяем тип (картинка или видео)
+                // УЛУЧШЕНО: Двойная проверка на видео (спасает, если система тупит)
                 String mimeType = getContentResolver().getType(selectedFileUri);
-                boolean isVideo = mimeType != null && mimeType.startsWith("video/");
+                boolean isVideo = (mimeType != null && mimeType.startsWith("video/"));
+                if (mimeType == null) {
+                    String path = selectedFileUri.toString().toLowerCase();
+                    isVideo = path.contains(".mp4") || path.contains(".mkv") || path.contains(".avi") || path.contains(".mov");
+                }
                 
-                // Устанавливаем имя файла
-                String extension = isVideo ? ".mp4" : ".jpg"; // Упрощенно: видео сохраняем как mp4, остальное как картинки (Glide сам разберется с GIF)
-                String backgroundFileName = "profile_background" + extension;
-                
-                // Сохраняем файл во внутреннюю память приложения
-                InputStream inputStream = getContentResolver().openInputStream(selectedFileUri);
+                // УЛУЧШЕНО: Удаляем старый фон, чтобы не забивать память телефона
+                String oldPath = prefs.getString("custom_bg_path", null);
+                if (oldPath != null) {
+                    File oldFile = new File(oldPath);
+                    if (oldFile.exists()) oldFile.delete();
+                }
+
+                // УЛУЧШЕНО: Генерируем уникальное имя файла, чтобы сбросить кэш Glide
+                String extension = isVideo ? ".mp4" : ".jpg"; 
+                String backgroundFileName = "profile_bg_" + System.currentTimeMillis() + extension;
                 File outFile = new File(getFilesDir(), backgroundFileName);
-                FileOutputStream outputStream = new FileOutputStream(outFile);
                 
+                // Копируем файл
+                java.io.InputStream inputStream = getContentResolver().openInputStream(selectedFileUri);
+                java.io.FileOutputStream outputStream = new java.io.FileOutputStream(outFile);
                 byte[] buffer = new byte[8192];
                 int bytesRead;
                 while ((bytesRead = inputStream.read(buffer)) != -1) {
                     outputStream.write(buffer, 0, bytesRead);
                 }
-                
                 outputStream.close();
                 inputStream.close();
                 
-                // Сохраняем информацию о типе и пути в SharedPreferences
+                // Сохраняем новые данные
                 prefs.edit()
                     .putString("custom_bg_path", outFile.getAbsolutePath())
                     .putBoolean("custom_bg_is_video", isVideo)
