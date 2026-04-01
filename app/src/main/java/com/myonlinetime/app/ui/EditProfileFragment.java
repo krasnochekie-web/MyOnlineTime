@@ -17,9 +17,11 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
-import com.myonlinetime.app.utils.Utils;
 
 public class EditProfileFragment extends Fragment {
+
+    // КОД ЗАПРОСА ДЛЯ ФОНА
+    public static final int RC_PICK_BACKGROUND = 9003;
 
     // Правильное создание Фрагмента с передачей параметров
     public static EditProfileFragment newInstance(String currentName, String currentAbout) {
@@ -58,27 +60,43 @@ public class EditProfileFragment extends Fragment {
         final EditText inputName = view.findViewById(R.id.input_nickname);
         final EditText inputAbout = view.findViewById(R.id.input_about);
         View btnChangePhoto = view.findViewById(R.id.btn_change_photo);
+        View btnChangeBackground = view.findViewById(R.id.btn_change_background); // Новая кнопка
         ImageView avatarPreview = view.findViewById(R.id.edit_avatar_preview);
 
         inputName.setText(currentName);
         inputAbout.setText(currentAbout);
-// СТАЛО:
-Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + acct.getId());
-if (cachedAvatar != null && avatarPreview != null) {
-    Glide.with(activity).load(cachedAvatar).circleCrop().into(avatarPreview);
-}
 
+        Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + acct.getId());
+        if (cachedAvatar != null && avatarPreview != null) {
+            Glide.with(activity).load(cachedAvatar).circleCrop().into(avatarPreview);
+        }
+
+        // Логика кнопки "Изменить фото" (Аватарка)
         View.OnClickListener photoClickListener = new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 Intent intent = new Intent(Intent.ACTION_PICK);
                 intent.setType("image/*");
-                activity.startActivityForResult(intent, 9002);
+                activity.startActivityForResult(intent, 9002); // 9002 - это RC_PICK_IMAGE в MainActivity
             }
         };
         
         if (btnChangePhoto != null) btnChangePhoto.setOnClickListener(photoClickListener);
         if (avatarPreview != null) avatarPreview.setOnClickListener(photoClickListener);
+
+        // =====================================================================
+        // >>> ЛОГИКА КНОПКИ "ИЗМЕНИТЬ ФОН" <<<
+        // =====================================================================
+        if (btnChangeBackground != null) {
+            btnChangeBackground.setOnClickListener(v -> {
+                Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                intent.setType("*/*");
+                intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "video/*"});
+                // Вызываем startActivityForResult у Activity, чтобы ответ пришел в MainActivity
+                activity.startActivityForResult(Intent.createChooser(intent, "Выберите фон"), RC_PICK_BACKGROUND);
+            });
+        }
+        // =====================================================================
 
         // Кнопка Сохранения
         view.findViewById(R.id.btn_save_changes).setOnClickListener(new View.OnClickListener() { 
