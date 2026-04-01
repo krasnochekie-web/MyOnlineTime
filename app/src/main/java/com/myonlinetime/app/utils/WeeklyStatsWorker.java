@@ -7,6 +7,7 @@ import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Build;
@@ -38,6 +39,17 @@ public class WeeklyStatsWorker extends Worker {
     @Override
     public Result doWork() {
         Context context = getApplicationContext();
+
+        // === ПРОВЕРКА НАСТРОЕК УВЕДОМЛЕНИЙ ===
+        SharedPreferences prefs = context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
+        boolean isGeneralEnabled = prefs.getBoolean("notif_general_enabled", true);
+        boolean isRecordsEnabled = prefs.getBoolean("notif_records_enabled", true);
+
+        // Если выключены Общие ИЛИ выключены Рекорды — просто прерываем работу (не отправляем пуш)
+        if (!isGeneralEnabled || !isRecordsEnabled) {
+            return Result.success();
+        }
+        // =======================================
 
         // Вычисляем промежутки времени
         Calendar cal = Calendar.getInstance();
@@ -124,7 +136,7 @@ public class WeeklyStatsWorker extends Worker {
         notificationManager.notify(NOTIF_ID, builder.build());
     }
 
-    // Хелпер для подсчета времени без системного мусора (такой же, как в StatsTimeFragment)
+    // Хелпер для подсчета времени без системного мусора
     private long calculateTime(Context context, long start, long end) {
         long total = 0;
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
