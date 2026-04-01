@@ -74,6 +74,13 @@
 <string name="user_hid_time">Пользователь скрыл время у себя</string>
 <string name="hidden_time_placeholder">XXXX</string>
 <string name="btn_save">Сохранить</string>
+	<string name="notif_channel_name">Еженедельный отчет</string>
+    <string name="notif_channel_desc">Сводка вашего экранного времени за неделю</string>
+    <string name="notif_time_less">Времени за данную неделю на %1$s меньше, чем за прошлую! </string>
+    <string name="notif_time_more">Времени за данную неделю на %1$s больше, чем за прошлую! </string>
+    <string name="notif_time_equal">Время за эту и прошлую неделю совпадает! </string>
+    <string name="notif_action_click">Нажмите, чтобы просмотреть.</string>
+    <string name="notif_time_format">%1$dч. %2$dм.</string>
     <string name="permission_title">Включить доступ для My Online Time</string>
     <string name="permission_rationale">Для отображения времени требуется доступ к статистике. Нажмите кнопку <font color="#FA8072">\"Включить доступ\"</font>, выберите <font color="#FA8072">My Online Time</font> в списке приложений и включите доступ.</string>
     <string name="btn_enable_access">Включить доступ</string>
