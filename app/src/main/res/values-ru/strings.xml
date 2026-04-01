@@ -8,6 +8,9 @@
     <string name="find">Поиск</string>
     <string name="time">Время</string>
     <string name="me">Профиль</string>
+	<string name="title_notifications">Уведомления</string>
+    <string name="empty_notifications">Уведомлений нет.</string>
+    <string name="action_view">Просмотреть.</string>
     <string name="total_time">Общее время</string>
     <string name="achievements">Достижения</string>
     <string name="permission_required">Требуется разрешение</string>
