@@ -15,6 +15,15 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.util.LruCache;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.work.ExistingPeriodicWorkPolicy;
+import androidx.work.PeriodicWorkRequest;
+import androidx.work.WorkManager;
+import java.util.concurrent.TimeUnit;
 import android.util.Base64;
 import android.view.MotionEvent;
 import android.view.View;
@@ -69,8 +78,7 @@ public class MainActivity extends AppCompatActivity {
     private View permissionOverlay;
     private float lastTouchY, lastTouchX;
     private boolean isBottomNavVisible = true;
-
-    @Override
+@Override
     protected void onCreate(Bundle savedInstanceState) {
         // --- ПРОВЕРКА ТЕМЫ ДО ОТРИСОВКИ ИНТЕРФЕЙСА ---
         SharedPreferences appPrefs = getSharedPreferences("AppPrefs", MODE_PRIVATE);
@@ -120,9 +128,9 @@ public class MainActivity extends AppCompatActivity {
         
         iconFeed = (ImageView) findViewById(R.id.icon_feed); 
         iconSearch = (ImageView) findViewById(R.id.icon_search);
-        iconProfile = (ImageView) findViewById(R.id.icon_profile); // Это теперь по центру
+        iconProfile = (ImageView) findViewById(R.id.icon_profile); 
         iconUsage = (ImageView) findViewById(R.id.icon_usage); 
-        iconSettings = (ImageView) findViewById(R.id.icon_settings); // Это новая справа
+        iconSettings = (ImageView) findViewById(R.id.icon_settings); 
 
         permissionOverlay = findViewById(R.id.permission_overlay);
         if (permissionOverlay != null) {
@@ -175,7 +183,34 @@ public class MainActivity extends AppCompatActivity {
         updateNavState(tabToOpen);
         resetHeader();
         navigator.switchScreen(tabToOpen, null);
+
+        // ==============================================================
+        // >>> НОВАЯ ЛОГИКА: УВЕДОМЛЕНИЯ И ВОРКЕР <<<
+        // ==============================================================
         
+        // 1. Запрос разрешения на уведомления (Android 13+)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                androidx.core.app.ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 101);
+            }
+        }
+
+        // 2. Планируем фоновую задачу раз в 7 дней
+        androidx.work.PeriodicWorkRequest weeklyWorkRequest = new androidx.work.PeriodicWorkRequest.Builder(
+                com.myonlinetime.app.utils.WeeklyStatsWorker.class, 7, java.util.concurrent.TimeUnit.DAYS)
+                .build();
+        
+        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                "WeeklyStatsNotification",
+                androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                weeklyWorkRequest
+        );
+
+        // 3. Обработка клика по уведомлению при "холодном" старте
+        handleNotificationIntent(getIntent());
+        
+        // ==============================================================
+
         // --- КОНЕЦ МЕТОДА onCreate ---
         mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
             StatsHelper.syncUserProfile(MainActivity.this);
@@ -183,6 +218,29 @@ public class MainActivity extends AppCompatActivity {
         });
 
     } 
+
+    // --- НОВЫЕ МЕТОДЫ ДЛЯ ОБРАБОТКИ КЛИКОВ ПО УВЕДОМЛЕНИЯМ ---
+    
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent); // Обновляем интент
+        handleNotificationIntent(intent);
+    }
+
+    private void handleNotificationIntent(Intent intent) {
+        if (intent != null && intent.hasExtra("open_tab")) {
+            String tab = intent.getStringExtra("open_tab");
+            if ("time".equals(tab)) {
+                // Имитируем клик по вкладке "Время"
+                hideLoginScreen(); 
+                updateNavState(3); // 3 - это вкладка времени в твоей навигации
+                navigator.switchScreen(3, null);
+                resetHeader();
+            }
+        }
+    }
+    // ---------------------------------------------------------
 
     // --- СОХРАНЕНИЕ СОСТОЯНИЯ ПРИ СМЕНЕ ТЕМЫ ---
     @Override
@@ -195,7 +253,7 @@ public class MainActivity extends AppCompatActivity {
     private void loadUserAvatarToBottomNav() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         
-        // --- Добавим обработку для гостя (когда account == null) ---
+        // --- Обработка для гостя (когда account == null) ---
         if (account == null) {
             if (iconProfile != null) {
                 iconProfile.setImageTintList(androidx.core.content.ContextCompat.getColorStateList(this, R.color.nav_icon_selector));
@@ -221,7 +279,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
-
     private void showBottomNav() {
         if (bottomNav == null) return;
         bottomNav.animate().translationY(0).setDuration(250).start();
