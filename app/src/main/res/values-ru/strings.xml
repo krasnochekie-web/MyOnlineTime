@@ -20,6 +20,9 @@
 	<string name="placeholder_dashes">--</string>
     <string name="placeholder_time_dashes">--ч --м</string>
 	<string name="btn_chart_text">График</string>
+	<string name="header_settings_sub">Настройки</string>
+    <string name="notif_general">Общие уведомления</string>
+    <string name="notif_records">Рекорды по периодам</string>
 	<string name="format_chart_hour">%1$d ч</string>
 	<string name="btn_all_time_text">За все время</string>
     <string name="last_week">Прошлая неделя</string>
