@@ -20,6 +20,9 @@
     <string name="placeholder_dashes">--</string>
     <string name="placeholder_time_dashes">--h --m</string>
     <string name="btn_chart_text">Chart</string>
+    <string name="header_settings_sub">Settings</string>
+    <string name="notif_general">General notifications</string>
+    <string name="notif_records">Records by periods</string>
     <string name="btn_all_time_text">All time</string>
     <string name="following">Following</string>
     <string name="last_week">Last week</string>
