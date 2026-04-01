@@ -64,12 +64,10 @@ public class NotificationsFragment extends Fragment {
             
             // Показываем стрелку назад
             activity.headerBackBtn.setVisibility(View.VISIBLE);
-activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow);
+            activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow); 
             
-            // Клик по стрелке закрывает этот фрагмент
-            activity.headerBackBtn.setOnClickListener(v -> {
-                activity.getSupportFragmentManager().popBackStack();
-            });
+            // ВНИМАНИЕ: Я удалил activity.headerBackBtn.setOnClickListener(...) 
+            // Теперь работает твой правильный AppNavigator из MainActivity!
         }
     }
 
