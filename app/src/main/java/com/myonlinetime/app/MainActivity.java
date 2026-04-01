@@ -250,6 +250,10 @@ public class MainActivity extends AppCompatActivity {
                 updateNavState(3); // 3 - это вкладка времени в твоей навигации
                 navigator.switchScreen(3, null);
                 resetHeader();
+
+                // ИСПРАВЛЕНИЕ: Удаляем намерение, чтобы при смене темы 
+                // нас снова не перекидывало на этот экран!
+                intent.removeExtra("open_tab");
             }
         }
     }
@@ -259,6 +263,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
+        // Запоминаем текущую открытую вкладку
         outState.putInt("SAVED_TAB", currentTab); 
     }
     // -------------------------------------------
@@ -336,7 +341,8 @@ public class MainActivity extends AppCompatActivity {
             super.onBackPressed();
         }
     }
-public void resetHeader() {
+
+    public void resetHeader() {
         headerTitle.setText(R.string.app_name);
         headerTitle.setTextSize(20);
         headerBackBtn.setVisibility(View.GONE);
@@ -347,7 +353,8 @@ public void resetHeader() {
             headerBellBtn.setVisibility(View.VISIBLE);
         }
     }
- private void checkAuthAndLoad(int tabIndex) {
+
+    private void checkAuthAndLoad(int tabIndex) {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         if (account == null) {
             showLoginScreen(); 
