@@ -52,6 +52,17 @@
                 android:textSize="20sp"
                 android:textStyle="bold"
                 android:textColor="@color/textWhiteStatic"/>
+
+            <ImageView
+                android:id="@+id/header_bell_btn"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:padding="2dp"
+                android:src="@drawable/ic_bell"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackgroundBorderless"/>
+
         </LinearLayout>
     </LinearLayout>
 
