@@ -38,15 +38,34 @@
             android:text="0ч 0м"
             android:textColor="@color/textGrayDynamic"
             android:textSize="18sp" />
-
-        <LinearLayout
+<LinearLayout
+            android:id="@+id/how_it_works_btn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center"
-            android:layout_marginTop="24dp"
-            android:layout_marginBottom="8dp">
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="0dp"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackground">
 
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/text_how_it_works"
+                android:textColor="@color/textGrayDynamic"
+                android:textSize="14sp" />
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginLeft="6dp"
+                android:src="@drawable/ic_hidden_exclamation"
+                app:tint="@color/textGrayDynamic" />
+        </LinearLayout>
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
