@@ -8,6 +8,8 @@
     <string name="find">Find</string>
     <string name="time">Time</string>
     <string name="me">Me</string>
+    <string name="btn_change_background">Change background</string>
+    <string name="toast_file_too_large">You have exceeded the file size limit! Please select a file under 30 MB.</string>
     <string name="dialog_how_it_works_title">How is time calculated?</string>
     <string name="dialog_how_it_works_charts">Upon first launch, the app considers your accumulated time over the past week. Charts are drawn strictly according to your statistics and are updated every day.\n\nIf you delete the \"My Online Time\" app, all accumulated time will be reset.</string>
     <string name="dialog_how_it_works_all_time">Initially, the total usage time for the last year is taken into account. If your phone is less than one year old, the time for the corresponding period is used.\n\nThis time starts to accumulate and updates every day. The time increases, and you set new records!\nIf you delete the \"My Online Time\" app, all accumulated time will be reset.</string>
