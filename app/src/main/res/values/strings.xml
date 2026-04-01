@@ -8,6 +8,9 @@
     <string name="find">Find</string>
     <string name="time">Time</string>
     <string name="me">Me</string>
+    <string name="title_notifications">Notifications</string>
+    <string name="empty_notifications">No notifications.</string>
+    <string name="action_view">Tap to view.</string>
     <string name="total_time">Total time</string>
     <string name="achievements">Achievements</string>
     <string name="permission_required">Permission required</string>
