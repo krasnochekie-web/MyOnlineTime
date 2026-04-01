@@ -402,11 +402,11 @@ public class MainActivity extends AppCompatActivity {
                 .setDuration(300)
                 .start();
     }
-
-    @Override
+@Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         
+        // --- 1. Авторизация Google ---
         if (requestCode == RC_SIGN_IN) {
             Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
             try {
@@ -430,6 +430,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        // --- 2. Изменение аватарки ---
         if (requestCode == RC_PICK_IMAGE && resultCode == RESULT_OK && data != null) {
             try {
                 InputStream inputStream = getContentResolver().openInputStream(data.getData());
@@ -467,8 +468,70 @@ public class MainActivity extends AppCompatActivity {
                 });
             } catch (Exception e) { e.printStackTrace(); }
         }
-    }
 
+        // =====================================================================
+        // >>> 3. ИЗМЕНЕНИЕ ФОНА ПРОФИЛЯ (ФОТО/ВИДЕО/GIF ДО 30 МБ) <<<
+        // =====================================================================
+        if (requestCode == 9003 && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            try {
+                android.net.Uri selectedFileUri = data.getData();
+                
+                // Проверяем размер файла
+                android.database.Cursor cursor = getContentResolver().query(selectedFileUri, null, null, null, null);
+                long fileSize = 0;
+                if (cursor != null && cursor.moveToFirst()) {
+                    int sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE);
+                    if (sizeIndex != -1) {
+                        fileSize = cursor.getLong(sizeIndex);
+                    }
+                    cursor.close();
+                }
+
+                // 30 МБ = 30 * 1024 * 1024 байт
+                long maxSize = 30 * 1024 * 1024;
+                
+                if (fileSize > maxSize) {
+                    Toast.makeText(this, getString(R.string.toast_file_too_large), Toast.LENGTH_LONG).show();
+                    return; // Прерываем сохранение
+                }
+
+                // Определяем тип (картинка или видео)
+                String mimeType = getContentResolver().getType(selectedFileUri);
+                boolean isVideo = mimeType != null && mimeType.startsWith("video/");
+                
+                // Устанавливаем имя файла
+                String extension = isVideo ? ".mp4" : ".jpg"; // Упрощенно: видео сохраняем как mp4, остальное как картинки (Glide сам разберется с GIF)
+                String backgroundFileName = "profile_background" + extension;
+                
+                // Сохраняем файл во внутреннюю память приложения
+                InputStream inputStream = getContentResolver().openInputStream(selectedFileUri);
+                File outFile = new File(getFilesDir(), backgroundFileName);
+                FileOutputStream outputStream = new FileOutputStream(outFile);
+                
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+                
+                outputStream.close();
+                inputStream.close();
+                
+                // Сохраняем информацию о типе и пути в SharedPreferences
+                prefs.edit()
+                    .putString("custom_bg_path", outFile.getAbsolutePath())
+                    .putBoolean("custom_bg_is_video", isVideo)
+                    .apply();
+                    
+                Toast.makeText(this, "Фон успешно установлен!", Toast.LENGTH_SHORT).show();
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                Toast.makeText(this, "Ошибка при установке фона", Toast.LENGTH_SHORT).show();
+            }
+        }
+        // =====================================================================
+    }
     private void updateNavState(int index) {
         currentTab = index;
         mainHeader.setVisibility(View.VISIBLE);
