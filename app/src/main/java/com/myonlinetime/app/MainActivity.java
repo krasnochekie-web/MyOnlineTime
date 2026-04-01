@@ -336,14 +336,18 @@ public class MainActivity extends AppCompatActivity {
             super.onBackPressed();
         }
     }
-
-    public void resetHeader() {
+public void resetHeader() {
         headerTitle.setText(R.string.app_name);
         headerTitle.setTextSize(20);
         headerBackBtn.setVisibility(View.GONE);
+        
+        // ВОССТАНАВЛИВАЕМ КОЛОКОЛЬЧИК ПРИ ЛЮБОМ СБРОСЕ ШАПКИ
+        ImageView headerBellBtn = findViewById(R.id.header_bell_btn);
+        if (headerBellBtn != null) {
+            headerBellBtn.setVisibility(View.VISIBLE);
+        }
     }
-
-    private void checkAuthAndLoad(int tabIndex) {
+ private void checkAuthAndLoad(int tabIndex) {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         if (account == null) {
             showLoginScreen(); 
