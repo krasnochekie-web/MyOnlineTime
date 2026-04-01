@@ -39,7 +39,8 @@
             android:text="0ч 0м"
             android:textColor="@color/textGrayDynamic"
             android:textSize="18sp" />
-<LinearLayout
+
+        <LinearLayout
             android:id="@+id/how_it_works_btn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -67,20 +68,6 @@
                 android:src="@drawable/ic_hidden_exclamation"
                 app:tint="@color/textGrayDynamic" />
         </LinearLayout>
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/text_how_it_works"
-                android:textColor="@color/textGrayDynamic"
-                android:textSize="14sp" />
-
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginLeft="6dp"
-                android:src="@drawable/ic_hidden_exclamation"
-                android:tint="@color/textGrayDynamic" />
-        </LinearLayout>
 
         <TextView
             android:id="@+id/all_time_desc"
@@ -92,7 +79,8 @@
             android:textSize="12sp"
             android:layout_marginBottom="24dp" />
     </LinearLayout>
-<FrameLayout
+
+    <FrameLayout
         android:id="@+id/yesterday_banner_wrapper"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
@@ -111,7 +99,8 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/text_yesterday"
-                android:textColor="@color/textDynamic" android:textSize="18sp"
+                android:textColor="@color/textDynamic" 
+                android:textSize="18sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -124,6 +113,7 @@
                 android:textStyle="bold" />
         </LinearLayout>
     </FrameLayout>
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/all_time_apps_list"
         android:layout_width="match_parent"
