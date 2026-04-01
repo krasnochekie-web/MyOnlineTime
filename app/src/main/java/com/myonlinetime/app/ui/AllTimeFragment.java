@@ -106,8 +106,7 @@ public class AllTimeFragment extends Fragment {
 
         return view;
     }
-
-    // =====================================================================
+// =====================================================================
     // >>> МЕТОД ДЛЯ ПОКАЗА ДИАЛОГА "КАК ЭТО РАБОТАЕТ" <<<
     // =====================================================================
     private void showHowItWorksDialog(boolean isAllTime) {
@@ -122,7 +121,6 @@ public class AllTimeFragment extends Fragment {
         }
 
         TextView descText = dialog.findViewById(R.id.dialog_description_text);
-        ImageView btnClose = dialog.findViewById(R.id.dialog_close_btn);
         Button btnOk = dialog.findViewById(R.id.dialog_ok_btn);
 
         if (isAllTime) {
@@ -131,13 +129,12 @@ public class AllTimeFragment extends Fragment {
             descText.setText(getString(R.string.dialog_how_it_works_charts));
         }
 
-        btnClose.setOnClickListener(v -> dialog.dismiss());
+        // Оставили закрытие только по кнопке Ок
         btnOk.setOnClickListener(v -> dialog.dismiss());
 
         dialog.show();
     }
     // =====================================================================
-
     private void loadAndCalculateStats() {
         // УБРАЛИ ХАРДКОД! Используем твои готовые форматы из strings.xml
         mainValTxt.setText(getString(R.string.format_days_hours, 0, 0));
