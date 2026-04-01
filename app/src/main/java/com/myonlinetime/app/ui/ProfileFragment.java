@@ -51,8 +51,8 @@ public class ProfileFragment extends Fragment {
     private SharedPreferences prefs;
     private final Gson gson = new Gson();
     
-    // Переменная для фонового видео
     private VideoView backgroundVideoView;
+    private String currentLoadedBgPath = null; // Трекинг для моментального обновления
 
     public static ProfileFragment newInstance(String targetUid) {
         ProfileFragment fragment = new ProfileFragment();
@@ -73,10 +73,7 @@ public class ProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.resetHeader();
 
-        String targetUid = "";
-        if (getArguments() != null) {
-            targetUid = getArguments().getString("TARGET_UID");
-        }
+        String targetUid = getArguments() != null ? getArguments().getString("TARGET_UID") : "";
 
         final GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         if (account == null) return view;
@@ -88,51 +85,10 @@ public class ProfileFragment extends Fragment {
         prefs = activity.getSharedPreferences("MyOnlineTime_Cache_" + myUid, Context.MODE_PRIVATE);
         loadLocalCache();
 
-        // =====================================================================
-        // >>> ЧИСТАЯ ЗАГРУЗКА ФОНА ИЗ XML (GIF, PHOTO, VIDEO) <<<
-        // =====================================================================
-        backgroundVideoView = view.findViewById(R.id.profile_custom_background_video);
-        ImageView bgImageView = view.findViewById(R.id.profile_custom_background_image);
-
+        // Отложенная загрузка фона (Убирает фриз при открытии экрана профиля)
         if (isMe) {
-            String customBgPath = activity.prefs.getString("custom_bg_path", null);
-            boolean isVideo = activity.prefs.getBoolean("custom_bg_is_video", false);
-            
-            if (customBgPath != null) {
-                File bgFile = new File(customBgPath);
-                if (bgFile.exists()) {
-                    if (isVideo) {
-                        bgImageView.setVisibility(View.GONE);
-                        backgroundVideoView.setVisibility(View.VISIBLE);
-                        
-                        backgroundVideoView.setVideoPath(customBgPath);
-                        backgroundVideoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
-                            @Override
-                            public void onPrepared(MediaPlayer mp) {
-                                mp.setLooping(true); // Зацикливаем видео
-                                mp.setVolume(0f, 0f); // Без звука
-                                
-                                // Масштабируем (centerCrop), так как VideoView по умолчанию оставляет черные полосы
-                                float videoRatio = mp.getVideoWidth() / (float) mp.getVideoHeight();
-                                float screenRatio = backgroundVideoView.getWidth() / (float) backgroundVideoView.getHeight();
-                                float scaleX = videoRatio > screenRatio ? videoRatio / screenRatio : 1f;
-                                float scaleY = videoRatio > screenRatio ? 1f : screenRatio / videoRatio;
-                                backgroundVideoView.setScaleX(scaleX);
-                                backgroundVideoView.setScaleY(scaleY);
-                                
-                                backgroundVideoView.start();
-                            }
-                        });
-                    } else {
-                        backgroundVideoView.setVisibility(View.GONE);
-                        bgImageView.setVisibility(View.VISIBLE);
-                        // Glide автоматически "съест" и GIF, и PNG, и JPG
-                        Glide.with(activity).load(bgFile).centerCrop().into(bgImageView);
-                    }
-                }
-            }
+            view.post(() -> loadBackground(activity, view));
         }
-        // =====================================================================
 
         final TextView nameView = view.findViewById(R.id.profile_name);
         final TextView aboutView = view.findViewById(R.id.profile_about);
@@ -346,10 +302,52 @@ public class ProfileFragment extends Fragment {
         return view;
     }
 
+    // МЕТОД ЗАГРУЗКИ ФОНА
+    private void loadBackground(MainActivity activity, View view) {
+        String customBgPath = activity.prefs.getString("custom_bg_path", null);
+        boolean isVideo = activity.prefs.getBoolean("custom_bg_is_video", false);
+        
+        if (customBgPath == null) return;
+        if (customBgPath.equals(currentLoadedBgPath)) return; // Избегаем повторной загрузки
+
+        currentLoadedBgPath = customBgPath;
+        File bgFile = new File(customBgPath);
+        
+        backgroundVideoView = view.findViewById(R.id.profile_custom_background_video);
+        ImageView bgImageView = view.findViewById(R.id.profile_custom_background_image);
+
+        if (bgFile.exists()) {
+            if (isVideo) {
+                bgImageView.setVisibility(View.GONE);
+                backgroundVideoView.setVisibility(View.VISIBLE);
+                backgroundVideoView.setVideoPath(customBgPath);
+                backgroundVideoView.setOnPreparedListener(mp -> {
+                    mp.setLooping(true);
+                    mp.setVolume(0f, 0f);
+                    float videoRatio = mp.getVideoWidth() / (float) mp.getVideoHeight();
+                    float screenRatio = backgroundVideoView.getWidth() / (float) backgroundVideoView.getHeight();
+                    float scaleX = videoRatio > screenRatio ? videoRatio / screenRatio : 1f;
+                    float scaleY = videoRatio > screenRatio ? 1f : screenRatio / videoRatio;
+                    backgroundVideoView.setScaleX(scaleX);
+                    backgroundVideoView.setScaleY(scaleY);
+                    backgroundVideoView.start();
+                });
+            } else {
+                if (backgroundVideoView != null) backgroundVideoView.setVisibility(View.GONE);
+                bgImageView.setVisibility(View.VISIBLE);
+                Glide.with(activity).load(bgFile).centerCrop().into(bgImageView);
+            }
+        }
+    }
+
     @Override
     public void onResume() {
         super.onResume();
-        if (backgroundVideoView != null && !backgroundVideoView.isPlaying()) {
+        // Моментально обновляем фон при возврате
+        if (getView() != null && getActivity() != null) {
+            loadBackground((MainActivity) getActivity(), getView());
+        }
+        if (backgroundVideoView != null && !backgroundVideoView.isPlaying() && backgroundVideoView.getVisibility() == View.VISIBLE) {
             backgroundVideoView.start();
         }
     }
@@ -383,7 +381,7 @@ public class ProfileFragment extends Fragment {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.resetHeader();
             }
-            if (backgroundVideoView != null && !backgroundVideoView.isPlaying()) {
+            if (backgroundVideoView != null && !backgroundVideoView.isPlaying() && backgroundVideoView.getVisibility() == View.VISIBLE) {
                 backgroundVideoView.start();
             }
         } else {
@@ -404,22 +402,15 @@ public class ProfileFragment extends Fragment {
         for (Map.Entry<String, Long> entry : topApps.entrySet()) {
             String pkgName = entry.getKey();
 
-            if (localHiddenApps.contains(pkgName)) {
-                continue;
-            }
-
+            if (localHiddenApps.contains(pkgName)) continue;
             if (limit >= 10) break;
 
             View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, container, false);
-
-            if (limit >= 2) {
-                view.setVisibility(View.GONE);
-            }
+            if (limit >= 2) view.setVisibility(View.GONE);
 
             ImageView iconView = view.findViewById(R.id.app_icon);
             TextView nameView = view.findViewById(R.id.app_name);
             TextView timeView = view.findViewById(R.id.app_time);
-            
             TextView descView = view.findViewById(R.id.app_custom_description);
             ImageView lockView = view.findViewById(R.id.app_lock_icon);
             ImageView optionsBtn = view.findViewById(R.id.btn_app_options);
@@ -458,10 +449,7 @@ public class ProfileFragment extends Fragment {
             ss.setSpan(span, hiddenText.length() - 1, hiddenText.length(), Spanned.SPAN_INCLUSIVE_EXCLUSIVE);
 
             weekTimeText.setText(ss);
-            
-            weekTimeText.setOnClickListener(v -> 
-                Toast.makeText(activity, R.string.user_hid_time, Toast.LENGTH_SHORT).show()
-            );
+            weekTimeText.setOnClickListener(v -> Toast.makeText(activity, R.string.user_hid_time, Toast.LENGTH_SHORT).show());
         } else {
             long minutes = totalVisibleTime / 1000 / 60;
             long hours = minutes / 60;
@@ -482,7 +470,6 @@ public class ProfileFragment extends Fragment {
         final TextView descView = itemView.findViewById(R.id.app_custom_description);
 
         if (optionsBtn == null) return;
-        
         optionsBtn.setVisibility(View.VISIBLE);
 
         boolean isHidden = localHiddenApps.contains(pkgName);
@@ -505,8 +492,7 @@ public class ProfileFragment extends Fragment {
         optionsBtn.setOnClickListener(v -> {
             View popupView = LayoutInflater.from(activity).inflate(R.layout.popup_app_options, null);
             final PopupWindow popupWindow = new PopupWindow(popupView, 
-                    ViewGroup.LayoutParams.WRAP_CONTENT, 
-                    ViewGroup.LayoutParams.WRAP_CONTENT, true);
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true);
             
             popupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             popupWindow.setElevation(10f);
@@ -516,9 +502,7 @@ public class ProfileFragment extends Fragment {
 
             btnHide.setOnClickListener(v1 -> {
                 popupWindow.dismiss();
-                
                 boolean willHide = !localHiddenApps.contains(pkgName);
-                
                 if (willHide) {
                     localHiddenApps.add(pkgName);
                     if (lockIcon != null) lockIcon.setVisibility(View.VISIBLE);
@@ -579,7 +563,6 @@ public class ProfileFragment extends Fragment {
         btnSave.setOnClickListener(v -> {
             String newDesc = editDesc.getText().toString().trim();
             localDescriptions.put(pkgName, newDesc);
-            
             prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
 
             if (descView != null) {
@@ -609,7 +592,6 @@ public class ProfileFragment extends Fragment {
             btnFollow.setBackgroundResource(R.drawable.bg_button_gray);
             btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textGrayDynamic));
         } else {
-            // ИСПРАВЛЕНО НА СТРОКОВЫЙ РЕСУРС
             btnFollow.setText(btnFollow.getContext().getString(R.string.btn_follow));
             btnFollow.setBackgroundResource(R.drawable.bg_button_grapefruit);
             btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textDynamic));
