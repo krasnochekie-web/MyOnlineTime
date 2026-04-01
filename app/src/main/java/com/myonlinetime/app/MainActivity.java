@@ -16,7 +16,6 @@ import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.util.LruCache;
 import android.Manifest;
-import android.content.pm.PackageManager;
 import android.os.Build;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -60,7 +59,7 @@ public class MainActivity extends AppCompatActivity {
     public TextView headerTitle;
     public ImageView headerBackBtn;
     
-    // Иконки меню (добавили настройки)
+    // Иконки меню
     private ImageView iconFeed, iconSearch, iconUsage, iconProfile, iconSettings;
     
     private int currentTab = 0;
@@ -78,7 +77,8 @@ public class MainActivity extends AppCompatActivity {
     private View permissionOverlay;
     private float lastTouchY, lastTouchX;
     private boolean isBottomNavVisible = true;
-@Override
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         // --- ПРОВЕРКА ТЕМЫ ДО ОТРИСОВКИ ИНТЕРФЕЙСА ---
         SharedPreferences appPrefs = getSharedPreferences("AppPrefs", MODE_PRIVATE);
@@ -127,21 +127,14 @@ public class MainActivity extends AppCompatActivity {
         bottomNav = (View) findViewById(R.id.bottom_nav_container);
         
         // ==============================================================
-        // >>> ЛОГИКА КОЛОКОЛЬЧИКА УВЕДОМЛЕНИЙ <<<
+        // >>> ЛОГИКА КОЛОКОЛЬЧИКА УВЕДОМЛЕНИЙ (ИСПРАВЛЕНО) <<<
         // ==============================================================
         ImageView headerBellBtn = findViewById(R.id.header_bell_btn);
         if (headerBellBtn != null) {
             headerBellBtn.setOnClickListener(v -> {
-                getSupportFragmentManager().beginTransaction()
-                        .setCustomAnimations(
-                                R.anim.slide_in_right, // Выезжает справа
-                                R.anim.slide_out_left, // Старый экран уезжает влево
-                                android.R.anim.slide_in_left, // При возврате старый выезжает слева
-                                android.R.anim.slide_out_right // Этот уезжает вправо
-                        )
-                        .replace(R.id.fragment_container, new com.myonlinetime.app.ui.NotificationsHistoryFragment())
-                        .addToBackStack(null)
-                        .commit();
+                if (navigator != null) {
+                    navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
+                }
             });
         }
         // ==============================================================
@@ -247,6 +240,7 @@ public class MainActivity extends AppCompatActivity {
         setIntent(intent); // Обновляем интент
         handleNotificationIntent(intent);
     }
+    
     private void handleNotificationIntent(Intent intent) {
         if (intent != null && intent.hasExtra("open_tab")) {
             String tab = intent.getStringExtra("open_tab");
@@ -298,6 +292,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
+    
     private void showBottomNav() {
         if (bottomNav == null) return;
         bottomNav.animate().translationY(0).setDuration(250).start();
@@ -326,7 +321,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onBackPressed() { handleBackNavigation(); }    
+    public void onBackPressed() { handleBackNavigation(); }  
 
     private void handleBackNavigation() {
         if (navigator.closeSubScreen()) {
@@ -487,5 +482,4 @@ public class MainActivity extends AppCompatActivity {
         int mode = appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), getPackageName());
         return mode == AppOpsManager.MODE_ALLOWED;
     }
-                                               }
-                                                 
+}
