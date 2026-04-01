@@ -8,6 +8,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.text.SpannableString;
 import android.text.Spanned;
@@ -23,6 +24,7 @@ import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.VideoView;
 
 import com.bumptech.glide.Glide;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
@@ -44,12 +46,13 @@ import java.util.Set;
 
 public class ProfileFragment extends Fragment {
 
-    // --- КЭШ ТЕЛЕФОНА ---
     private Set<String> localHiddenApps = new HashSet<>();
     private Map<String, String> localDescriptions = new HashMap<>();
     private SharedPreferences prefs;
     private final Gson gson = new Gson();
-    // ---------------------
+    
+    // Переменная для фонового видео
+    private VideoView backgroundVideoView;
 
     public static ProfileFragment newInstance(String targetUid) {
         ProfileFragment fragment = new ProfileFragment();
@@ -82,9 +85,54 @@ public class ProfileFragment extends Fragment {
         final boolean isMe = targetUid.equals(myUid);
         final String finalTargetUid = targetUid;
 
-        // Инициализируем локальный кэш
         prefs = activity.getSharedPreferences("MyOnlineTime_Cache_" + myUid, Context.MODE_PRIVATE);
         loadLocalCache();
+
+        // =====================================================================
+        // >>> ЧИСТАЯ ЗАГРУЗКА ФОНА ИЗ XML (GIF, PHOTO, VIDEO) <<<
+        // =====================================================================
+        backgroundVideoView = view.findViewById(R.id.profile_custom_background_video);
+        ImageView bgImageView = view.findViewById(R.id.profile_custom_background_image);
+
+        if (isMe) {
+            String customBgPath = activity.prefs.getString("custom_bg_path", null);
+            boolean isVideo = activity.prefs.getBoolean("custom_bg_is_video", false);
+            
+            if (customBgPath != null) {
+                File bgFile = new File(customBgPath);
+                if (bgFile.exists()) {
+                    if (isVideo) {
+                        bgImageView.setVisibility(View.GONE);
+                        backgroundVideoView.setVisibility(View.VISIBLE);
+                        
+                        backgroundVideoView.setVideoPath(customBgPath);
+                        backgroundVideoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                            @Override
+                            public void onPrepared(MediaPlayer mp) {
+                                mp.setLooping(true); // Зацикливаем видео
+                                mp.setVolume(0f, 0f); // Без звука
+                                
+                                // Масштабируем (centerCrop), так как VideoView по умолчанию оставляет черные полосы
+                                float videoRatio = mp.getVideoWidth() / (float) mp.getVideoHeight();
+                                float screenRatio = backgroundVideoView.getWidth() / (float) backgroundVideoView.getHeight();
+                                float scaleX = videoRatio > screenRatio ? videoRatio / screenRatio : 1f;
+                                float scaleY = videoRatio > screenRatio ? 1f : screenRatio / videoRatio;
+                                backgroundVideoView.setScaleX(scaleX);
+                                backgroundVideoView.setScaleY(scaleY);
+                                
+                                backgroundVideoView.start();
+                            }
+                        });
+                    } else {
+                        backgroundVideoView.setVisibility(View.GONE);
+                        bgImageView.setVisibility(View.VISIBLE);
+                        // Glide автоматически "съест" и GIF, и PNG, и JPG
+                        Glide.with(activity).load(bgFile).centerCrop().into(bgImageView);
+                    }
+                }
+            }
+        }
+        // =====================================================================
 
         final TextView nameView = view.findViewById(R.id.profile_name);
         final TextView aboutView = view.findViewById(R.id.profile_about);
@@ -199,7 +247,6 @@ public class ProfileFragment extends Fragment {
                                 }
                             }
 
-                            // ОБНОВЛЕНИЕ КЭША ДАННЫМИ С СЕРВЕРА (ПРИОРИТЕТ СЕРВЕРА)
                             if (isMe) {
                                 boolean cacheChanged = false;
                                 if (user.hiddenApps != null) {
@@ -214,7 +261,6 @@ public class ProfileFragment extends Fragment {
                                     prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
                                     cacheChanged = true;
                                 }
-                                // Если кэш обновился с сервера, незаметно обновляем UI
                                 if (cacheChanged) {
                                     LinearLayout appsContainer = view.findViewById(R.id.profile_apps_container);
                                     StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainer);
@@ -222,7 +268,6 @@ public class ProfileFragment extends Fragment {
                             }
 
                             if (!isMe) {
-                                // Для других пользователей используем их данные напрямую с сервера
                                 if (user.hiddenApps != null) {
                                     localHiddenApps.clear();
                                     localHiddenApps.addAll(user.hiddenApps);
@@ -301,6 +346,22 @@ public class ProfileFragment extends Fragment {
         return view;
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (backgroundVideoView != null && !backgroundVideoView.isPlaying()) {
+            backgroundVideoView.start();
+        }
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (backgroundVideoView != null && backgroundVideoView.isPlaying()) {
+            backgroundVideoView.pause();
+        }
+    }
+
     private void loadLocalCache() {
         localHiddenApps = new HashSet<>(prefs.getStringSet("hidden_apps", new HashSet<>()));
         String descJson = prefs.getString("app_descriptions", "{}");
@@ -321,6 +382,13 @@ public class ProfileFragment extends Fragment {
             if (activity != null) {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.resetHeader();
+            }
+            if (backgroundVideoView != null && !backgroundVideoView.isPlaying()) {
+                backgroundVideoView.start();
+            }
+        } else {
+            if (backgroundVideoView != null && backgroundVideoView.isPlaying()) {
+                backgroundVideoView.pause();
             }
         }
     }
@@ -446,7 +514,6 @@ public class ProfileFragment extends Fragment {
             TextView btnDesc = popupView.findViewById(R.id.menu_description);
             TextView btnHide = popupView.findViewById(R.id.menu_hide);
 
-            // Кнопка "Скрыть / Показать"
             btnHide.setOnClickListener(v1 -> {
                 popupWindow.dismiss();
                 
@@ -461,16 +528,12 @@ public class ProfileFragment extends Fragment {
                     if (lockIcon != null) lockIcon.setVisibility(View.GONE);
                 }
 
-                // Сохраняем в кэш
                 prefs.edit().putStringSet("hidden_apps", localHiddenApps).apply();
                 
-                // Отправляем на сервер
                 if (activity.vpsToken != null) {
                     VpsApi.setAppVisibility(activity.vpsToken, pkgName, willHide, new VpsApi.Callback() {
                         @Override public void onSuccess(String result) {}
-                        @Override public void onError(String error) {
-                            // Опционально: показать ошибку или откатить кэш, если сервер недоступен
-                        }
+                        @Override public void onError(String error) {}
                     });
                 }
             });
@@ -497,14 +560,12 @@ public class ProfileFragment extends Fragment {
         EditText editDesc = dialog.findViewById(R.id.dialog_edit_description);
         TextView titleView = dialog.findViewById(R.id.dialog_title);
 
-        // Получаем красивое имя приложения
         PackageManager pm = activity.getPackageManager();
         String appName = pkgName;
         try {
             appName = pm.getApplicationLabel(pm.getApplicationInfo(pkgName, 0)).toString();
         } catch (Exception e) {}
 
-        // Устанавливаем заголовок "Описание НазваниеПриложения"
         titleView.setText(activity.getString(R.string.action_description) + " " + appName);
 
         String existingDesc = localDescriptions.get(pkgName);
@@ -519,7 +580,6 @@ public class ProfileFragment extends Fragment {
             String newDesc = editDesc.getText().toString().trim();
             localDescriptions.put(pkgName, newDesc);
             
-            // Сохраняем в кэш телефона
             prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
 
             if (descView != null) {
@@ -532,7 +592,6 @@ public class ProfileFragment extends Fragment {
             }
             dialog.dismiss();
             
-            // Отправляем на сервер
             if (activity.vpsToken != null) {
                 VpsApi.setAppDescription(activity.vpsToken, pkgName, newDesc, new VpsApi.Callback() {
                     @Override public void onSuccess(String result) {}
@@ -550,7 +609,8 @@ public class ProfileFragment extends Fragment {
             btnFollow.setBackgroundResource(R.drawable.bg_button_gray);
             btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textGrayDynamic));
         } else {
-            btnFollow.setText("Подписаться"); // Или R.string.btn_follow, как было
+            // ИСПРАВЛЕНО НА СТРОКОВЫЙ РЕСУРС
+            btnFollow.setText(btnFollow.getContext().getString(R.string.btn_follow));
             btnFollow.setBackgroundResource(R.drawable.bg_button_grapefruit);
             btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textDynamic));
         }
