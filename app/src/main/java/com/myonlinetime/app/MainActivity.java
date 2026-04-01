@@ -126,6 +126,26 @@ public class MainActivity extends AppCompatActivity {
         headerBackBtn = (ImageView) findViewById(R.id.header_back_btn);
         bottomNav = (View) findViewById(R.id.bottom_nav_container);
         
+        // ==============================================================
+        // >>> ЛОГИКА КОЛОКОЛЬЧИКА УВЕДОМЛЕНИЙ <<<
+        // ==============================================================
+        ImageView headerBellBtn = findViewById(R.id.header_bell_btn);
+        if (headerBellBtn != null) {
+            headerBellBtn.setOnClickListener(v -> {
+                getSupportFragmentManager().beginTransaction()
+                        .setCustomAnimations(
+                                R.anim.slide_in_right, // Выезжает справа
+                                R.anim.slide_out_left, // Старый экран уезжает влево
+                                android.R.anim.slide_in_left, // При возврате старый выезжает слева
+                                android.R.anim.slide_out_right // Этот уезжает вправо
+                        )
+                        .replace(R.id.fragment_container, new com.myonlinetime.app.ui.NotificationsHistoryFragment())
+                        .addToBackStack(null)
+                        .commit();
+            });
+        }
+        // ==============================================================
+
         iconFeed = (ImageView) findViewById(R.id.icon_feed); 
         iconSearch = (ImageView) findViewById(R.id.icon_search);
         iconProfile = (ImageView) findViewById(R.id.icon_profile); 
@@ -227,7 +247,6 @@ public class MainActivity extends AppCompatActivity {
         setIntent(intent); // Обновляем интент
         handleNotificationIntent(intent);
     }
-
     private void handleNotificationIntent(Intent intent) {
         if (intent != null && intent.hasExtra("open_tab")) {
             String tab = intent.getStringExtra("open_tab");
