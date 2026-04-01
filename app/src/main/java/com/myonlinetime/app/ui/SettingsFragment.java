@@ -96,21 +96,14 @@ public class SettingsFragment extends Fragment {
         setupThemeButtons();
 
         // Общие настройки
-        // === ЛОГИКА ОТКРЫТИЯ ЭКРАНА УВЕДОМЛЕНИЙ ===
+        // === ИСПРАВЛЕННАЯ ЛОГИКА ОТКРЫТИЯ ЭКРАНА УВЕДОМЛЕНИЙ ===
         view.findViewById(R.id.btn_notifications).setOnClickListener(v -> {
-            if (activity != null) {
-                activity.getSupportFragmentManager().beginTransaction()
-                        .setCustomAnimations(
-                                R.anim.slide_in_bottom,
-                                R.anim.slide_out_top,
-                                R.anim.slide_in_top,
-                                R.anim.slide_out_bottom
-                        )
-                        .replace(R.id.fragment_container, new NotificationsFragment())
-                        .addToBackStack(null)
-                        .commit();
+            if (activity != null && activity.navigator != null) {
+                // Твой Навигатор сам сделает все нужные анимации!
+                activity.navigator.openSubScreen(new NotificationsFragment());
             }
         });
+        // =======================================================
         
         view.findViewById(R.id.btn_saved).setOnClickListener(v -> { /* Пока пусто */ });
         view.findViewById(R.id.btn_clear_cache).setOnClickListener(v -> clearAppCache());
