@@ -32,7 +32,6 @@
         <item>Last Month</item>
         <item>Last Year</item>
     </string-array>
-
     <!-- НОВЫЕ СТРОКИ: Интерфейс -->
     <string name="edit_profile_title">Edit Profile</string>
     <string name="hint_change_photo">Click the button below to change photo</string>
@@ -73,6 +72,13 @@
     <string name="app_hidden">Hidden</string>
     <string name="user_hid_time">User hid their time</string>
     <string name="hidden_time_placeholder">XXXX</string>
+<string name="notif_channel_name">Weekly Summary</string>
+    <string name="notif_channel_desc">Your weekly screen time report</string>
+    <string name="notif_time_less">Your screen time this week is %1$s less than last week! </string>
+    <string name="notif_time_more">Your screen time this week is %1$s more than last week! </string>
+    <string name="notif_time_equal">Your screen time this week is exactly the same as last week! </string>
+    <string name="notif_action_click">Tap to view.</string>
+    <string name="notif_time_format">%1$dh %2$dm</string>
 <string name="btn_save">Save</string>
     <string name="permission_title">Enable access for My Online Time</string>
     <string name="permission_rationale">Usage access is required to display your time. Tap the <font color="#FA8072">\"Enable access\"</font> button, select <font color="#FA8072">My Online Time</font> in the app list, and turn on the access.</string>
