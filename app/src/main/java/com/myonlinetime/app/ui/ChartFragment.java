@@ -1,17 +1,22 @@
 package com.myonlinetime.app.ui;
 
+import android.app.Dialog;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.fragment.app.Fragment;
@@ -67,6 +72,16 @@ public class ChartFragment extends Fragment {
         btnNext = view.findViewById(R.id.btn_next_day);
         recyclerView = view.findViewById(R.id.chart_apps_list);
 
+        // =========================================================================
+        // >>> ВЕШАЕМ КЛИК НА КНОПКУ "КАК ЭТО РАБОТАЕТ" <<<
+        // =========================================================================
+        View howItWorksBtn = view.findViewById(R.id.how_it_works_btn);
+        if (howItWorksBtn != null) {
+            // Передаем false, так как это экран графиков
+            howItWorksBtn.setOnClickListener(v -> showHowItWorksDialog(false));
+        }
+        // =========================================================================
+
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         
         // ВОТ ЗДЕСЬ ДОБАВЛЕН ФЛАГ false, ЧТОБЫ КОМПИЛЯТОР НЕ РУГАЛСЯ!
@@ -86,6 +101,37 @@ public class ChartFragment extends Fragment {
         loadWeeklyData();
         return view;
     }
+
+    // =====================================================================
+    // >>> МЕТОД ДЛЯ ПОКАЗА ДИАЛОГА "КАК ЭТО РАБОТАЕТ" <<<
+    // =====================================================================
+    private void showHowItWorksDialog(boolean isAllTime) {
+        final Dialog dialog = new Dialog(requireContext());
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setContentView(R.layout.dialog_how_it_works);
+        
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            dialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog;
+        }
+
+        TextView descText = dialog.findViewById(R.id.dialog_description_text);
+        ImageView btnClose = dialog.findViewById(R.id.dialog_close_btn);
+        Button btnOk = dialog.findViewById(R.id.dialog_ok_btn);
+
+        if (isAllTime) {
+            descText.setText(getString(R.string.dialog_how_it_works_all_time));
+        } else {
+            descText.setText(getString(R.string.dialog_how_it_works_charts));
+        }
+
+        btnClose.setOnClickListener(v -> dialog.dismiss());
+        btnOk.setOnClickListener(v -> dialog.dismiss());
+
+        dialog.show();
+    }
+    // =====================================================================
 
     private void selectDay(int index) {
         if (weeklyData.isEmpty() || index < 0 || index > 6) return;
