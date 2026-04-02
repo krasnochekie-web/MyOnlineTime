@@ -322,9 +322,8 @@ public class ProfileFragment extends Fragment {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.resetHeader();
                 activity.updateGlobalBackground(true);
-            } else {
-                activity.updateGlobalBackground(false);
             }
+            // ИСПРАВЛЕНИЕ: Мы удалили блок else, чтобы при скрытии профиля фон не выключался.
         }
     }
     // ------------------------------------
