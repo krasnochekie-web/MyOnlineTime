@@ -23,7 +23,6 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 
 import java.io.File;
-import java.util.Locale;
 
 public class SettingsFragment extends Fragment {
 
@@ -103,7 +102,13 @@ public class SettingsFragment extends Fragment {
         });
         
         view.findViewById(R.id.btn_saved).setOnClickListener(v -> { /* Пока пусто */ });
-        view.findViewById(R.id.btn_clear_cache).setOnClickListener(v -> clearAppCache());
+        
+        // --- ОТКРЫВАЕМ НОВЫЙ ЭКРАН ВМЕСТО ВЫЗОВА МЕТОДА ОЧИСТКИ ---
+        view.findViewById(R.id.btn_clear_cache).setOnClickListener(v -> {
+            if (activity != null && activity.navigator != null) {
+                activity.navigator.openSubScreen(new ClearCacheFragment());
+            }
+        });
 
         // Прочее
         View.OnClickListener openSiteListener = v -> {
@@ -188,74 +193,6 @@ public class SettingsFragment extends Fragment {
         }
     }
 
-    private void clearAppCache() {
-        try {
-            Context context = requireContext();
-            long sizeBefore = getDirSize(context.getCacheDir());
-            
-            deleteDir(context.getCacheDir());
-            if (context.getExternalCacheDir() != null) {
-                sizeBefore += getDirSize(context.getExternalCacheDir());
-                deleteDir(context.getExternalCacheDir());
-            }
-
-            double sizeInMb = (double) sizeBefore / (1024 * 1024);
-            String formattedSize = String.format(Locale.getDefault(), "%.2f", sizeInMb);
-            
-            Toast.makeText(context, getString(R.string.toast_cache_cleared, formattedSize), Toast.LENGTH_LONG).show();
-
-        } catch (Exception e) {
-            Toast.makeText(getContext(), "Ошибка при очистке кэша", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private boolean deleteDir(File dir) {
-        if (dir != null && dir.isDirectory()) {
-            String[] children = dir.list();
-            if (children != null) {
-                for (String child : children) {
-                    boolean success = deleteDir(new File(dir, child));
-                    if (!success) {
-                        return false;
-                    }
-                }
-            }
-            return dir.delete();
-        } else if (dir != null && dir.isFile()) {
-            return dir.delete();
-        }
-        return false;
-    }
-
-    private long getDirSize(File dir) {
-        long size = 0;
-        if (dir != null && dir.isDirectory()) {
-            File[] files = dir.listFiles();
-            if (files != null) {
-                for (File file : files) {
-                    if (file.isFile()) {
-                        size += file.length();
-                    } else if (file.isDirectory()) {
-                        size += getDirSize(file);
-                    }
-                }
-            }
-        } else if (dir != null && dir.isFile()) {
-            size = dir.length();
-        }
-        return size;
-    }
-
-    // ========================================================
-    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
-    // ========================================================
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(false); 
-        }
-    }
-    // ========================================================
-
-} // <-- Конец класса SettingsFragment
+    // ИСПРАВЛЕНИЕ: Методы очистки (clearAppCache, deleteDir, getDirSize) удалены!
+    // ИСПРАВЛЕНИЕ: Метод onResume (жесткое выключение фона) удален!
+}
