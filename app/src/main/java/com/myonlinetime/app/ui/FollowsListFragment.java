@@ -90,5 +90,15 @@ public class FollowsListFragment extends Fragment {
         }
     }
 
-    // ИСПРАВЛЕНИЕ: Метод onResume (жесткое выключение фона) удален!
+    // ========================================================
+    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ========================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+        }
+    }
+    // ========================================================
 }
