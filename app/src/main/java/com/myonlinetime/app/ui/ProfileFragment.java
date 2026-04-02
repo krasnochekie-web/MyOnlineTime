@@ -9,6 +9,8 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ImageSpan;
@@ -41,6 +43,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executors;
 
 public class ProfileFragment extends Fragment {
 
@@ -78,7 +81,6 @@ public class ProfileFragment extends Fragment {
         final String finalTargetUid = targetUid;
 
         prefs = activity.getSharedPreferences("MyOnlineTime_Cache_" + myUid, Context.MODE_PRIVATE);
-        loadLocalCache();
 
         final TextView nameView = view.findViewById(R.id.profile_name);
         final TextView aboutView = view.findViewById(R.id.profile_about);
@@ -120,20 +122,32 @@ public class ProfileFragment extends Fragment {
 
         if (!isMe) btnBack.setVisibility(View.VISIBLE);
 
+        // ОПТИМИЗАЦИЯ 1: Асинхронная загрузка кэша без фризов
+        loadLocalCacheAsync(() -> {
+            if (isMe && isAdded()) {
+                // Вызываем подгрузку статистики только после того, как кэш прогрузился
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (!isAdded()) return;
+                    StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
+                }, 150); // Уменьшили задержку, так как мы уже в фоне
+            }
+        });
+
         if (isMe) {
             nameView.setText(activity.prefs.getString("my_nickname", account.getDisplayName()));
             aboutView.setText(activity.prefs.getString("my_about", ""));
 
+            // ОПТИМИЗАЦИЯ 2: Убрали блокирующий file.exists(). Glide сам проверит файл в фоне!
             Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + myUid);
             if (cachedAvatar != null) {
                 Glide.with(activity).load(cachedAvatar).circleCrop().into(avatarView);
             } else {
                 File file = new File(activity.getFilesDir(), "avatar_" + myUid + ".png");
-                if (file.exists()) {
-                    Glide.with(activity).load(file).circleCrop().into(avatarView);
-                } else {
-                    avatarView.setBackgroundResource(R.drawable.bg_edit_circle);
-                }
+                Glide.with(activity)
+                     .load(file)
+                     .circleCrop()
+                     .error(R.drawable.bg_edit_circle) // Если файла нет, Glide сам поставит заглушку
+                     .into(avatarView);
             }
 
             btnEdit.setVisibility(View.VISIBLE);
@@ -143,12 +157,6 @@ public class ProfileFragment extends Fragment {
                     nameView.getText().toString(),
                     aboutView.getText().toString()
             )));
-
-            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                if (!isAdded()) return;
-                LinearLayout appsContainer = view.findViewById(R.id.profile_apps_container);
-                StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainer);
-            }, 300);
 
         } else {
             nameView.setText(activity.getString(R.string.loading));
@@ -181,14 +189,20 @@ public class ProfileFragment extends Fragment {
                             if (user.photo != null && user.photo.length() > 10) {
                                 File localAvatar = new File(activity.getFilesDir(), "avatar_" + myUid + ".png");
                                 if (isMe && localAvatar.exists() && user.photo.startsWith("http")) {
+                                    // Ничего не делаем, локальная свежее
                                 } else {
                                     if (user.photo.startsWith("http")) {
                                         Glide.with(activity).load(user.photo).circleCrop().into(avatarView);
                                     } else {
-                                        try {
-                                            byte[] imageByteArray = android.util.Base64.decode(user.photo, android.util.Base64.DEFAULT);
-                                            Glide.with(activity).asBitmap().load(imageByteArray).circleCrop().into(avatarView);
-                                        } catch (Exception e) {}
+                                        // ОПТИМИЗАЦИЯ 3: Тяжелый Base64 декодируем в фоне!
+                                        Executors.newSingleThreadExecutor().execute(() -> {
+                                            try {
+                                                byte[] imageByteArray = android.util.Base64.decode(user.photo, android.util.Base64.DEFAULT);
+                                                new Handler(Looper.getMainLooper()).post(() -> {
+                                                    if (isAdded()) Glide.with(activity).asBitmap().load(imageByteArray).circleCrop().into(avatarView);
+                                                });
+                                            } catch (Exception e) {}
+                                        });
                                     }
                                 }
                             }
@@ -208,8 +222,7 @@ public class ProfileFragment extends Fragment {
                                     cacheChanged = true;
                                 }
                                 if (cacheChanged) {
-                                    LinearLayout appsContainer = view.findViewById(R.id.profile_apps_container);
-                                    StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainer);
+                                    StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
                                 }
                             }
 
@@ -222,8 +235,7 @@ public class ProfileFragment extends Fragment {
                                     localDescriptions.clear();
                                     localDescriptions.putAll(user.appDescriptions);
                                 }
-                                LinearLayout appsContainer = view.findViewById(R.id.profile_apps_container);
-                                renderOtherUserStats(user.topApps, appsContainer, activity, weekTimeText);
+                                renderOtherUserStats(user.topApps, appsContainerLocal, activity, weekTimeText);
                             }
 
                         } else if (!isMe) nameView.setText(activity.getString(R.string.new_user));
@@ -317,16 +329,27 @@ public class ProfileFragment extends Fragment {
     }
     // ------------------------------------
 
-    private void loadLocalCache() {
-        localHiddenApps = new HashSet<>(prefs.getStringSet("hidden_apps", new HashSet<>()));
-        String descJson = prefs.getString("app_descriptions", "{}");
-        try {
-            Map<String, String> map = gson.fromJson(descJson, new TypeToken<Map<String, String>>(){}.getType());
-            if (map != null) {
-                localDescriptions.clear();
-                localDescriptions.putAll(map);
-            }
-        } catch (Exception e) { e.printStackTrace(); }
+    // ОПТИМИЗАЦИЯ: Вынесли тяжелый парсинг JSON в фон
+    private void loadLocalCacheAsync(Runnable onLoaded) {
+        Executors.newSingleThreadExecutor().execute(() -> {
+            Set<String> hidden = new HashSet<>(prefs.getStringSet("hidden_apps", new HashSet<>()));
+            String descJson = prefs.getString("app_descriptions", "{}");
+            Map<String, String> map = null;
+            try {
+                map = gson.fromJson(descJson, new TypeToken<Map<String, String>>(){}.getType());
+            } catch (Exception e) { e.printStackTrace(); }
+
+            final Map<String, String> finalMap = map;
+            new Handler(Looper.getMainLooper()).post(() -> {
+                localHiddenApps.clear();
+                localHiddenApps.addAll(hidden);
+                if (finalMap != null) {
+                    localDescriptions.clear();
+                    localDescriptions.putAll(finalMap);
+                }
+                if (onLoaded != null) onLoaded.run();
+            });
+        });
     }
 
     private void renderOtherUserStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText) {
