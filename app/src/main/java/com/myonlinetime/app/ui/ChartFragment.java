@@ -100,12 +100,18 @@ public class ChartFragment extends Fragment {
         return view;
     }
 
-    // ИСПРАВЛЕНИЕ: Метод onResume с activity.updateGlobalBackground(false) удален!
-    // Теперь фон не гаснет мгновенно при входе на эту вкладку.
+    // ========================================================
+    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ========================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+        }
+    }
+    // ========================================================
 
-    // =====================================================================
-    // >>> МЕТОД ДЛЯ ПОКАЗА ДИАЛОГА "КАК ЭТО РАБОТАЕТ" <<<
-    // =====================================================================
     private void showHowItWorksDialog(boolean isAllTime) {
         final Dialog dialog = new Dialog(requireContext());
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -130,7 +136,6 @@ public class ChartFragment extends Fragment {
 
         dialog.show();
     }
-    // =====================================================================
 
     private void selectDay(int index) {
         if (weeklyData.isEmpty() || index < 0 || index > 6) return;
@@ -223,7 +228,7 @@ public class ChartFragment extends Fragment {
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
                 barChart.setData(barMillis, dayLabels);
-                selectDay(6); // Сразу выбираем сегодняшний день
+                selectDay(6); 
             });
         });
     }
