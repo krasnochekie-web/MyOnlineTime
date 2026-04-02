@@ -87,7 +87,6 @@ public class AllTimeFragment extends Fragment {
         // =========================================================================
         View howItWorksBtn = view.findViewById(R.id.how_it_works_btn);
         if (howItWorksBtn != null) {
-            // Передаем true, так как это экран "За всё время"
             howItWorksBtn.setOnClickListener(v -> showHowItWorksDialog(true));
         }
         // =========================================================================
@@ -95,7 +94,6 @@ public class AllTimeFragment extends Fragment {
         recyclerView = view.findViewById(R.id.all_time_apps_list);
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         
-        // ВОТ ЗДЕСЬ ДОБАВЛЕН ФЛАГ false, ЧТОБЫ КОМПИЛЯТОР НЕ РУГАЛСЯ!
         adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, false);
         
         // Оборачиваем твой адаптер вместе с плашкой и отдаем списку
@@ -107,8 +105,17 @@ public class AllTimeFragment extends Fragment {
         return view;
     }
 
-    // ИСПРАВЛЕНИЕ: Мы полностью удалили метод onResume, 
-    // чтобы экран не выключал фон мгновенно и не создавал мерцания.
+    // ========================================================
+    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ========================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+        }
+    }
+    // ========================================================
 
     // =====================================================================
     // >>> МЕТОД ДЛЯ ПОКАЗА ДИАЛОГА "КАК ЭТО РАБОТАЕТ" <<<
@@ -133,7 +140,6 @@ public class AllTimeFragment extends Fragment {
             descText.setText(getString(R.string.dialog_how_it_works_charts));
         }
 
-        // Оставили закрытие только по кнопке Ок
         btnOk.setOnClickListener(v -> dialog.dismiss());
 
         dialog.show();
@@ -141,7 +147,6 @@ public class AllTimeFragment extends Fragment {
     // =====================================================================
     
     private void loadAndCalculateStats() {
-        // УБРАЛИ ХАРДКОД! Используем твои готовые форматы из strings.xml
         mainValTxt.setText(getString(R.string.format_days_hours, 0, 0));
         subValTxt.setText(getString(R.string.format_total_hours_mins, 0, 0));
         yesterdayValTxt.setText(getString(R.string.format_plus_hours_mins, 0, 0));
@@ -350,8 +355,6 @@ public class AllTimeFragment extends Fragment {
         return defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
     }
 
-    // --- НАШ КЛАСС-ОБЕРТКА ---
-    // Он вставляет плашку нулевым элементом прямо в RecyclerView
     private class HeaderWrapperAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         private final View headerView;
         private final RecyclerView.Adapter innerAdapter;
@@ -360,7 +363,6 @@ public class AllTimeFragment extends Fragment {
             this.headerView = headerView;
             this.innerAdapter = innerAdapter;
 
-            // Передаем обновления данных от твоего адаптера к нашему
             this.innerAdapter.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
                 @Override public void onChanged() { notifyDataSetChanged(); }
                 @Override public void onItemRangeChanged(int positionStart, int itemCount) { notifyItemRangeChanged(positionStart + 1, itemCount); }
@@ -397,7 +399,7 @@ public class AllTimeFragment extends Fragment {
 
         @Override
         public int getItemCount() {
-            return innerAdapter.getItemCount() + 1; // +1 место для плашки
+            return innerAdapter.getItemCount() + 1;
         }
     }
 }
