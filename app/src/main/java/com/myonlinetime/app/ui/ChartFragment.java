@@ -77,14 +77,12 @@ public class ChartFragment extends Fragment {
         // =========================================================================
         View howItWorksBtn = view.findViewById(R.id.how_it_works_btn);
         if (howItWorksBtn != null) {
-            // Передаем false, так как это экран графиков
             howItWorksBtn.setOnClickListener(v -> showHowItWorksDialog(false));
         }
         // =========================================================================
 
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         
-        // ВОТ ЗДЕСЬ ДОБАВЛЕН ФЛАГ false, ЧТОБЫ КОМПИЛЯТОР НЕ РУГАЛСЯ!
         adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, false);
         recyclerView.setAdapter(adapter);
 
@@ -101,7 +99,20 @@ public class ChartFragment extends Fragment {
         loadWeeklyData();
         return view;
     }
-// =====================================================================
+
+    // ========================================================
+    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ========================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+        }
+    }
+    // ========================================================
+
+    // =====================================================================
     // >>> МЕТОД ДЛЯ ПОКАЗА ДИАЛОГА "КАК ЭТО РАБОТАЕТ" <<<
     // =====================================================================
     private void showHowItWorksDialog(boolean isAllTime) {
@@ -124,12 +135,12 @@ public class ChartFragment extends Fragment {
             descText.setText(getString(R.string.dialog_how_it_works_charts));
         }
 
-        // Оставили закрытие только по кнопке Ок
         btnOk.setOnClickListener(v -> dialog.dismiss());
 
         dialog.show();
     }
     // =====================================================================
+
     private void selectDay(int index) {
         if (weeklyData.isEmpty() || index < 0 || index > 6) return;
         currentIndex = index;
