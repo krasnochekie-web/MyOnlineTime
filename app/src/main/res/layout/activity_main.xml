@@ -78,6 +78,7 @@
                 android:textColor="@color/textWhiteStatic"/>
 
             <FrameLayout
+                android:id="@+id/header_bell_container"
                 android:layout_width="28dp"
                 android:layout_height="28dp"
                 android:clipChildren="false"
