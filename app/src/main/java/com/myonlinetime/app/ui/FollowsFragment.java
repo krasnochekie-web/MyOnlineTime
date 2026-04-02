@@ -60,7 +60,7 @@ public class FollowsFragment extends Fragment {
         // Находим ViewPager2
         final ViewPager2 viewPager = mainLayout.findViewById(R.id.follows_view_pager);
 
-        // Устанавливаем адаптер (он создает два фрагмента: один для подписчиков, другой для подписок)
+        // Устанавливаем адаптер
         viewPager.setAdapter(new FragmentStateAdapter(this) {
             @NonNull
             @Override
@@ -82,14 +82,14 @@ public class FollowsFragment extends Fragment {
                 // Обновляем шапку
                 activity.headerTitle.setText(activity.getString(isFollowers ? R.string.followers : R.string.following));
                 
-                // Умная смена цвета текста: бордовый для активной, серый для неактивной
+                // Умная смена цвета текста
                 int activeColor = ContextCompat.getColor(activity, R.color.burgundyRed);
                 int inactiveColor = ContextCompat.getColor(activity, R.color.tabTextInactive);
                 
                 txtFollowers.setTextColor(isFollowers ? activeColor : inactiveColor);
                 txtFollowing.setTextColor(!isFollowers ? activeColor : inactiveColor);
 
-                // Обновляем остальной UI ваших кастомных вкладок
+                // Обновляем остальной UI
                 txtFollowers.setSelected(isFollowers);
                 txtFollowing.setSelected(!isFollowers);
                 lineFollowers.setSelected(isFollowers);
@@ -99,7 +99,7 @@ public class FollowsFragment extends Fragment {
             }
         });
 
-        // Слушаем КЛИКИ по вкладкам (заставляем ViewPager свайпнуться)
+        // Слушаем КЛИКИ по вкладкам
         mainLayout.findViewById(R.id.tab_followers).setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { viewPager.setCurrentItem(0, true); }
         });
@@ -110,7 +110,7 @@ public class FollowsFragment extends Fragment {
         // Устанавливаем начальную вкладку
         viewPager.setCurrentItem(startOnFollowers ? 0 : 1, false);
 
-        // Загружаем только циферки (счетчики)
+        // Загружаем счетчики
         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
         if(acct != null) {
             VpsApi.authenticateWithGoogle(acct.getIdToken(), new VpsApi.LoginCallback() {
@@ -135,5 +135,18 @@ public class FollowsFragment extends Fragment {
         }
 
         return mainLayout; 
+    } // <-- Конец onCreateView
+
+    // ========================================================
+    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ========================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+        }
     }
-}
+    // ========================================================
+
+} // <-- Конец класса FollowsFragment
