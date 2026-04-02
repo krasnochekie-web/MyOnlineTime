@@ -75,25 +75,6 @@ public class StatsHostFragment extends Fragment {
         return view;
     } // <-- Конец onCreateView
 
-    // ========================================================
-    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
-    // ========================================================
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(false); 
-        }
-    }
-
-    @Override
-    public void onHiddenChanged(boolean hidden) {
-        super.onHiddenChanged(hidden);
-        if (!hidden && getActivity() instanceof MainActivity) {
-            // ГАРАНТИРУЕМ ВЫКЛЮЧЕНИЕ ФОНА ПРИ ВОЗВРАТЕ НА ВКЛАДКУ
-            ((MainActivity) getActivity()).updateGlobalBackground(false); 
-        }
-    }
-    // ========================================================
-
-} // <-- Конец класса StatsHostFragment
+    // ИСПРАВЛЕНИЕ: Методы onResume и onHiddenChanged удалены!
+    // Фрагмент больше не выключает видео-фон жестко и мгновенно.
+}
