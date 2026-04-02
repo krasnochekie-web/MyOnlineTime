@@ -29,6 +29,18 @@ public class FeedFragment extends Fragment {
         }
 
         return view;
-    }
-}
+    } // <-- Здесь заканчивается onCreateView
 
+    // ========================================================
+    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ========================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); // Выключает видео-фон
+        }
+    }
+    // ========================================================
+
+} // <-- А здесь заканчивается сам класс FeedFragment
