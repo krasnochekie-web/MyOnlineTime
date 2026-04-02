@@ -43,7 +43,7 @@
         android:layout_height="wrap_content"
         android:background="@drawable/bg_gradient_header"
         android:orientation="vertical"
-        fitsSystemWindows="true"
+        android:fitsSystemWindows="true"
         android:elevation="0dp"
         app:layout_insetEdge="top">
 
@@ -77,15 +77,38 @@
                 android:textStyle="bold"
                 android:textColor="@color/textWhiteStatic"/>
 
-            <ImageView
-                android:id="@+id/header_bell_btn"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:padding="2dp"
-                android:src="@drawable/ic_bell"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="?attr/selectableItemBackgroundBorderless"/>
+            <FrameLayout
+                android:id="@+id/header_bell_container"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:clipToPadding="false">
+
+                <ImageView
+                    android:id="@+id/header_bell_btn"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:padding="2dp"
+                    android:src="@drawable/ic_bell"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="?attr/selectableItemBackgroundBorderless"/>
+
+                <TextView
+                    android:id="@+id/header_bell_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top|end"
+                    android:layout_marginTop="-4dp"
+                    android:layout_marginEnd="-6dp"
+                    android:background="@drawable/bg_notification_badge"
+                    android:gravity="center"
+                    android:minWidth="16dp"
+                    android:textColor="@color/textWhiteStatic" 
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </FrameLayout>
 
         </LinearLayout>
     </LinearLayout>
