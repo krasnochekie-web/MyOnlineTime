@@ -9,7 +9,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 
-// Импортируем новые крутые классы
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -19,7 +18,7 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 import com.myonlinetime.app.models.User;
-import com.myonlinetime.app.adapters.UserListAdapter; // Наш новый адаптер
+import com.myonlinetime.app.adapters.UserListAdapter;
 
 import java.util.List;
 
@@ -29,7 +28,9 @@ public class SearchFragment extends Fragment {
     private RecyclerView resultsList; 
     private UserListAdapter adapter;  
 
-    public SearchFragment() {}
+    public SearchFragment() {
+        // Обязательный пустой конструктор
+    }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -39,27 +40,24 @@ public class SearchFragment extends Fragment {
             activity.resetHeader();
         }
 
-        // Подгружаем дизайн из XML
         View view = inflater.inflate(R.layout.layout_search, container, false);
         
         EditText searchInput = view.findViewById(R.id.search_input);
         resultsList = view.findViewById(R.id.search_results_list);
 
-        // Настраиваем RecyclerView (говорим ему быть вертикальным списком)
+        // Настройка списка
         resultsList.setLayoutManager(new LinearLayoutManager(activity));
-
-        // Подключаем Адаптер
         adapter = new UserListAdapter(activity);
         resultsList.setAdapter(adapter);
 
-        // Восстанавливаем старый поиск при повороте/возврате
+        // Восстановление поиска
         if (lastSearchQuery.length() > 0) {
             searchInput.setText(lastSearchQuery);
             searchInput.setSelection(lastSearchQuery.length());
             performSearch(lastSearchQuery, activity);
         }
 
-        // Слушаем ввод текста
+        // Слушатель ввода
         searchInput.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
@@ -80,8 +78,10 @@ public class SearchFragment extends Fragment {
             if (activity != null) {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.resetHeader();
-                // ИСПРАВЛЕНИЕ: Мы удалили мгновенное выключение фона отсюда.
-                // Экрану достаточно того, что находится в onResume!
+                
+                // Если твоя навигация использует show/hide, 
+                // на всякий случай дублируем выключение здесь
+                activity.updateGlobalBackground(false);
             }
         }
     }
@@ -105,10 +105,13 @@ public class SearchFragment extends Fragment {
                 });
             }
         } else {
-            adapter.setUsers(null); // Очищаем список, если текст стерли
+            adapter.setUsers(null);
         }
     }
 
+    // ========================================================
+    // НАШ ПРЕДОХРАНИТЕЛЬ: Гасим фон сразу при входе
+    // ========================================================
     @Override
     public void onResume() {
         super.onResume();
@@ -116,5 +119,4 @@ public class SearchFragment extends Fragment {
             ((MainActivity) getActivity()).updateGlobalBackground(false); 
         }
     }
-
 }
