@@ -245,21 +245,34 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Если фон тот же самый, просто продолжаем воспроизведение (никаких рывков!)
+        // === ИСПРАВЛЕНИЕ: Возвращаем видимость фону, если путь не изменился ===
         if (path.equals(currentBgPath)) {
-            if (isVideo && exoPlayer != null && !exoPlayer.isPlaying()) {
-                exoPlayer.play();
+            if (isVideo) {
+                if (globalImageView != null) globalImageView.setVisibility(View.GONE);
+                if (playerView != null) playerView.setVisibility(View.VISIBLE);
+                if (exoPlayer != null && !exoPlayer.isPlaying()) {
+                    exoPlayer.play();
+                }
+            } else {
+                if (playerView != null) playerView.setVisibility(View.GONE);
+                if (exoPlayer != null && exoPlayer.isPlaying()) {
+                    exoPlayer.pause();
+                }
+                if (globalImageView != null) {
+                    globalImageView.setVisibility(View.VISIBLE);
+                }
             }
             return;
         }
+        // ======================================================================
 
         currentBgPath = path;
         File file = new File(path);
         if (!file.exists()) return;
 
         if (isVideo) {
-            globalImageView.setVisibility(View.GONE);
-            playerView.setVisibility(View.VISIBLE);
+            if (globalImageView != null) globalImageView.setVisibility(View.GONE);
+            if (playerView != null) playerView.setVisibility(View.VISIBLE);
             
             // Загружаем новое видео
             MediaItem mediaItem = MediaItem.fromUri(Uri.fromFile(file));
@@ -271,8 +284,10 @@ public class MainActivity extends AppCompatActivity {
             if (playerView != null) playerView.setVisibility(View.GONE);
             if (exoPlayer != null) exoPlayer.pause();
             
-            globalImageView.setVisibility(View.VISIBLE);
-            Glide.with(this).load(file).centerCrop().into(globalImageView);
+            if (globalImageView != null) {
+                globalImageView.setVisibility(View.VISIBLE);
+                Glide.with(this).load(file).centerCrop().into(globalImageView);
+            }
         }
     }
     
@@ -545,22 +560,29 @@ public class MainActivity extends AppCompatActivity {
                     return; 
                 }
 
+                // === ИСПРАВЛЕНИЕ ДЛЯ GIF ===
                 String mimeType = getContentResolver().getType(selectedFileUri);
                 boolean isVideo = (mimeType != null && mimeType.startsWith("video/"));
+                boolean isGif = (mimeType != null && mimeType.contains("gif"));
+                
                 if (mimeType == null) {
-                    String path = selectedFileUri.toString().toLowerCase();
-                    isVideo = path.contains(".mp4") || path.contains(".mkv") || path.contains(".avi") || path.contains(".mov");
+                    String pathLower = selectedFileUri.toString().toLowerCase();
+                    isVideo = pathLower.contains(".mp4") || pathLower.contains(".mkv") || pathLower.contains(".avi") || pathLower.contains(".mov");
+                    isGif = pathLower.contains(".gif");
                 }
                 
+                // Удаляем старый фон
                 String oldPath = prefs.getString("custom_bg_path", null);
                 if (oldPath != null) {
                     File oldFile = new File(oldPath);
                     if (oldFile.exists()) oldFile.delete();
                 }
 
-                String extension = isVideo ? ".mp4" : ".jpg"; 
+                // Даем правильное расширение файлу
+                String extension = isVideo ? ".mp4" : (isGif ? ".gif" : ".jpg"); 
                 String backgroundFileName = "profile_bg_" + System.currentTimeMillis() + extension;
                 File outFile = new File(getFilesDir(), backgroundFileName);
+                // ============================
                 
                 java.io.InputStream inputStream = getContentResolver().openInputStream(selectedFileUri);
                 java.io.FileOutputStream outputStream = new java.io.FileOutputStream(outFile);
