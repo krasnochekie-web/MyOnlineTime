@@ -2,22 +2,7 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bgDynamic"> 
-
-    <ImageView
-        android:id="@+id/profile_custom_background_image"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scaleType="centerCrop"
-        android:visibility="gone" />
-
-    <VideoView
-        android:id="@+id/profile_custom_background_video"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_gravity="center"
-        android:visibility="gone" />
-    <ScrollView
+    android:background="@android:color/transparent"> <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:paddingTop="@dimen/header_clearance"
@@ -90,7 +75,9 @@
                 android:layout_marginHorizontal="16dp"
                 android:layout_marginTop="16dp"
                 android:baselineAligned="false"
-                android:alpha="0.85"> <LinearLayout
+                android:alpha="0.85"> 
+                
+                <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -180,7 +167,8 @@
                 android:layout_marginTop="12dp"
                 android:background="@drawable/bg_app_card"
                 android:padding="16dp"
-                android:alpha="0.85"> <TextView
+                android:alpha="0.85"> 
+                <TextView
                     android:id="@+id/profile_about"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -222,7 +210,9 @@
                 android:layout_marginTop="16dp"
                 android:background="@drawable/bg_app_card"
                 android:orientation="horizontal"
-                android:alpha="0.85"> <LinearLayout
+                android:alpha="0.85"> 
+                
+                <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_weight="1"
@@ -261,7 +251,9 @@
                 android:background="@drawable/bg_app_card"
                 android:orientation="vertical"
                 android:paddingTop="8dp"
-                android:alpha="0.85"> <LinearLayout
+                android:alpha="0.85"> 
+                
+                <LinearLayout
                     android:id="@+id/profile_apps_container"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
