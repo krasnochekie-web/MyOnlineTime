@@ -80,6 +80,8 @@ public class SearchFragment extends Fragment {
             if (activity != null) {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.resetHeader();
+                // ГАРАНТИРУЕМ ВЫКЛЮЧЕНИЕ ФОНА ПРИ ВОЗВРАТЕ НА ВКЛАДКУ
+                activity.updateGlobalBackground(false); 
             }
         }
     }
@@ -107,4 +109,17 @@ public class SearchFragment extends Fragment {
             adapter.setUsers(null); // Очищаем список, если текст стерли
         }
     }
-}
+
+    // ========================================================
+    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ========================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+        }
+    }
+    // ========================================================
+
+} // <-- Конец класса SearchFragment
