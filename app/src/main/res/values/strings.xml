@@ -8,6 +8,9 @@
     <string name="find">Find</string>
     <string name="time">Time</string>
     <string name="me">Me</string>
+    <string name="settings_clear_bg">Clear background</string>
+    <string name="toast_bg_cleared">Custom background removed successfully</string>
+    <string name="toast_bg_already_clear">Standard background is already active</string>
     <string name="btn_change_background">Change background</string>
     <string name="toast_file_too_large">You have exceeded the file size limit! Please select a file under 30 MB.</string>
     <string name="dialog_how_it_works_title">How is time calculated?</string>
