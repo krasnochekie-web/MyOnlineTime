@@ -6,7 +6,6 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.animation.DecelerateInterpolator;
 import android.widget.ImageView;
 import android.widget.Toast;
 
@@ -41,33 +40,18 @@ public class ClearCacheFragment extends Fragment {
         return view;
     }
 
-    // --- АНИМАЦИЯ ВЫЕЗДА СНИЗУ ---
-    @Override
-    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-        super.onViewCreated(view, savedInstanceState);
-        
-        int screenHeight = getResources().getDisplayMetrics().heightPixels;
-        view.setTranslationY(screenHeight);
-        view.animate()
-            .translationY(0)
-            .setDuration(300)
-            .setInterpolator(new DecelerateInterpolator())
-            .start();
-    }
-
     private void setupHeader(MainActivity activity) {
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
-            
-            // Используем твой существующий стринг для шапки "Настройки"
             activity.headerTitle.setText(getString(R.string.header_settings_sub)); 
             
             activity.headerBackBtn.setVisibility(View.VISIBLE);
             activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow);
 
+            // Оставляем колокольчик видимым, как на экране уведомлений!
             ImageView bellBtn = activity.findViewById(R.id.header_bell_btn);
             if (bellBtn != null) {
-                bellBtn.setVisibility(View.GONE);
+                bellBtn.setVisibility(View.VISIBLE);
             }
         }
     }
@@ -75,12 +59,24 @@ public class ClearCacheFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        // Возвращаем шапку в исходное состояние при выходе
+        // Возвращаем шапку (надпись My Online Time) при выходе
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
             activity.resetHeader();
         }
     }
+
+    // ========================================================
+    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ========================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+        }
+    }
+    // ========================================================
 
     // ==========================================
     // ЛОГИКА ОЧИСТКИ ФОНА
@@ -102,7 +98,7 @@ public class ClearCacheFragment extends Fragment {
                 
             Toast.makeText(activity, getString(R.string.toast_bg_cleared), Toast.LENGTH_SHORT).show();
             
-            // Сбрасываем стейт плеера и картинки в MainActivity
+            // Фон удален, даем команду MainActivity обновить стейт
             activity.updateGlobalBackground(false); 
         } else {
             Toast.makeText(activity, getString(R.string.toast_bg_already_clear), Toast.LENGTH_SHORT).show();
