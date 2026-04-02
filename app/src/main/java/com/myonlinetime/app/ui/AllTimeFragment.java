@@ -106,14 +106,11 @@ public class AllTimeFragment extends Fragment {
 
         return view;
     }
-@Override
-public void onResume() {
-    super.onResume();
-    if (getActivity() instanceof MainActivity) {
-        ((MainActivity) getActivity()).updateGlobalBackground(false); // Выключает фон
-    }
-    }
-// =====================================================================
+
+    // ИСПРАВЛЕНИЕ: Мы полностью удалили метод onResume, 
+    // чтобы экран не выключал фон мгновенно и не создавал мерцания.
+
+    // =====================================================================
     // >>> МЕТОД ДЛЯ ПОКАЗА ДИАЛОГА "КАК ЭТО РАБОТАЕТ" <<<
     // =====================================================================
     private void showHowItWorksDialog(boolean isAllTime) {
@@ -142,6 +139,7 @@ public void onResume() {
         dialog.show();
     }
     // =====================================================================
+    
     private void loadAndCalculateStats() {
         // УБРАЛИ ХАРДКОД! Используем твои готовые форматы из strings.xml
         mainValTxt.setText(getString(R.string.format_days_hours, 0, 0));
