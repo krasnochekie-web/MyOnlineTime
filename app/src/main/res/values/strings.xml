@@ -8,6 +8,7 @@
     <string name="find">Find</string>
     <string name="time">Time</string>
     <string name="me">Me</string>
+<string name="err_cache_clear">Error clearing cache</string>
     <string name="settings_clear_bg">Clear background</string>
     <string name="toast_bg_cleared">Custom background removed successfully</string>
     <string name="toast_bg_already_clear">Standard background is already active</string>
