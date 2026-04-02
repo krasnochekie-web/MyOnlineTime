@@ -65,9 +65,6 @@ public class NotificationsFragment extends Fragment {
             // Показываем стрелку назад
             activity.headerBackBtn.setVisibility(View.VISIBLE);
             activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow); 
-            
-            // ВНИМАНИЕ: Я удалил activity.headerBackBtn.setOnClickListener(...) 
-            // Теперь работает твой правильный AppNavigator из MainActivity!
         }
     }
 
@@ -81,5 +78,14 @@ public class NotificationsFragment extends Fragment {
         }
     }
 
-    // ИСПРАВЛЕНИЕ: Метод onResume с activity.updateGlobalBackground(false) удален!
+    // ========================================================
+    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ========================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+        }
+    }
 }
