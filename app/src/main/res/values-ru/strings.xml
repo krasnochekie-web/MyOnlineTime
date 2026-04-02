@@ -7,6 +7,7 @@
     <string name="feed">Лента</string>
     <string name="find">Поиск</string>
     <string name="time">Время</string>
+	<string name="notif_max_count">99+</string>
     <string name="me">Профиль</string>
 	<string name="settings_clear_bg">Очистить фон</string>
     <string name="toast_bg_cleared">Пользовательский фон успешно удален</string>
