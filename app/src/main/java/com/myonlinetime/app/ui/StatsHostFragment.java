@@ -25,7 +25,6 @@ public class StatsHostFragment extends Fragment {
 
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.resetHeader();
-        // activity.headerTitle.setText("Статистика"); // Если нужна общая шапка
 
         final TextView txtTime = view.findViewById(R.id.txt_tab_time);
         final TextView txtChart = view.findViewById(R.id.txt_tab_chart);
@@ -42,9 +41,9 @@ public class StatsHostFragment extends Fragment {
             @Override
             public Fragment createFragment(int position) {
                 switch (position) {
-                    case 0: return new StatsTimeFragment(); // Наш экран со спиннером
-                    case 1: return new ChartFragment(); // Твой график
-                    case 2: return new AllTimeFragment(); // Твоё общее время
+                    case 0: return new StatsTimeFragment();
+                    case 1: return new ChartFragment();
+                    case 2: return new AllTimeFragment();
                     default: return new StatsTimeFragment();
                 }
             }
@@ -62,7 +61,7 @@ public class StatsHostFragment extends Fragment {
                 txtChart.setTextColor(position == 1 ? activeColor : inactiveColor);
                 txtAllTime.setTextColor(position == 2 ? activeColor : inactiveColor);
 
-                lineTime.setBackgroundColor(position == 0 ? activeColor : 0x00000000); // 0x00000000 = transparent
+                lineTime.setBackgroundColor(position == 0 ? activeColor : 0x00000000);
                 lineChart.setBackgroundColor(position == 1 ? activeColor : 0x00000000);
                 lineAllTime.setBackgroundColor(position == 2 ? activeColor : 0x00000000);
             }
@@ -73,8 +72,17 @@ public class StatsHostFragment extends Fragment {
         view.findViewById(R.id.tab_all_time).setOnClickListener(v -> viewPager.setCurrentItem(2, true));
 
         return view;
-    } // <-- Конец onCreateView
+    }
 
-    // ИСПРАВЛЕНИЕ: Методы onResume и onHiddenChanged удалены!
-    // Фрагмент больше не выключает видео-фон жестко и мгновенно.
+    // ========================================================
+    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ========================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+        }
+    }
+    // ========================================================
 }
