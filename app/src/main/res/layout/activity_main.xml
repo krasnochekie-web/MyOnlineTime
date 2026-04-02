@@ -79,15 +79,13 @@
 
             <FrameLayout
                 android:id="@+id/header_bell_container"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:clipChildren="false"
-                android:clipToPadding="false">
+                android:layout_width="28dp"
+                android:layout_height="28dp">
 
                 <ImageView
                     android:id="@+id/header_bell_btn"
-                    android:layout_width="28dp"
-                    android:layout_height="28dp"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
                     android:padding="2dp"
                     android:src="@drawable/ic_bell"
                     android:clickable="true"
@@ -99,14 +97,14 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="top|end"
-                    android:layout_marginTop="-4dp"
-                    android:layout_marginEnd="-6dp"
                     android:background="@drawable/bg_notification_badge"
                     android:gravity="center"
-                    android:minWidth="16dp"
-                    android:textColor="@color/textWhiteStatic" 
-                    android:textSize="9sp"
+                    android:minWidth="12dp"
+                    android:minHeight="12dp"
+                    android:textColor="@color/textWhiteStatic"
+                    android:textSize="8sp"
                     android:textStyle="bold"
+                    android:includeFontPadding="false"
                     android:visibility="gone" />
             </FrameLayout>
 
