@@ -33,7 +33,9 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import android.util.Base64;
 
-// === ИМПОРТЫ ДЛЯ НОВОГО ПЛЕЕРА ===
+// === ИМПОРТЫ ДЛЯ JSON И ПЛЕЕРА ===
+import org.json.JSONArray;
+import org.json.JSONObject;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -70,7 +72,6 @@ public class MainActivity extends AppCompatActivity {
     private ExoPlayer exoPlayer;
     private ImageView globalImageView;
     private String currentBgPath = null;
-    // -----------------------------------
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,7 +79,6 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences appPrefs = getSharedPreferences("AppPrefs", MODE_PRIVATE);
         int savedTheme = appPrefs.getInt("selected_theme", AppCompatDelegate.MODE_NIGHT_YES);
         AppCompatDelegate.setDefaultNightMode(savedTheme);
-        // ----------------------------------------------
 
         super.onCreate(savedInstanceState);
         
@@ -120,6 +120,7 @@ public class MainActivity extends AppCompatActivity {
         headerBackBtn = (ImageView) findViewById(R.id.header_back_btn);
         bottomNav = (View) findViewById(R.id.bottom_nav_container);
         
+        // --- ОБРАБОТКА КОЛОКОЛЬЧИКА ---
         ImageView headerBellBtn = findViewById(R.id.header_bell_btn);
         if (headerBellBtn != null) {
             headerBellBtn.setOnClickListener(v -> {
@@ -128,6 +129,8 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
         }
+        // Обновляем бейджик при запуске
+        updateNotificationBadge();
 
         iconFeed = (ImageView) findViewById(R.id.icon_feed); 
         iconSearch = (ImageView) findViewById(R.id.icon_search);
@@ -177,11 +180,8 @@ public class MainActivity extends AppCompatActivity {
         
         headerBackBtn.setOnClickListener(v -> handleBackNavigation());
 
-        // --- ИНИЦИАЛИЗАЦИЯ ГЛОБАЛЬНОГО ФОНА ---
         initGlobalBackground();
-        // --------------------------------------
 
-        // --- УМНЫЙ ЗАПУСК ИЛИ ВОССТАНОВЛЕНИЕ ---
         int tabToOpen = 0; 
         if (savedInstanceState != null) {
             tabToOpen = savedInstanceState.getInt("SAVED_TAB", 0);
@@ -191,14 +191,12 @@ public class MainActivity extends AppCompatActivity {
         resetHeader();
         navigator.switchScreen(tabToOpen, null);
 
-        // 1. Запрос разрешения на уведомления (Android 13+)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 androidx.core.app.ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 101);
             }
         }
 
-        // 2. Планируем фоновую задачу раз в 7 дней
         androidx.work.PeriodicWorkRequest weeklyWorkRequest = new androidx.work.PeriodicWorkRequest.Builder(
                 com.myonlinetime.app.utils.WeeklyStatsWorker.class, 7, java.util.concurrent.TimeUnit.DAYS)
                 .build();
@@ -209,7 +207,6 @@ public class MainActivity extends AppCompatActivity {
                 weeklyWorkRequest
         );
 
-        // 3. Обработка клика по уведомлению
         handleNotificationIntent(getIntent());
         
         mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
@@ -219,19 +216,45 @@ public class MainActivity extends AppCompatActivity {
     } 
 
     // =====================================================================
-    // >>> МЕТОДЫ УПРАВЛЕНИЯ НОВЫМ ГЛОБАЛЬНЫМ ФОНОМ (ExoPlayer) <<<
+    // >>> ЛОГИКА БЕЙДЖИКА УВЕДОМЛЕНИЙ <<<
     // =====================================================================
+    public void updateNotificationBadge() {
+        TextView badge = findViewById(R.id.header_bell_badge);
+        if (badge == null) return;
+
+        // Берем историю из AppPrefs (как в фрагменте истории)
+        SharedPreferences appPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
+        String historyJson = appPrefs.getString("notif_history_array", "[]");
+        
+        int unreadCount = 0;
+        try {
+            JSONArray array = new JSONArray(historyJson);
+            for (int i = 0; i < array.length(); i++) {
+                if (!array.getJSONObject(i).optBoolean("isRead", false)) {
+                    unreadCount++;
+                }
+            }
+        } catch (Exception e) { e.printStackTrace(); }
+
+        if (unreadCount > 0) {
+            badge.setVisibility(View.VISIBLE);
+            if (unreadCount > 99) {
+                badge.setText(getString(R.string.notif_max_count));
+            } else {
+                badge.setText(String.valueOf(unreadCount));
+            }
+        } else {
+            badge.setVisibility(View.GONE);
+        }
+    }
+
     private void initGlobalBackground() {
         playerView = findViewById(R.id.global_background_video);
         globalImageView = findViewById(R.id.global_background_image);
-        
-        // Создаем движок плеера
         exoPlayer = new ExoPlayer.Builder(this).build();
         playerView.setPlayer(exoPlayer);
-        
-        // Настраиваем бесконечный луп без рывков
         exoPlayer.setRepeatMode(Player.REPEAT_MODE_ALL);
-        exoPlayer.setVolume(0f); // Звук на нуле
+        exoPlayer.setVolume(0f);
     }
 
     public void updateGlobalBackground(boolean show) {
@@ -245,26 +268,18 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // === ИСПРАВЛЕНИЕ: Возвращаем видимость фону, если путь не изменился ===
         if (path.equals(currentBgPath)) {
             if (isVideo) {
                 if (globalImageView != null) globalImageView.setVisibility(View.GONE);
                 if (playerView != null) playerView.setVisibility(View.VISIBLE);
-                if (exoPlayer != null && !exoPlayer.isPlaying()) {
-                    exoPlayer.play();
-                }
+                if (exoPlayer != null && !exoPlayer.isPlaying()) exoPlayer.play();
             } else {
                 if (playerView != null) playerView.setVisibility(View.GONE);
-                if (exoPlayer != null && exoPlayer.isPlaying()) {
-                    exoPlayer.pause();
-                }
-                if (globalImageView != null) {
-                    globalImageView.setVisibility(View.VISIBLE);
-                }
+                if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
+                if (globalImageView != null) globalImageView.setVisibility(View.VISIBLE);
             }
             return;
         }
-        // ======================================================================
 
         currentBgPath = path;
         File file = new File(path);
@@ -273,17 +288,13 @@ public class MainActivity extends AppCompatActivity {
         if (isVideo) {
             if (globalImageView != null) globalImageView.setVisibility(View.GONE);
             if (playerView != null) playerView.setVisibility(View.VISIBLE);
-            
-            // Загружаем новое видео
             MediaItem mediaItem = MediaItem.fromUri(Uri.fromFile(file));
             exoPlayer.setMediaItem(mediaItem);
             exoPlayer.prepare();
             exoPlayer.play();
-            
         } else {
             if (playerView != null) playerView.setVisibility(View.GONE);
             if (exoPlayer != null) exoPlayer.pause();
-            
             if (globalImageView != null) {
                 globalImageView.setVisibility(View.VISIBLE);
                 Glide.with(this).load(file).centerCrop().into(globalImageView);
@@ -291,19 +302,17 @@ public class MainActivity extends AppCompatActivity {
         }
     }
     
-    // --- ПРАВИЛЬНАЯ РАБОТА С ФОНОМ ПРИ СВОРАЧИВАНИИ ---
     @Override
     protected void onPause() {
         super.onPause();
-        if (exoPlayer != null && exoPlayer.isPlaying()) {
-            exoPlayer.pause();
-        }
+        if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         loadUserAvatarToBottomNav(); 
+        updateNotificationBadge(); // Обновляем при возврате в приложение
         
         if (exoPlayer != null && playerView != null && playerView.getVisibility() == View.VISIBLE) {
             exoPlayer.play();
@@ -325,13 +334,11 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Обязательно освобождаем память плеера при выходе
         if (exoPlayer != null) {
             exoPlayer.release();
             exoPlayer = null;
         }
     }
-    // =====================================================================
 
     @Override
     protected void onNewIntent(Intent intent) {
@@ -361,7 +368,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadUserAvatarToBottomNav() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
-        
         if (account == null) {
             if (iconProfile != null) {
                 iconProfile.setImageTintList(androidx.core.content.ContextCompat.getColorStateList(this, R.color.nav_icon_selector));
@@ -420,9 +426,9 @@ public class MainActivity extends AppCompatActivity {
         headerTitle.setTextSize(20);
         headerBackBtn.setVisibility(View.GONE);
         
-        ImageView headerBellBtn = findViewById(R.id.header_bell_btn);
-        if (headerBellBtn != null) {
-            headerBellBtn.setVisibility(View.VISIBLE);
+        View bellContainer = findViewById(R.id.header_bell_container);
+        if (bellContainer != null) {
+            bellContainer.setVisibility(View.VISIBLE);
         }
     }
 
@@ -543,24 +549,19 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == 9003 && resultCode == RESULT_OK && data != null && data.getData() != null) {
             try {
                 android.net.Uri selectedFileUri = data.getData();
-                
                 android.database.Cursor cursor = getContentResolver().query(selectedFileUri, null, null, null, null);
                 long fileSize = 0;
                 if (cursor != null && cursor.moveToFirst()) {
                     int sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE);
-                    if (sizeIndex != -1) {
-                        fileSize = cursor.getLong(sizeIndex);
-                    }
+                    if (sizeIndex != -1) fileSize = cursor.getLong(sizeIndex);
                     cursor.close();
                 }
 
-                long maxSize = 30 * 1024 * 1024;
-                if (fileSize > maxSize) {
+                if (fileSize > 30 * 1024 * 1024) {
                     Toast.makeText(this, getString(R.string.toast_file_too_large), Toast.LENGTH_LONG).show();
                     return; 
                 }
 
-                // === ИСПРАВЛЕНИЕ ДЛЯ GIF ===
                 String mimeType = getContentResolver().getType(selectedFileUri);
                 boolean isVideo = (mimeType != null && mimeType.startsWith("video/"));
                 boolean isGif = (mimeType != null && mimeType.contains("gif"));
@@ -571,18 +572,15 @@ public class MainActivity extends AppCompatActivity {
                     isGif = pathLower.contains(".gif");
                 }
                 
-                // Удаляем старый фон
                 String oldPath = prefs.getString("custom_bg_path", null);
                 if (oldPath != null) {
                     File oldFile = new File(oldPath);
                     if (oldFile.exists()) oldFile.delete();
                 }
 
-                // Даем правильное расширение файлу
                 String extension = isVideo ? ".mp4" : (isGif ? ".gif" : ".jpg"); 
                 String backgroundFileName = "profile_bg_" + System.currentTimeMillis() + extension;
                 File outFile = new File(getFilesDir(), backgroundFileName);
-                // ============================
                 
                 java.io.InputStream inputStream = getContentResolver().openInputStream(selectedFileUri);
                 java.io.FileOutputStream outputStream = new java.io.FileOutputStream(outFile);
@@ -600,8 +598,6 @@ public class MainActivity extends AppCompatActivity {
                     .apply();
                     
                 Toast.makeText(this, "Фон успешно установлен!", Toast.LENGTH_SHORT).show();
-                
-                // Сразу обновляем фон на экране
                 updateGlobalBackground(true);
 
             } catch (Exception e) {
