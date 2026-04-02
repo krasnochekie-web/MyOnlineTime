@@ -137,16 +137,5 @@ public class FollowsFragment extends Fragment {
         return mainLayout; 
     } // <-- Конец onCreateView
 
-    // ========================================================
-    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
-    // ========================================================
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(false); 
-        }
-    }
-    // ========================================================
-
-} // <-- Конец класса FollowsFragment
+    // ИСПРАВЛЕНИЕ: Мы удалили метод onResume с жестким выключением фона.
+}
