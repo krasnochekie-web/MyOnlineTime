@@ -8,6 +8,9 @@
     <string name="find">Поиск</string>
     <string name="time">Время</string>
     <string name="me">Профиль</string>
+	<string name="settings_clear_bg">Очистить фон</string>
+    <string name="toast_bg_cleared">Пользовательский фон успешно удален</string>
+    <string name="toast_bg_already_clear">У вас установлен стандартный фон</string>
 	<string name="dialog_how_it_works_title">Как считается время?</string>
 	<string name="btn_change_background">Изменить фон</string>
     <string name="toast_file_too_large">Вы превысили допустимый лимит для загрузки файла! Выберите соответствующий, до 30 мегабайт.</string>
