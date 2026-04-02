@@ -116,7 +116,8 @@ public class EditProfileFragment extends Fragment {
     public void onResume() {
         super.onResume();
         if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(true); // Сигнал MainActivity: включи фон!
+            // При входе на экран редактирования гарантируем, что фон включен
+            ((MainActivity) getActivity()).updateGlobalBackground(true); 
         }
     }
 
@@ -125,10 +126,12 @@ public class EditProfileFragment extends Fragment {
         super.onHiddenChanged(hidden);
         if (getActivity() instanceof MainActivity) {
             if (!hidden) {
+                // Если экран снова стал видимым (вернулись на него), включаем фон
                 ((MainActivity) getActivity()).updateGlobalBackground(true);
-            } else {
-                ((MainActivity) getActivity()).updateGlobalBackground(false);
             }
+            // УБРАЛИ БЛОК else { updateGlobalBackground(false) }
+            // Теперь фон не гаснет при переходе между Профилем и Редактированием!
         }
     }
+    // ------------------------------------
 }
