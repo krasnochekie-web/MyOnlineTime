@@ -26,8 +26,8 @@ import java.util.List;
 public class SearchFragment extends Fragment {
 
     private String lastSearchQuery = "";
-    private RecyclerView resultsList; // Теперь тут RecyclerView!
-    private UserListAdapter adapter;  // Наш адаптер
+    private RecyclerView resultsList; 
+    private UserListAdapter adapter;  
 
     public SearchFragment() {}
 
@@ -80,8 +80,8 @@ public class SearchFragment extends Fragment {
             if (activity != null) {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.resetHeader();
-                // ГАРАНТИРУЕМ ВЫКЛЮЧЕНИЕ ФОНА ПРИ ВОЗВРАТЕ НА ВКЛАДКУ
-                activity.updateGlobalBackground(false); 
+                // ИСПРАВЛЕНИЕ: Мы удалили мгновенное выключение фона отсюда.
+                // Экрану достаточно того, что находится в onResume!
             }
         }
     }
@@ -97,7 +97,6 @@ public class SearchFragment extends Fragment {
                         VpsApi.searchUsers(token, query, new VpsApi.SearchCallback() {
                             @Override public void onFound(List<User> users) {
                                 if (!isAdded()) return; 
-                                // Мэджик! Просто отдаем список адаптеру
                                 adapter.setUsers(users);
                             }
                         });
@@ -110,9 +109,6 @@ public class SearchFragment extends Fragment {
         }
     }
 
-    // ========================================================
-    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
-    // ========================================================
     @Override
     public void onResume() {
         super.onResume();
@@ -120,6 +116,5 @@ public class SearchFragment extends Fragment {
             ((MainActivity) getActivity()).updateGlobalBackground(false); 
         }
     }
-    // ========================================================
 
-} // <-- Конец класса SearchFragment
+}
