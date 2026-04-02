@@ -96,14 +96,11 @@ public class SettingsFragment extends Fragment {
         setupThemeButtons();
 
         // Общие настройки
-        // === ИСПРАВЛЕННАЯ ЛОГИКА ОТКРЫТИЯ ЭКРАНА УВЕДОМЛЕНИЙ ===
         view.findViewById(R.id.btn_notifications).setOnClickListener(v -> {
             if (activity != null && activity.navigator != null) {
-                // Твой Навигатор сам сделает все нужные анимации!
                 activity.navigator.openSubScreen(new NotificationsFragment());
             }
         });
-        // =======================================================
         
         view.findViewById(R.id.btn_saved).setOnClickListener(v -> { /* Пока пусто */ });
         view.findViewById(R.id.btn_clear_cache).setOnClickListener(v -> clearAppCache());
@@ -178,12 +175,10 @@ public class SettingsFragment extends Fragment {
     }
 
     private void updateThemeUI(int mode) {
-        // Ставим всем неактивный динамический фон
         themeAuto.setBackgroundResource(R.drawable.bg_theme_toggle_inactive);
         themeLight.setBackgroundResource(R.drawable.bg_theme_toggle_inactive);
         themeDark.setBackgroundResource(R.drawable.bg_theme_toggle_inactive);
 
-        // Ставим бордовый фон только выбранной теме
         if (mode == AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM) {
             themeAuto.setBackgroundResource(R.drawable.bg_button_active);
         } else if (mode == AppCompatDelegate.MODE_NIGHT_NO) {
@@ -250,4 +245,17 @@ public class SettingsFragment extends Fragment {
         }
         return size;
     }
-}
+
+    // ========================================================
+    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ========================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+        }
+    }
+    // ========================================================
+
+} // <-- Конец класса SettingsFragment
