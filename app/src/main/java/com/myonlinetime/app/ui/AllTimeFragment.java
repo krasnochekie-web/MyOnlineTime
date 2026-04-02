@@ -106,6 +106,13 @@ public class AllTimeFragment extends Fragment {
 
         return view;
     }
+@Override
+public void onResume() {
+    super.onResume();
+    if (getActivity() instanceof MainActivity) {
+        ((MainActivity) getActivity()).updateGlobalBackground(false); // Выключает фон
+    }
+    }
 // =====================================================================
     // >>> МЕТОД ДЛЯ ПОКАЗА ДИАЛОГА "КАК ЭТО РАБОТАЕТ" <<<
     // =====================================================================
