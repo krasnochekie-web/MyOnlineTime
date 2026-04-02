@@ -4,38 +4,20 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 
 import com.myonlinetime.app.utils.StatsHelper;
-
 import android.app.AppOpsManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.util.LruCache;
-import android.Manifest;
-import android.os.Build;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-import androidx.work.ExistingPeriodicWorkPolicy;
-import androidx.work.PeriodicWorkRequest;
-import androidx.work.WorkManager;
-import java.util.concurrent.TimeUnit;
-import android.util.Base64;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.Window;
 import android.widget.*;
 
-import android.app.usage.UsageStats;
-import android.app.usage.UsageStatsManager;
-
 import com.myonlinetime.app.models.User;
-import com.myonlinetime.app.utils.Utils;
-import com.myonlinetime.app.adapters.AppsAdapter;
-
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
@@ -48,7 +30,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
-import java.util.*;
+import android.util.Base64;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -75,8 +57,12 @@ public class MainActivity extends AppCompatActivity {
     public com.myonlinetime.app.utils.AppNavigator navigator;
 
     private View permissionOverlay;
-    private float lastTouchY, lastTouchX;
-    private boolean isBottomNavVisible = true;
+
+    // --- ПЕРЕМЕННЫЕ ГЛОБАЛЬНОГО ФОНА ---
+    private VideoView globalVideoView;
+    private ImageView globalImageView;
+    private String currentBgPath = null;
+    // -----------------------------------
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -126,9 +112,6 @@ public class MainActivity extends AppCompatActivity {
         headerBackBtn = (ImageView) findViewById(R.id.header_back_btn);
         bottomNav = (View) findViewById(R.id.bottom_nav_container);
         
-        // ==============================================================
-        // >>> ЛОГИКА КОЛОКОЛЬЧИКА УВЕДОМЛЕНИЙ (ИСПРАВЛЕНО) <<<
-        // ==============================================================
         ImageView headerBellBtn = findViewById(R.id.header_bell_btn);
         if (headerBellBtn != null) {
             headerBellBtn.setOnClickListener(v -> {
@@ -137,7 +120,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
         }
-        // ==============================================================
 
         iconFeed = (ImageView) findViewById(R.id.icon_feed); 
         iconSearch = (ImageView) findViewById(R.id.icon_search);
@@ -187,8 +169,12 @@ public class MainActivity extends AppCompatActivity {
         
         headerBackBtn.setOnClickListener(v -> handleBackNavigation());
 
+        // --- ИНИЦИАЛИЗАЦИЯ ГЛОБАЛЬНОГО ФОНА ---
+        initGlobalBackground();
+        // --------------------------------------
+
         // --- УМНЫЙ ЗАПУСК ИЛИ ВОССТАНОВЛЕНИЕ ---
-        int tabToOpen = 0; // По умолчанию Лента
+        int tabToOpen = 0; 
         if (savedInstanceState != null) {
             tabToOpen = savedInstanceState.getInt("SAVED_TAB", 0);
         }
@@ -197,10 +183,6 @@ public class MainActivity extends AppCompatActivity {
         resetHeader();
         navigator.switchScreen(tabToOpen, null);
 
-        // ==============================================================
-        // >>> НОВАЯ ЛОГИКА: УВЕДОМЛЕНИЯ И ВОРКЕР <<<
-        // ==============================================================
-        
         // 1. Запрос разрешения на уведомления (Android 13+)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -219,25 +201,82 @@ public class MainActivity extends AppCompatActivity {
                 weeklyWorkRequest
         );
 
-        // 3. Обработка клика по уведомлению при "холодном" старте
+        // 3. Обработка клика по уведомлению
         handleNotificationIntent(getIntent());
         
-        // ==============================================================
-
-        // --- КОНЕЦ МЕТОДА onCreate ---
         mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
             StatsHelper.syncUserProfile(MainActivity.this);
             loadUserAvatarToBottomNav(); 
         });
-
     } 
 
-    // --- НОВЫЕ МЕТОДЫ ДЛЯ ОБРАБОТКИ КЛИКОВ ПО УВЕДОМЛЕНИЯМ ---
-    
+    // =====================================================================
+    // >>> МЕТОДЫ УПРАВЛЕНИЯ ГЛОБАЛЬНЫМ ФОНОМ <<<
+    // =====================================================================
+    private void initGlobalBackground() {
+        globalVideoView = findViewById(R.id.global_background_video);
+        globalImageView = findViewById(R.id.global_background_image);
+    }
+
+    public void updateGlobalBackground(boolean show) {
+        String path = prefs.getString("custom_bg_path", null);
+        boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
+
+        if (!show || path == null) {
+            if (globalVideoView != null) {
+                globalVideoView.setVisibility(View.GONE);
+                globalVideoView.stopPlayback();
+            }
+            if (globalImageView != null) globalImageView.setVisibility(View.GONE);
+            currentBgPath = null;
+            return;
+        }
+
+        // Если фон не менялся, не перезапускаем его
+        if (path.equals(currentBgPath)) {
+            if (isVideo && globalVideoView != null && !globalVideoView.isPlaying()) {
+                globalVideoView.start();
+            }
+            return;
+        }
+
+        currentBgPath = path;
+        File file = new File(path);
+        if (!file.exists()) return;
+
+        if (isVideo) {
+            globalImageView.setVisibility(View.GONE);
+            globalVideoView.setVisibility(View.VISIBLE);
+            globalVideoView.setVideoPath(path);
+            globalVideoView.setOnPreparedListener(mp -> {
+                mp.setLooping(true);
+                mp.setVolume(0f, 0f);
+                
+                // Масштабирование видео (аналог centerCrop)
+                float videoRatio = mp.getVideoWidth() / (float) mp.getVideoHeight();
+                float screenRatio = globalVideoView.getWidth() / (float) globalVideoView.getHeight();
+                float scaleX = videoRatio > screenRatio ? videoRatio / screenRatio : 1f;
+                float scaleY = videoRatio > screenRatio ? 1f : screenRatio / videoRatio;
+                globalVideoView.setScaleX(scaleX);
+                globalVideoView.setScaleY(scaleY);
+                
+                globalVideoView.start();
+            });
+        } else {
+            if (globalVideoView != null) {
+                globalVideoView.setVisibility(View.GONE);
+                globalVideoView.stopPlayback();
+            }
+            globalImageView.setVisibility(View.VISIBLE);
+            Glide.with(this).load(file).centerCrop().into(globalImageView);
+        }
+    }
+    // =====================================================================
+
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        setIntent(intent); // Обновляем интент
+        setIntent(intent); 
         handleNotificationIntent(intent);
     }
     
@@ -245,33 +284,24 @@ public class MainActivity extends AppCompatActivity {
         if (intent != null && intent.hasExtra("open_tab")) {
             String tab = intent.getStringExtra("open_tab");
             if ("time".equals(tab)) {
-                // Имитируем клик по вкладке "Время"
                 hideLoginScreen(); 
-                updateNavState(3); // 3 - это вкладка времени в твоей навигации
+                updateNavState(3); 
                 navigator.switchScreen(3, null);
                 resetHeader();
-
-                // ИСПРАВЛЕНИЕ: Удаляем намерение, чтобы при смене темы 
-                // нас снова не перекидывало на этот экран!
                 intent.removeExtra("open_tab");
             }
         }
     }
-    // ---------------------------------------------------------
 
-    // --- СОХРАНЕНИЕ СОСТОЯНИЯ ПРИ СМЕНЕ ТЕМЫ ---
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        // Запоминаем текущую открытую вкладку
         outState.putInt("SAVED_TAB", currentTab); 
     }
-    // -------------------------------------------
 
     private void loadUserAvatarToBottomNav() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         
-        // --- Обработка для гостя (когда account == null) ---
         if (account == null) {
             if (iconProfile != null) {
                 iconProfile.setImageTintList(androidx.core.content.ContextCompat.getColorStateList(this, R.color.nav_icon_selector));
@@ -347,7 +377,6 @@ public class MainActivity extends AppCompatActivity {
         headerTitle.setTextSize(20);
         headerBackBtn.setVisibility(View.GONE);
         
-        // ВОССТАНАВЛИВАЕМ КОЛОКОЛЬЧИК ПРИ ЛЮБОМ СБРОСЕ ШАПКИ
         ImageView headerBellBtn = findViewById(R.id.header_bell_btn);
         if (headerBellBtn != null) {
             headerBellBtn.setVisibility(View.VISIBLE);
@@ -402,11 +431,11 @@ public class MainActivity extends AppCompatActivity {
                 .setDuration(300)
                 .start();
     }
-@Override
+
+    @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         
-        // --- 1. Авторизация Google ---
         if (requestCode == RC_SIGN_IN) {
             Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
             try {
@@ -430,7 +459,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // --- 2. Изменение аватарки ---
         if (requestCode == RC_PICK_IMAGE && resultCode == RESULT_OK && data != null) {
             try {
                 InputStream inputStream = getContentResolver().openInputStream(data.getData());
@@ -469,14 +497,10 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) { e.printStackTrace(); }
         }
 
-// =====================================================================
-        // >>> 3. ИЗМЕНЕНИЕ ФОНА ПРОФИЛЯ (ФОТО/ВИДЕО/GIF ДО 30 МБ) <<<
-        // =====================================================================
         if (requestCode == 9003 && resultCode == RESULT_OK && data != null && data.getData() != null) {
             try {
                 android.net.Uri selectedFileUri = data.getData();
                 
-                // Проверяем размер файла
                 android.database.Cursor cursor = getContentResolver().query(selectedFileUri, null, null, null, null);
                 long fileSize = 0;
                 if (cursor != null && cursor.moveToFirst()) {
@@ -487,14 +511,12 @@ public class MainActivity extends AppCompatActivity {
                     cursor.close();
                 }
 
-                // 30 МБ = 30 * 1024 * 1024 байт
                 long maxSize = 30 * 1024 * 1024;
                 if (fileSize > maxSize) {
                     Toast.makeText(this, getString(R.string.toast_file_too_large), Toast.LENGTH_LONG).show();
                     return; 
                 }
 
-                // УЛУЧШЕНО: Двойная проверка на видео (спасает, если система тупит)
                 String mimeType = getContentResolver().getType(selectedFileUri);
                 boolean isVideo = (mimeType != null && mimeType.startsWith("video/"));
                 if (mimeType == null) {
@@ -502,19 +524,16 @@ public class MainActivity extends AppCompatActivity {
                     isVideo = path.contains(".mp4") || path.contains(".mkv") || path.contains(".avi") || path.contains(".mov");
                 }
                 
-                // УЛУЧШЕНО: Удаляем старый фон, чтобы не забивать память телефона
                 String oldPath = prefs.getString("custom_bg_path", null);
                 if (oldPath != null) {
                     File oldFile = new File(oldPath);
                     if (oldFile.exists()) oldFile.delete();
                 }
 
-                // УЛУЧШЕНО: Генерируем уникальное имя файла, чтобы сбросить кэш Glide
                 String extension = isVideo ? ".mp4" : ".jpg"; 
                 String backgroundFileName = "profile_bg_" + System.currentTimeMillis() + extension;
                 File outFile = new File(getFilesDir(), backgroundFileName);
                 
-                // Копируем файл
                 java.io.InputStream inputStream = getContentResolver().openInputStream(selectedFileUri);
                 java.io.FileOutputStream outputStream = new java.io.FileOutputStream(outFile);
                 byte[] buffer = new byte[8192];
@@ -525,21 +544,23 @@ public class MainActivity extends AppCompatActivity {
                 outputStream.close();
                 inputStream.close();
                 
-                // Сохраняем новые данные
                 prefs.edit()
                     .putString("custom_bg_path", outFile.getAbsolutePath())
                     .putBoolean("custom_bg_is_video", isVideo)
                     .apply();
                     
                 Toast.makeText(this, "Фон успешно установлен!", Toast.LENGTH_SHORT).show();
+                
+                // Сразу обновляем фон на экране
+                updateGlobalBackground(true);
 
             } catch (Exception e) {
                 e.printStackTrace();
                 Toast.makeText(this, "Ошибка при установке фона", Toast.LENGTH_SHORT).show();
             }
         }
-        // =====================================================================
     }
+
     private void updateNavState(int index) {
         currentTab = index;
         mainHeader.setVisibility(View.VISIBLE);
