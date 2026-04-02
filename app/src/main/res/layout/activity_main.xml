@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/main_root"
     android:layout_width="match_parent"
@@ -8,32 +7,9 @@
     android:background="@color/bgDynamic">
 
     <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent">
-        
-        <androidx.media3.ui.PlayerView
-            android:id="@+id/global_background_video"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_gravity="center"
-            app:use_controller="false" 
-            app:resize_mode="zoom" 
-            app:surface_type="texture_view"
-            android:visibility="gone" />
-
-        <ImageView
-            android:id="@+id/global_background_image"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scaleType="centerCrop"
-            android:visibility="gone" />
-    </FrameLayout>
-
-    <FrameLayout
         android:id="@+id/fragment_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@android:color/transparent"
         app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
     <LinearLayout
@@ -43,7 +19,7 @@
         android:layout_height="wrap_content"
         android:background="@drawable/bg_gradient_header"
         android:orientation="vertical"
-        android:fitsSystemWindows="true"
+        fitsSystemWindows="true"
         android:elevation="0dp"
         app:layout_insetEdge="top">
 
@@ -111,8 +87,7 @@
                     android:includeFontPadding="false"
                     android:visibility="gone" />
             </FrameLayout>
-
-        </LinearLayout>
+            </LinearLayout>
     </LinearLayout>
 
     <LinearLayout
@@ -168,3 +143,4 @@
         android:visibility="gone" /> 
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
+                    
