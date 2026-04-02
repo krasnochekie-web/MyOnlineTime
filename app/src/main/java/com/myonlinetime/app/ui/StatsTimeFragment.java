@@ -308,4 +308,17 @@ public class StatsTimeFragment extends Fragment {
         android.content.pm.ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
         return defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
     }
-}
+
+    // ========================================================
+    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ========================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+        }
+    }
+    // ========================================================
+
+} // <-- Конец класса StatsTimeFragment
