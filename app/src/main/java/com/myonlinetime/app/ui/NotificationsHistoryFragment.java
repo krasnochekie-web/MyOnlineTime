@@ -36,14 +36,12 @@ public class NotificationsHistoryFragment extends Fragment {
         RecyclerView recycler = view.findViewById(R.id.recycler_notifications);
         TextView emptyText = view.findViewById(R.id.empty_notif_text);
 
-        // Читаем историю
         SharedPreferences prefs = requireContext().getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
         String historyJson = prefs.getString("notif_history_array", "[]");
         
         List<NotifItem> items = new ArrayList<>();
         try {
             JSONArray array = new JSONArray(historyJson);
-            // Идем с конца, чтобы свежие были сверху
             for (int i = array.length() - 1; i >= 0; i--) {
                 JSONObject obj = array.getJSONObject(i);
                 items.add(new NotifItem(
@@ -52,9 +50,7 @@ public class NotificationsHistoryFragment extends Fragment {
                         obj.getLong("timestamp")
                 ));
             }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        } catch (Exception e) { e.printStackTrace(); }
 
         if (items.isEmpty()) {
             recycler.setVisibility(View.GONE);
@@ -64,9 +60,32 @@ public class NotificationsHistoryFragment extends Fragment {
             emptyText.setVisibility(View.GONE);
             recycler.setLayoutManager(new LinearLayoutManager(getContext()));
             recycler.setAdapter(new NotifAdapter(items, (MainActivity) getActivity()));
+            
+            // Сбрасываем бейджик при просмотре истории
+            markAllAsRead();
         }
 
         return view;
+    }
+
+    private void markAllAsRead() {
+        SharedPreferences prefs = requireContext().getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
+        String historyJson = prefs.getString("notif_history_array", "[]");
+        
+        try {
+            JSONArray array = new JSONArray(historyJson);
+            if (array.length() == 0) return;
+
+            for (int i = 0; i < array.length(); i++) {
+                array.getJSONObject(i).put("isRead", true);
+            }
+            
+            prefs.edit().putString("notif_history_array", array.toString()).apply();
+            
+            if (getActivity() instanceof MainActivity) {
+                ((MainActivity) getActivity()).updateNotificationBadge();
+            }
+        } catch (Exception e) { e.printStackTrace(); }
     }
 
     private void setupHeader() {
@@ -74,14 +93,11 @@ public class NotificationsHistoryFragment extends Fragment {
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerTitle.setText(getString(R.string.title_notifications));
-            
             activity.headerBackBtn.setVisibility(View.VISIBLE);
             activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow); 
 
             ImageView bellBtn = activity.findViewById(R.id.header_bell_btn);
-            if (bellBtn != null) {
-                bellBtn.setVisibility(View.GONE);
-            }
+            if (bellBtn != null) bellBtn.setVisibility(View.GONE);
         }
     }
 
@@ -89,14 +105,9 @@ public class NotificationsHistoryFragment extends Fragment {
     public void onDestroyView() {
         super.onDestroyView();
         MainActivity activity = (MainActivity) getActivity();
-        if (activity != null) {
-            activity.resetHeader(); 
-        }
+        if (activity != null) activity.resetHeader(); 
     }
 
-    // ========================================================
-    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
-    // ========================================================
     @Override
     public void onResume() {
         super.onResume();
@@ -104,12 +115,12 @@ public class NotificationsHistoryFragment extends Fragment {
             ((MainActivity) getActivity()).updateGlobalBackground(false); 
         }
     }
-    // ========================================================
 
-    // --- АДАПТЕР ДЛЯ СПИСКА ---
     private static class NotifItem {
         String mainText; String actionText; long timestamp;
-        NotifItem(String m, String a, long t) { mainText = m; actionText = a; timestamp = t; }
+        NotifItem(String m, String a, long t) { 
+            mainText = m; actionText = a; timestamp = t; 
+        }
     }
 
     private static class NotifAdapter extends RecyclerView.Adapter<NotifAdapter.ViewHolder> {
@@ -136,6 +147,8 @@ public class NotificationsHistoryFragment extends Fragment {
             holder.actionText.setText(item.actionText);
             holder.dateText.setText(sdf.format(new Date(item.timestamp)));
 
+            // ТУТ БЫЛА ЖИРНОСТЬ — ТЕПЕРЬ ЕЁ НЕТ
+            
             holder.actionText.setOnClickListener(v -> {
                 if (activity != null) {
                     Intent intent = new Intent(activity, MainActivity.class);
