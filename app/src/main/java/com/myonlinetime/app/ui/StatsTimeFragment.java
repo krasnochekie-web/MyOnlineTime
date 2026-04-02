@@ -309,16 +309,4 @@ public class StatsTimeFragment extends Fragment {
         return defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
     }
 
-    // ========================================================
-    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
-    // ========================================================
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(false); 
-        }
-    }
-    // ========================================================
-
-} // <-- Конец класса StatsTimeFragment
+}
