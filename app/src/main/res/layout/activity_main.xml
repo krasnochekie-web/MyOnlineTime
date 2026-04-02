@@ -1,24 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/main_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bgDynamic">
 
-    <VideoView
-        android:id="@+id/global_background_video"
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_gravity="center"
-        android:visibility="gone" />
+        android:layout_height="match_parent">
+        
+        <VideoView
+            android:id="@+id/global_background_video"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:visibility="gone" />
 
-    <ImageView
-        android:id="@+id/global_background_image"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scaleType="centerCrop"
-        android:visibility="gone" />
+        <ImageView
+            android:id="@+id/global_background_image"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:visibility="gone" />
+    </FrameLayout>
 
     <FrameLayout
         android:id="@+id/fragment_container"
@@ -34,8 +40,8 @@
         android:layout_height="wrap_content"
         android:background="@drawable/bg_gradient_header"
         android:orientation="vertical"
-        android:fitsSystemWindows="true"
-        android:elevation="10dp"
+        fitsSystemWindows="true"
+        android:elevation="0dp"
         app:layout_insetEdge="top">
 
         <LinearLayout
