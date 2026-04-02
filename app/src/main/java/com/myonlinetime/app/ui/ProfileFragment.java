@@ -8,7 +8,6 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
-import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.text.SpannableString;
 import android.text.Spanned;
@@ -24,7 +23,6 @@ import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.VideoView;
 
 import com.bumptech.glide.Glide;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
@@ -50,9 +48,6 @@ public class ProfileFragment extends Fragment {
     private Map<String, String> localDescriptions = new HashMap<>();
     private SharedPreferences prefs;
     private final Gson gson = new Gson();
-    
-    private VideoView backgroundVideoView;
-    private String currentLoadedBgPath = null; // Трекинг для моментального обновления
 
     public static ProfileFragment newInstance(String targetUid) {
         ProfileFragment fragment = new ProfileFragment();
@@ -84,11 +79,6 @@ public class ProfileFragment extends Fragment {
 
         prefs = activity.getSharedPreferences("MyOnlineTime_Cache_" + myUid, Context.MODE_PRIVATE);
         loadLocalCache();
-
-        // Отложенная загрузка фона (Убирает фриз при открытии экрана профиля)
-        if (isMe) {
-            view.post(() -> loadBackground(activity, view));
-        }
 
         final TextView nameView = view.findViewById(R.id.profile_name);
         final TextView aboutView = view.findViewById(R.id.profile_about);
@@ -302,63 +292,30 @@ public class ProfileFragment extends Fragment {
         return view;
     }
 
-    // МЕТОД ЗАГРУЗКИ ФОНА
-    private void loadBackground(MainActivity activity, View view) {
-        String customBgPath = activity.prefs.getString("custom_bg_path", null);
-        boolean isVideo = activity.prefs.getBoolean("custom_bg_is_video", false);
-        
-        if (customBgPath == null) return;
-        if (customBgPath.equals(currentLoadedBgPath)) return; // Избегаем повторной загрузки
-
-        currentLoadedBgPath = customBgPath;
-        File bgFile = new File(customBgPath);
-        
-        backgroundVideoView = view.findViewById(R.id.profile_custom_background_video);
-        ImageView bgImageView = view.findViewById(R.id.profile_custom_background_image);
-
-        if (bgFile.exists()) {
-            if (isVideo) {
-                bgImageView.setVisibility(View.GONE);
-                backgroundVideoView.setVisibility(View.VISIBLE);
-                backgroundVideoView.setVideoPath(customBgPath);
-                backgroundVideoView.setOnPreparedListener(mp -> {
-                    mp.setLooping(true);
-                    mp.setVolume(0f, 0f);
-                    float videoRatio = mp.getVideoWidth() / (float) mp.getVideoHeight();
-                    float screenRatio = backgroundVideoView.getWidth() / (float) backgroundVideoView.getHeight();
-                    float scaleX = videoRatio > screenRatio ? videoRatio / screenRatio : 1f;
-                    float scaleY = videoRatio > screenRatio ? 1f : screenRatio / videoRatio;
-                    backgroundVideoView.setScaleX(scaleX);
-                    backgroundVideoView.setScaleY(scaleY);
-                    backgroundVideoView.start();
-                });
-            } else {
-                if (backgroundVideoView != null) backgroundVideoView.setVisibility(View.GONE);
-                bgImageView.setVisibility(View.VISIBLE);
-                Glide.with(activity).load(bgFile).centerCrop().into(bgImageView);
-            }
-        }
-    }
-
+    // --- УПРАВЛЕНИЕ ГЛОБАЛЬНЫМ ФОНОМ ---
     @Override
     public void onResume() {
         super.onResume();
-        // Моментально обновляем фон при возврате
-        if (getView() != null && getActivity() != null) {
-            loadBackground((MainActivity) getActivity(), getView());
-        }
-        if (backgroundVideoView != null && !backgroundVideoView.isPlaying() && backgroundVideoView.getVisibility() == View.VISIBLE) {
-            backgroundVideoView.start();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(true);
         }
     }
 
     @Override
-    public void onPause() {
-        super.onPause();
-        if (backgroundVideoView != null && backgroundVideoView.isPlaying()) {
-            backgroundVideoView.pause();
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        if (getActivity() instanceof MainActivity) {
+            MainActivity activity = (MainActivity) getActivity();
+            if (!hidden) {
+                activity.mainHeader.setVisibility(View.VISIBLE);
+                activity.resetHeader();
+                activity.updateGlobalBackground(true);
+            } else {
+                activity.updateGlobalBackground(false);
+            }
         }
     }
+    // ------------------------------------
 
     private void loadLocalCache() {
         localHiddenApps = new HashSet<>(prefs.getStringSet("hidden_apps", new HashSet<>()));
@@ -370,25 +327,6 @@ public class ProfileFragment extends Fragment {
                 localDescriptions.putAll(map);
             }
         } catch (Exception e) { e.printStackTrace(); }
-    }
-
-    @Override
-    public void onHiddenChanged(boolean hidden) {
-        super.onHiddenChanged(hidden);
-        if (!hidden) {
-            MainActivity activity = (MainActivity) getActivity();
-            if (activity != null) {
-                activity.mainHeader.setVisibility(View.VISIBLE);
-                activity.resetHeader();
-            }
-            if (backgroundVideoView != null && !backgroundVideoView.isPlaying() && backgroundVideoView.getVisibility() == View.VISIBLE) {
-                backgroundVideoView.start();
-            }
-        } else {
-            if (backgroundVideoView != null && backgroundVideoView.isPlaying()) {
-                backgroundVideoView.pause();
-            }
-        }
     }
 
     private void renderOtherUserStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText) {
