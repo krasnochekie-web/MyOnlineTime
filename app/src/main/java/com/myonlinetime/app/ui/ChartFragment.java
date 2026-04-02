@@ -100,17 +100,8 @@ public class ChartFragment extends Fragment {
         return view;
     }
 
-    // ========================================================
-    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
-    // ========================================================
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(false); 
-        }
-    }
-    // ========================================================
+    // ИСПРАВЛЕНИЕ: Метод onResume с activity.updateGlobalBackground(false) удален!
+    // Теперь фон не гаснет мгновенно при входе на эту вкладку.
 
     // =====================================================================
     // >>> МЕТОД ДЛЯ ПОКАЗА ДИАЛОГА "КАК ЭТО РАБОТАЕТ" <<<
