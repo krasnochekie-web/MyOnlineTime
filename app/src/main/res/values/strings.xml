@@ -7,6 +7,7 @@
     <string name="feed">Feed</string>
     <string name="find">Find</string>
     <string name="time">Time</string>
+    <string name="notif_max_count">99+</string>
     <string name="me">Me</string>
 <string name="err_cache_clear">Error clearing cache</string>
     <string name="settings_clear_bg">Clear background</string>
