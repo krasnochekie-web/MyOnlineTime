@@ -82,7 +82,6 @@ public class NotificationsHistoryFragment extends Fragment {
             if (bellBtn != null) {
                 bellBtn.setVisibility(View.GONE);
             }
-            // ИСПРАВЛЕНО: Удалил локальный setOnClickListener, теперь работает глобальный из MainActivity
         }
     }
 
@@ -91,9 +90,21 @@ public class NotificationsHistoryFragment extends Fragment {
         super.onDestroyView();
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
-            activity.resetHeader(); // Этот метод теперь сам возвращает колокольчик!
+            activity.resetHeader(); 
         }
     }
+
+    // ========================================================
+    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ========================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+        }
+    }
+    // ========================================================
 
     // --- АДАПТЕР ДЛЯ СПИСКА ---
     private static class NotifItem {
