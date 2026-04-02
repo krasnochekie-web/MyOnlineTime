@@ -103,7 +103,7 @@ public class SettingsFragment extends Fragment {
         
         view.findViewById(R.id.btn_saved).setOnClickListener(v -> { /* Пока пусто */ });
         
-        // --- ОТКРЫВАЕМ НОВЫЙ ЭКРАН ВМЕСТО ВЫЗОВА МЕТОДА ОЧИСТКИ ---
+        // --- ОТКРЫВАЕМ НОВЫЙ ЭКРАН ОЧИСТКИ ---
         view.findViewById(R.id.btn_clear_cache).setOnClickListener(v -> {
             if (activity != null && activity.navigator != null) {
                 activity.navigator.openSubScreen(new ClearCacheFragment());
@@ -193,6 +193,14 @@ public class SettingsFragment extends Fragment {
         }
     }
 
-    // ИСПРАВЛЕНИЕ: Методы очистки (clearAppCache, deleteDir, getDirSize) удалены!
-    // ИСПРАВЛЕНИЕ: Метод onResume (жесткое выключение фона) удален!
+    // ========================================================
+    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ========================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+        }
+    }
 }
