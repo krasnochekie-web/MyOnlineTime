@@ -94,7 +94,17 @@ public class NotificationsHistoryFragment extends Fragment {
         }
     }
 
-    // ИСПРАВЛЕНИЕ: Метод onResume с жестким выключением фона удален!
+    // ========================================================
+    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ========================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+        }
+    }
+    // ========================================================
 
     // --- АДАПТЕР ДЛЯ СПИСКА ---
     private static class NotifItem {
@@ -126,7 +136,6 @@ public class NotificationsHistoryFragment extends Fragment {
             holder.actionText.setText(item.actionText);
             holder.dateText.setText(sdf.format(new Date(item.timestamp)));
 
-            // Делаем кликабельным текст "Нажмите, чтобы просмотреть"
             holder.actionText.setOnClickListener(v -> {
                 if (activity != null) {
                     Intent intent = new Intent(activity, MainActivity.class);
