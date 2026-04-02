@@ -11,6 +11,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.LruCache;
 import android.view.View;
@@ -31,6 +32,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import android.util.Base64;
+
+// === ИМПОРТЫ ДЛЯ НОВОГО ПЛЕЕРА ===
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.Player;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.ui.PlayerView;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -58,8 +65,9 @@ public class MainActivity extends AppCompatActivity {
 
     private View permissionOverlay;
 
-    // --- ПЕРЕМЕННЫЕ ГЛОБАЛЬНОГО ФОНА ---
-    private VideoView globalVideoView;
+    // --- ПЕРЕМЕННЫЕ ГЛОБАЛЬНОГО ФОНА (НОВЫЙ ПЛЕЕР) ---
+    private PlayerView playerView;
+    private ExoPlayer exoPlayer;
     private ImageView globalImageView;
     private String currentBgPath = null;
     // -----------------------------------
@@ -211,11 +219,19 @@ public class MainActivity extends AppCompatActivity {
     } 
 
     // =====================================================================
-    // >>> МЕТОДЫ УПРАВЛЕНИЯ ГЛОБАЛЬНЫМ ФОНОМ <<<
+    // >>> МЕТОДЫ УПРАВЛЕНИЯ НОВЫМ ГЛОБАЛЬНЫМ ФОНОМ (ExoPlayer) <<<
     // =====================================================================
     private void initGlobalBackground() {
-        globalVideoView = findViewById(R.id.global_background_video);
+        playerView = findViewById(R.id.global_background_video);
         globalImageView = findViewById(R.id.global_background_image);
+        
+        // Создаем движок плеера
+        exoPlayer = new ExoPlayer.Builder(this).build();
+        playerView.setPlayer(exoPlayer);
+        
+        // Настраиваем бесконечный луп без рывков
+        exoPlayer.setRepeatMode(Player.REPEAT_MODE_ALL);
+        exoPlayer.setVolume(0f); // Звук на нуле
     }
 
     public void updateGlobalBackground(boolean show) {
@@ -223,19 +239,16 @@ public class MainActivity extends AppCompatActivity {
         boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
 
         if (!show || path == null) {
-            if (globalVideoView != null) {
-                globalVideoView.setVisibility(View.GONE);
-                globalVideoView.stopPlayback();
-            }
+            if (playerView != null) playerView.setVisibility(View.GONE);
+            if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
             if (globalImageView != null) globalImageView.setVisibility(View.GONE);
-            currentBgPath = null;
             return;
         }
 
-        // Если фон не менялся, не перезапускаем его
+        // Если фон тот же самый, просто продолжаем воспроизведение (никаких рывков!)
         if (path.equals(currentBgPath)) {
-            if (isVideo && globalVideoView != null && !globalVideoView.isPlaying()) {
-                globalVideoView.start();
+            if (isVideo && exoPlayer != null && !exoPlayer.isPlaying()) {
+                exoPlayer.play();
             }
             return;
         }
@@ -246,29 +259,61 @@ public class MainActivity extends AppCompatActivity {
 
         if (isVideo) {
             globalImageView.setVisibility(View.GONE);
-            globalVideoView.setVisibility(View.VISIBLE);
-            globalVideoView.setVideoPath(path);
-            globalVideoView.setOnPreparedListener(mp -> {
-                mp.setLooping(true);
-                mp.setVolume(0f, 0f);
-                
-                // Масштабирование видео (аналог centerCrop)
-                float videoRatio = mp.getVideoWidth() / (float) mp.getVideoHeight();
-                float screenRatio = globalVideoView.getWidth() / (float) globalVideoView.getHeight();
-                float scaleX = videoRatio > screenRatio ? videoRatio / screenRatio : 1f;
-                float scaleY = videoRatio > screenRatio ? 1f : screenRatio / videoRatio;
-                globalVideoView.setScaleX(scaleX);
-                globalVideoView.setScaleY(scaleY);
-                
-                globalVideoView.start();
-            });
+            playerView.setVisibility(View.VISIBLE);
+            
+            // Загружаем новое видео
+            MediaItem mediaItem = MediaItem.fromUri(Uri.fromFile(file));
+            exoPlayer.setMediaItem(mediaItem);
+            exoPlayer.prepare();
+            exoPlayer.play();
+            
         } else {
-            if (globalVideoView != null) {
-                globalVideoView.setVisibility(View.GONE);
-                globalVideoView.stopPlayback();
-            }
+            if (playerView != null) playerView.setVisibility(View.GONE);
+            if (exoPlayer != null) exoPlayer.pause();
+            
             globalImageView.setVisibility(View.VISIBLE);
             Glide.with(this).load(file).centerCrop().into(globalImageView);
+        }
+    }
+    
+    // --- ПРАВИЛЬНАЯ РАБОТА С ФОНОМ ПРИ СВОРАЧИВАНИИ ---
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (exoPlayer != null && exoPlayer.isPlaying()) {
+            exoPlayer.pause();
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        loadUserAvatarToBottomNav(); 
+        
+        if (exoPlayer != null && playerView != null && playerView.getVisibility() == View.VISIBLE) {
+            exoPlayer.play();
+        }
+        
+        if (permissionOverlay != null) {
+            if (hasPermission()) {
+                permissionOverlay.setVisibility(View.GONE);
+                GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+                if (account != null) StatsHelper.syncUserProfile(this);
+            } else {
+                permissionOverlay.setVisibility(View.VISIBLE);
+                permissionOverlay.bringToFront();
+                mainHeader.bringToFront();
+            }
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // Обязательно освобождаем память плеера при выходе
+        if (exoPlayer != null) {
+            exoPlayer.release();
+            exoPlayer = null;
         }
     }
     // =====================================================================
@@ -336,23 +381,6 @@ public class MainActivity extends AppCompatActivity {
     private void hideBottomNav() {
         if (bottomNav == null) return;
         bottomNav.animate().translationY(bottomNav.getHeight() + 50).setDuration(250).start();
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        loadUserAvatarToBottomNav(); 
-        if (permissionOverlay != null) {
-            if (hasPermission()) {
-                permissionOverlay.setVisibility(View.GONE);
-                GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
-                if (account != null) StatsHelper.syncUserProfile(this);
-            } else {
-                permissionOverlay.setVisibility(View.VISIBLE);
-                permissionOverlay.bringToFront();
-                mainHeader.bringToFront();
-            }
-        }
     }
 
     @Override
