@@ -66,7 +66,8 @@ public class FollowsListFragment extends Fragment {
 
         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
         if (acct != null) {
-            VpsApi.authenticateWithGoogle(acct.getIdToken(), new VpsApi.LoginCallback() {
+            // ИСПРАВЛЕН ВЫЗОВ VPS API (Добавлен контекст activity)
+            VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
                 @Override
                 public void onSuccess(String token) {
                     VpsApi.getList(token, targetUid, listType, new VpsApi.SearchCallback() {
