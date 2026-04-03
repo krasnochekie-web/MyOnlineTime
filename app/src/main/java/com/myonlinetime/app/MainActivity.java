@@ -73,14 +73,12 @@ public class MainActivity extends AppCompatActivity {
     private ImageView globalImageView;
     private String currentBgPath = null;
 
-    // --- ИСПРАВЛЕНИЕ: СЛУШАТЕЛЬ ИЗМЕНЕНИЙ В ПАМЯТИ ---
-    // Если пришел пуш и записался в историю, бейджик загорится сам
+    // Слушатель изменений в памяти для бейджика
     private final SharedPreferences.OnSharedPreferenceChangeListener notifListener = (sharedPrefs, key) -> {
         if ("notif_history_array".equals(key)) {
             runOnUiThread(this::updateNotificationBadge);
         }
     };
-    // --------------------------------------------------
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -142,7 +140,6 @@ public class MainActivity extends AppCompatActivity {
         if (headerBellBtn != null) headerBellBtn.setOnClickListener(bellListener);
         if (headerBellContainer != null) headerBellContainer.setOnClickListener(bellListener);
         
-        // Обновляем бейджик при запуске
         updateNotificationBadge();
 
         iconFeed = (ImageView) findViewById(R.id.icon_feed); 
@@ -159,7 +156,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Логика кликов по меню
         findViewById(R.id.nav_feed).setOnClickListener(v -> {
             hideLoginScreen(); 
             updateNavState(0);
@@ -193,7 +189,6 @@ public class MainActivity extends AppCompatActivity {
         
         headerBackBtn.setOnClickListener(v -> handleBackNavigation());
 
-        // --- ИНИЦИАЛИЗАЦИЯ И СТАРТ ФОНА ---
         initGlobalBackground();
         updateGlobalBackground(true);
 
@@ -230,9 +225,6 @@ public class MainActivity extends AppCompatActivity {
         });
     } 
 
-    // =====================================================================
-    // >>> ЛОГИКА БЕЙДЖИКА УВЕДОМЛЕНИЙ <<<
-    // =====================================================================
     public void updateNotificationBadge() {
         TextView badge = findViewById(R.id.header_bell_badge);
         if (badge == null) return;
@@ -321,7 +313,6 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
         if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
         
-        // --- ОТПИСЫВАЕМСЯ ОТ СЛУШАТЕЛЯ ---
         getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(notifListener);
     }
@@ -332,10 +323,12 @@ public class MainActivity extends AppCompatActivity {
         loadUserAvatarToBottomNav(); 
         updateNotificationBadge(); 
         
-        // --- ПРИНУДИТЕЛЬНЫЙ ПЕРЕЗАПУСК ФОНА ---
+        // === ПУЛЕНЕПРОБИВАЕМОЕ ВОССТАНОВЛЕНИЕ ФОНА ===
+        // Обнуляем путь, заставляя плеер загрузить поверхность с нуля
+        currentBgPath = null; 
         updateGlobalBackground(true);
+        // =============================================
         
-        // --- ПОДПИСЫВАЕМСЯ НА СЛУШАТЕЛЯ ---
         getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(notifListener);
         
@@ -447,7 +440,6 @@ public class MainActivity extends AppCompatActivity {
         headerTitle.setTextSize(20);
         headerBackBtn.setVisibility(View.GONE);
         
-        // --- ИСПРАВЛЕНИЕ: ВОЗВРАЩАЕМ ВИДИМОСТЬ КОЛОКОЛЬЧИКУ ---
         View bellContainer = findViewById(R.id.header_bell_container);
         if (bellContainer != null) {
             bellContainer.setVisibility(View.VISIBLE);
@@ -457,9 +449,7 @@ public class MainActivity extends AppCompatActivity {
             bellBtn.setVisibility(View.VISIBLE);
         }
         
-        // --- ИСПРАВЛЕНИЕ: ОБНОВЛЯЕМ БЕЙДЖ ПРИ ВОЗВРАТЕ ИЗ ИСТОРИИ ---
         updateNotificationBadge();
-        // -----------------------------------------------------------
     }
 
     private void checkAuthAndLoad(int tabIndex) {
