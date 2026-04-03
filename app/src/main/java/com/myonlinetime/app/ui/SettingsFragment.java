@@ -199,7 +199,8 @@ public class SettingsFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        if (getActivity() instanceof MainActivity) {
+        // ДОБАВЛЕНА ПРОВЕРКА !isHidden()
+        if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(false); 
         }
     }
