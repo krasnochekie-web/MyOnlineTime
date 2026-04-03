@@ -16,8 +16,6 @@
 <string name="chooser_select_background">Выберите фон</string>
 <string name="followers_tab_title">Подписчики</string>
 <string name="following_tab_title">Подписки</string>
-<string name="header_settings_sub">Уведомления</string>
-<string name="title_notifications">Уведомления</string>
 <string name="date_format">dd.MM.yyyy</string>
 <string name="toast_signed_out">Вы вышли из аккаунта</string>
     <string name="default_user_name">Пользователь</string>
