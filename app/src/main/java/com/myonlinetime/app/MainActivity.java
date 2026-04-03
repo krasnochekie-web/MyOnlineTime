@@ -262,18 +262,14 @@ public class MainActivity extends AppCompatActivity {
         exoPlayer.setRepeatMode(Player.REPEAT_MODE_ALL);
         exoPlayer.setVolume(0f);
     }
-
-    public void updateGlobalBackground(boolean show) {
+public void updateGlobalBackground(boolean show) {
         String path = prefs.getString("custom_bg_path", null);
         boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
 
         if (!show || path == null) {
             if (playerView != null) playerView.setVisibility(View.GONE);
             if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
-            if (globalImageView != null) {
-                globalImageView.setVisibility(View.GONE);
-                Glide.with(this).clear(globalImageView); // Очищаем память
-            }
+            if (globalImageView != null) globalImageView.setVisibility(View.GONE);
             return;
         }
 
@@ -287,7 +283,6 @@ public class MainActivity extends AppCompatActivity {
                 if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
                 if (globalImageView != null) {
                     globalImageView.setVisibility(View.VISIBLE);
-                    // Glide не перевызываем, картинка/GIF уже в памяти и работает
                 }
             }
             return;
@@ -298,10 +293,7 @@ public class MainActivity extends AppCompatActivity {
         if (!file.exists()) return;
 
         if (isVideo) {
-            if (globalImageView != null) {
-                globalImageView.setVisibility(View.GONE);
-                Glide.with(this).clear(globalImageView); // Высвобождаем память от прошлой картинки
-            }
+            if (globalImageView != null) globalImageView.setVisibility(View.GONE);
             if (playerView != null) playerView.setVisibility(View.VISIBLE);
             MediaItem mediaItem = MediaItem.fromUri(Uri.fromFile(file));
             exoPlayer.setMediaItem(mediaItem);
@@ -313,16 +305,14 @@ public class MainActivity extends AppCompatActivity {
             if (globalImageView != null) {
                 globalImageView.setVisibility(View.VISIBLE);
                 
-                // Передаем масштабирование самому ImageView
-                globalImageView.setScaleType(ImageView.ScaleType.CENTER_CROP); 
-                
+                // ВОЗВРАЩАЕМ .centerCrop(), чтобы Glide не давился большими файлами
                 Glide.with(this)
                      .load(file)
-                     .into(globalImageView); // Никакого .centerCrop() внутри Glide!
+                     .centerCrop()
+                     .into(globalImageView);
             }
         }
-    }
-    
+    }    
     @Override
     protected void onPause() {
         super.onPause();
@@ -331,17 +321,16 @@ public class MainActivity extends AppCompatActivity {
         getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(notifListener);
     }
-
-    @Override
+@Override
     protected void onResume() {
         super.onResume();
         loadUserAvatarToBottomNav(); 
         updateNotificationBadge(); 
         
         // === ПУЛЕНЕПРОБИВАЕМОЕ ВОССТАНОВЛЕНИЕ ФОНА ===
-        // Обнуляем путь ТОЛЬКО для видео, заставляя плеер загрузить поверхность с нуля
         boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
         if (isVideo) {
+            // Обнуляем путь ТОЛЬКО для видео, так как плеер теряет поверхность
             currentBgPath = null; 
         }
         updateGlobalBackground(true);
@@ -362,7 +351,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
-
     @Override
     protected void onDestroy() {
         super.onDestroy();
