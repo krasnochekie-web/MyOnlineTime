@@ -49,8 +49,8 @@
             android:layout_height="76dp"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingLeft="20dp"
-            android:paddingRight="20dp"
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"
             android:paddingTop="20dp">
 
             <ImageView
@@ -108,7 +108,8 @@
                     android:includeFontPadding="false"
                     android:visibility="gone" />
             </FrameLayout>
-            </LinearLayout>
+
+        </LinearLayout>
     </LinearLayout>
 
     <LinearLayout
