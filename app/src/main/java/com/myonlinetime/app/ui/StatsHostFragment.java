@@ -75,12 +75,13 @@ public class StatsHostFragment extends Fragment {
     }
 
     // ========================================================
-    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ИСПРАВЛЕННЫЙ МЕТОД onResume
     // ========================================================
     @Override
     public void onResume() {
         super.onResume();
-        if (getActivity() instanceof MainActivity) {
+        // ДОБАВЛЕНО: Проверка !isHidden(), чтобы скрытый фрагмент не выключал фон
+        if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(false); 
         }
     }
