@@ -278,6 +278,11 @@ public class MainActivity extends AppCompatActivity {
                 if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
                 if (globalImageView != null) {
                     globalImageView.setVisibility(View.VISIBLE);
+                    File file = new File(path);
+                    Glide.with(this)
+                         .load(file)
+                         .centerCrop()
+                         .into(globalImageView);
                 }
             }
             return;
@@ -317,17 +322,28 @@ public class MainActivity extends AppCompatActivity {
             .unregisterOnSharedPreferenceChangeListener(notifListener);
     }
 
+    // =======================================================================
+    // ИДЕАЛЬНОЕ МЯГКОЕ ВОССТАНОВЛЕНИЕ ФОНА (Без лишних вспышек)
+    // =======================================================================
     @Override
     protected void onResume() {
         super.onResume();
         loadUserAvatarToBottomNav(); 
         updateNotificationBadge(); 
         
-        // === ИСПРАВЛЕНИЕ: Сбрасываем кэш пути ДЛЯ ВСЕХ фонов (и видео, и фото) ===
-        // Это заставит Glide заново отрисовать картинку при возврате в приложение
-        currentBgPath = null; 
-        updateGlobalBackground(true);
-        // =======================================================================
+        // Мы больше не "включаем" фон насильно для всех экранов подряд.
+        // Вместо этого мы проверяем: если фон СЕЙЧАС физически на экране (он VISIBLE),
+        // значит мы на экране профиля. В этом случае мягко просим Glide/Плеер проснуться.
+        // На других экранах (Поиск, Настройки) этот код просто ничего не сделает!
+        String path = prefs.getString("custom_bg_path", null);
+        if (path != null) {
+            boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
+            if (isVideo && playerView != null && playerView.getVisibility() == View.VISIBLE) {
+                if (exoPlayer != null && !exoPlayer.isPlaying()) exoPlayer.play();
+            } else if (!isVideo && globalImageView != null && globalImageView.getVisibility() == View.VISIBLE) {
+                Glide.with(this).load(new File(path)).centerCrop().into(globalImageView);
+            }
+        }
         
         getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(notifListener);
