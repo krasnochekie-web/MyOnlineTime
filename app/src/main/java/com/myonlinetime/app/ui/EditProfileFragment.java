@@ -78,7 +78,8 @@ public class EditProfileFragment extends Fragment {
                 Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
                 intent.setType("*/*");
                 intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "video/*"});
-                activity.startActivityForResult(Intent.createChooser(intent, "Выберите фон"), RC_PICK_BACKGROUND);
+                // === Избавились от хардкода: тянем строку из ресурсов ===
+                activity.startActivityForResult(Intent.createChooser(intent, activity.getString(R.string.chooser_select_background)), RC_PICK_BACKGROUND);
             });
         }
 
@@ -86,7 +87,8 @@ public class EditProfileFragment extends Fragment {
              final String n = inputName.getText().toString();
              final String a = inputAbout.getText().toString();
              
-             VpsApi.authenticateWithGoogle(acct.getIdToken(), new VpsApi.LoginCallback() {
+             // === ДОБАВЛЕН activity для компиляции с обновленным VpsApi ===
+             VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
                  @Override public void onSuccess(String token) {
                      activity.vpsToken = token;
                      VpsApi.saveUser(activity.vpsToken, n, a, null, 0, null, new VpsApi.Callback() {
@@ -111,7 +113,7 @@ public class EditProfileFragment extends Fragment {
         return view;
     }
 
-    // --- УПРАВЛЕНИЕ ГЛОБАЛЬНЫМ ФОНОМ ---
+    // --- УПРАВЛЕНИЕ ГЛОБАЛЬНЫМ ФОНОМ (Оригинальная логика, без анимаций) ---
     @Override
     public void onResume() {
         super.onResume();
