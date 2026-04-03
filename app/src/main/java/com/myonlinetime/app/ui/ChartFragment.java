@@ -240,7 +240,11 @@ public class ChartFragment extends Fragment {
             } else if (event.getEventType() == UsageEvents.Event.ACTIVITY_PAUSED) {
                 if (openTimes.containsKey(pkg)) {
                     long duration = event.getTimeStamp() - openTimes.get(pkg);
-                    if (duration > 0) results.put(pkg, results.getOrDefault(pkg, 0L) + duration);
+                    if (duration > 0) {
+                        // ИЗБАВЛЯЕМСЯ ОТ getOrDefault ДЛЯ ПОДДЕРЖКИ ANDROID 5.1
+                        Long current = results.get(pkg);
+                        results.put(pkg, (current == null ? 0L : current) + duration);
+                    }
                     openTimes.remove(pkg);
                 }
             }
