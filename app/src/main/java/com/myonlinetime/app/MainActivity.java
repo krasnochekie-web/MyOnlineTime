@@ -262,7 +262,8 @@ public class MainActivity extends AppCompatActivity {
         exoPlayer.setRepeatMode(Player.REPEAT_MODE_ALL);
         exoPlayer.setVolume(0f);
     }
-public void updateGlobalBackground(boolean show) {
+
+    public void updateGlobalBackground(boolean show) {
         String path = prefs.getString("custom_bg_path", null);
         boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
 
@@ -305,7 +306,6 @@ public void updateGlobalBackground(boolean show) {
             if (globalImageView != null) {
                 globalImageView.setVisibility(View.VISIBLE);
                 
-                // ВОЗВРАЩАЕМ .centerCrop(), чтобы Glide не давился большими файлами
                 Glide.with(this)
                      .load(file)
                      .centerCrop()
@@ -313,6 +313,7 @@ public void updateGlobalBackground(boolean show) {
             }
         }
     }    
+    
     @Override
     protected void onPause() {
         super.onPause();
@@ -321,7 +322,8 @@ public void updateGlobalBackground(boolean show) {
         getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(notifListener);
     }
-@Override
+
+    @Override
     protected void onResume() {
         super.onResume();
         loadUserAvatarToBottomNav(); 
@@ -351,6 +353,7 @@ public void updateGlobalBackground(boolean show) {
             }
         }
     }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
@@ -623,12 +626,12 @@ public void updateGlobalBackground(boolean show) {
                     .putBoolean("custom_bg_is_video", isVideo)
                     .apply();
                     
-                Toast.makeText(this, "Фон успешно установлен!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.toast_bg_success), Toast.LENGTH_SHORT).show();
                 updateGlobalBackground(true);
 
             } catch (Exception e) {
                 e.printStackTrace();
-                Toast.makeText(this, "Ошибка при установке фона", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.toast_bg_error), Toast.LENGTH_SHORT).show();
             }
         }
     }
