@@ -114,7 +114,8 @@ public class FollowsFragment extends Fragment {
         // Загружаем счетчики
         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
         if(acct != null) {
-            VpsApi.authenticateWithGoogle(acct.getIdToken(), new VpsApi.LoginCallback() {
+            // ИСПРАВЛЕН ВЫЗОВ VPS API (Добавлен контекст activity)
+            VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
                 @Override
                 public void onSuccess(String token) {
                     VpsApi.getCounts(token, targetUid, new VpsApi.Callback() {
