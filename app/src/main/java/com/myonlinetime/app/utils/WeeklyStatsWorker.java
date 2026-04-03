@@ -99,8 +99,13 @@ public class WeeklyStatsWorker extends Worker {
             newNotif.put("actionText", actionText);
             newNotif.put("timestamp", timestamp);
             
+            // === ИСПРАВЛЕНИЕ: ЯВНО ПОМЕЧАЕМ КАК "НЕ ПРОЧИТАНО" ===
+            newNotif.put("isRead", false);
+            // =====================================================
+            
             array.put(newNotif); // Добавляем в конец
             prefs.edit().putString("notif_history_array", array.toString()).apply();
+            
         } catch (Exception e) {
             e.printStackTrace();
         }
