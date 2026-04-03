@@ -31,7 +31,7 @@
                     android:id="@+id/tab_txt_followers" 
                     android:layout_width="wrap_content" 
                     android:layout_height="wrap_content" 
-                    android:text="Подписчики" 
+                    android:text="@string/followers_tab_title" 
                     android:textColor="@color/burgundyRed" 
                     android:textStyle="bold" />
                 <TextView 
@@ -71,7 +71,7 @@
                     android:id="@+id/tab_txt_following" 
                     android:layout_width="wrap_content" 
                     android:layout_height="wrap_content" 
-                    android:text="Подписки" 
+                    android:text="@string/following_tab_title" 
                     android:textColor="@color/tabTextInactive" 
                     android:textStyle="bold" />
                 <TextView 
