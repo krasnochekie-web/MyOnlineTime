@@ -26,6 +26,16 @@ import java.util.Locale;
 
 public class NotificationsHistoryFragment extends Fragment {
 
+    // === ТЕХНИЧЕСКИЙ ХАРДКОР ВЫНЕСЕН В КОНСТАНТЫ ===
+    private static final String PREFS_NAME = "AppPrefs";
+    private static final String KEY_HISTORY = "notif_history_array";
+    private static final String JSON_MAIN_TEXT = "mainText";
+    private static final String JSON_ACTION_TEXT = "actionText";
+    private static final String JSON_TIMESTAMP = "timestamp";
+    private static final String JSON_IS_READ = "isRead";
+    private static final String EXTRA_OPEN_TAB = "open_tab";
+    private static final String TAB_TIME = "time";
+
     private Runnable hideBgRunnable;
 
     @Nullable
@@ -38,8 +48,8 @@ public class NotificationsHistoryFragment extends Fragment {
         RecyclerView recycler = view.findViewById(R.id.recycler_notifications);
         TextView emptyText = view.findViewById(R.id.empty_notif_text);
 
-        SharedPreferences prefs = requireContext().getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
-        String historyJson = prefs.getString("notif_history_array", "[]");
+        SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String historyJson = prefs.getString(KEY_HISTORY, "[]");
         
         List<NotifItem> items = new ArrayList<>();
         try {
@@ -47,9 +57,9 @@ public class NotificationsHistoryFragment extends Fragment {
             for (int i = array.length() - 1; i >= 0; i--) {
                 JSONObject obj = array.getJSONObject(i);
                 items.add(new NotifItem(
-                        obj.getString("mainText"),
-                        obj.getString("actionText"),
-                        obj.getLong("timestamp")
+                        obj.getString(JSON_MAIN_TEXT),
+                        obj.getString(JSON_ACTION_TEXT),
+                        obj.getLong(JSON_TIMESTAMP)
                 ));
             }
         } catch (Exception e) { e.printStackTrace(); }
@@ -63,7 +73,6 @@ public class NotificationsHistoryFragment extends Fragment {
             recycler.setLayoutManager(new LinearLayoutManager(getContext()));
             recycler.setAdapter(new NotifAdapter(items, (MainActivity) getActivity()));
             
-            // Сбрасываем бейджик при просмотре истории
             markAllAsRead();
         }
 
@@ -71,18 +80,18 @@ public class NotificationsHistoryFragment extends Fragment {
     }
 
     private void markAllAsRead() {
-        SharedPreferences prefs = requireContext().getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
-        String historyJson = prefs.getString("notif_history_array", "[]");
+        SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String historyJson = prefs.getString(KEY_HISTORY, "[]");
         
         try {
             JSONArray array = new JSONArray(historyJson);
             if (array.length() == 0) return;
 
             for (int i = 0; i < array.length(); i++) {
-                array.getJSONObject(i).put("isRead", true);
+                array.getJSONObject(i).put(JSON_IS_READ, true);
             }
             
-            prefs.edit().putString("notif_history_array", array.toString()).apply();
+            prefs.edit().putString(KEY_HISTORY, array.toString()).apply();
             
             if (getActivity() instanceof MainActivity) {
                 ((MainActivity) getActivity()).updateNotificationBadge();
@@ -117,7 +126,7 @@ public class NotificationsHistoryFragment extends Fragment {
         if (activity == null) return;
 
         if (!hidden) {
-            setupHeader(); // Восстанавливаем шапку при возврате
+            setupHeader(); 
             
             if (hideBgRunnable == null) {
                 hideBgRunnable = () -> {
@@ -168,11 +177,13 @@ public class NotificationsHistoryFragment extends Fragment {
     private static class NotifAdapter extends RecyclerView.Adapter<NotifAdapter.ViewHolder> {
         private final List<NotifItem> items;
         private final MainActivity activity;
-        private final SimpleDateFormat sdf = new SimpleDateFormat("dd.MM.yyyy", Locale.getDefault());
+        private final SimpleDateFormat sdf;
 
         NotifAdapter(List<NotifItem> items, MainActivity activity) {
             this.items = items;
             this.activity = activity;
+            // Перенос формата даты в ресурсы
+            this.sdf = new SimpleDateFormat(activity.getString(R.string.date_format), Locale.getDefault());
         }
 
         @NonNull
@@ -193,7 +204,7 @@ public class NotificationsHistoryFragment extends Fragment {
                 if (activity != null) {
                     Intent intent = new Intent(activity, MainActivity.class);
                     intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                    intent.putExtra("open_tab", "time");
+                    intent.putExtra(EXTRA_OPEN_TAB, TAB_TIME);
                     activity.startActivity(intent);
                 }
             });
