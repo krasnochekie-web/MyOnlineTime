@@ -16,8 +16,6 @@
 	<string name="chooser_select_background">Select background</string>
 	<string name="followers_tab_title">Followers</string>
 <string name="following_tab_title">Following</string>
-<string name="header_settings_sub">Notifications</string>
-<string name="title_notifications">Notifications</string>
 <string name="date_format">MM/dd/yyyy</string>
 <string name="toast_signed_out">You have signed out</string>
     <string name="default_user_name">User</string>
