@@ -206,7 +206,7 @@
             <TextView
                 android:id="@+id/btn_clear_cache"
                 style="@style/SettingsItemStyle"
-                android:text="@string/settings_clear_cache"
+                android:text="@string/settings_clear_storage"
                 app:drawableStartCompat="@drawable/ic_clear" />
         </LinearLayout>
 
