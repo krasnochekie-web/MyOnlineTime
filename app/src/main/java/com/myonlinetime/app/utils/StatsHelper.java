@@ -34,12 +34,18 @@ import java.util.concurrent.Executors;
 
 public class StatsHelper {
 
+    // ТЕХНИЧЕСКИЕ КОНСТАНТЫ
+    private static final String PKG_ANDROID = "android";
+    private static final String PKG_SYSTEM_UI = "com.android.systemui";
+    private static final String PKG_GMS = "com.google.android.gms";
+    private static final String PKG_SETTINGS = "com.android.settings";
+    private static final String PKG_SETUP_WIZARD = "com.google.android.setupwizard";
+
     // 1. МЕТОД ДЛЯ ФОНОВОЙ СИНХРОНИЗАЦИИ С СЕРВЕРОМ
     public static void syncUserProfile(final MainActivity activity) {
         final GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         if (account == null) return;
         
-        // ОПТИМИЗАЦИЯ: Уводим синхронизацию в фон, чтобы не тормозить запуск приложения
         ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
             long now = System.currentTimeMillis();
@@ -82,9 +88,9 @@ public class StatsHelper {
             for (Map.Entry<String, Long> entry : exactTimes.entrySet()) {
                 String pkg = entry.getKey();
                 long time = entry.getValue();
-                boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || 
-                                        pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || 
-                                        pkg.equals("com.google.android.setupwizard") || pkg.equals(launcherPkg);
+                boolean isSystemTrash = pkg.equals(PKG_ANDROID) || pkg.equals(PKG_SYSTEM_UI) || 
+                                        pkg.equals(PKG_GMS) || pkg.equals(PKG_SETTINGS) || 
+                                        pkg.equals(PKG_SETUP_WIZARD) || pkg.equals(launcherPkg);
                                         
                 if (time > 0 && userApps.contains(pkg) && !isSystemTrash) {
                     finalList.add(pkg);
@@ -92,14 +98,10 @@ public class StatsHelper {
                 }
             }
             
-            Collections.sort(finalList, new Comparator<String>() {
-                public int compare(String left, String right) {
-                    Long tLeft = exactTimes.get(left);
-                    Long tRight = exactTimes.get(right);
-                    if (tLeft == null) tLeft = 0L;
-                    if (tRight == null) tRight = 0L;
-                    return Long.compare(tRight, tLeft);
-                }
+            Collections.sort(finalList, (left, right) -> {
+                Long tLeft = exactTimes.get(left);
+                Long tRight = exactTimes.get(right);
+                return Long.compare(tRight != null ? tRight : 0L, tLeft != null ? tLeft : 0L);
             });
             
             final Map<String, Long> finalTopApps = new HashMap<>();
@@ -111,12 +113,12 @@ public class StatsHelper {
             
             final long finalTime = totalMillis;
             
-            // Возвращаемся в главный поток только для отправки запроса
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (activity.vpsToken != null) {
                      VpsApi.saveUser(activity.vpsToken, null, null, null, finalTime, finalTopApps, null);
                 } else {
-                     VpsApi.authenticateWithGoogle(account.getIdToken(), new VpsApi.LoginCallback() {
+                     // ИСПРАВЛЕН ВЫЗОВ: Добавлен activity (Context)
+                     VpsApi.authenticateWithGoogle(activity, account.getIdToken(), new VpsApi.LoginCallback() {
                          @Override
                          public void onSuccess(String token) {
                              activity.vpsToken = token;
@@ -133,7 +135,6 @@ public class StatsHelper {
     public static void loadStatsToProfile(final MainActivity activity, final TextView weekTimeText, final LinearLayout appsContainer) {
         appsContainer.removeAllViews();
         
-        // ОПТИМИЗАЦИЯ: Уводим всю математику и сбор статистики в фоновый поток
         ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
             long now = System.currentTimeMillis();
@@ -176,9 +177,9 @@ public class StatsHelper {
             for (Map.Entry<String, Long> entry : exactTimes.entrySet()) {
                 String pkg = entry.getKey();
                 long time = entry.getValue();
-                boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || 
-                                        pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || 
-                                        pkg.equals("com.google.android.setupwizard") || pkg.equals(launcherPkg);
+                boolean isSystemTrash = pkg.equals(PKG_ANDROID) || pkg.equals(PKG_SYSTEM_UI) || 
+                                        pkg.equals(PKG_GMS) || pkg.equals(PKG_SETTINGS) || 
+                                        pkg.equals(PKG_SETUP_WIZARD) || pkg.equals(launcherPkg);
                                         
                 if (time > 0 && userApps.contains(pkg) && !isSystemTrash) {
                     finalList.add(pkg);
@@ -186,27 +187,27 @@ public class StatsHelper {
                 }
             }
             
-            Collections.sort(finalList, new Comparator<String>() {
-                public int compare(String left, String right) {
-                    Long tLeft = exactTimes.get(left);
-                    Long tRight = exactTimes.get(right);
-                    if (tLeft == null) tLeft = 0L;
-                    if (tRight == null) tRight = 0L;
-                    return Long.compare(tRight, tLeft);
-                }
+            Collections.sort(finalList, (left, right) -> {
+                Long tLeft = exactTimes.get(left);
+                Long tRight = exactTimes.get(right);
+                return Long.compare(tRight != null ? tRight : 0L, tLeft != null ? tLeft : 0L);
             });
 
             final long finalTotalMillis = tempTotalMillis;
 
-            // Математика закончена! Возвращаемся в главный поток только чтобы отрисовать UI
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (activity.isDestroyed() || activity.isFinishing()) return;
 
                 long minutes = finalTotalMillis / 1000 / 60;
                 long hours = minutes / 60;
                 long mins = minutes % 60;
+                
+                // РАЗХАРДКОРЕНО: Используем строковые ресурсы для времени
                 if (weekTimeText != null) {
-                    weekTimeText.setText(hours > 0 ? hours + " ч " + mins + " мин" : mins + " мин");
+                    String timeStr = (hours > 0) 
+                        ? activity.getString(R.string.format_hours_mins, hours, mins) 
+                        : activity.getString(R.string.format_mins, mins);
+                    weekTimeText.setText(timeStr);
                 }
                 
                 int limit = 0;
