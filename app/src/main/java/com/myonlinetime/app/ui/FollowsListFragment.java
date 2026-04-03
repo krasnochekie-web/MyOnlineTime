@@ -27,7 +27,6 @@ public class FollowsListFragment extends Fragment {
     private String listType; // "followers" или "following"
     private UserListAdapter adapter;
     private TextView statusText;
-    private Runnable hideBgRunnable;
 
     public static FollowsListFragment newInstance(String uid, String type) {
         FollowsListFragment f = new FollowsListFragment();
@@ -66,7 +65,6 @@ public class FollowsListFragment extends Fragment {
 
         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
         if (acct != null) {
-            // ИСПРАВЛЕН ВЫЗОВ VPS API (Добавлен контекст activity)
             VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
                 @Override
                 public void onSuccess(String token) {
@@ -92,23 +90,5 @@ public class FollowsListFragment extends Fragment {
         }
     }
 
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (getActivity() instanceof MainActivity) {
-            MainActivity activity = (MainActivity) getActivity();
-            if (hideBgRunnable == null) {
-                hideBgRunnable = () -> {
-                    if (isAdded() && !isHidden()) {
-                        activity.updateGlobalBackground(false);
-                    }
-                };
-            }
-            if (getView() != null) {
-                getView().postDelayed(hideBgRunnable, 300);
-            } else {
-                activity.updateGlobalBackground(false);
-            }
-        }
-    }
+    // МЕТОД onResume И hideBgRunnable УДАЛЕНЫ ПОЛНОСТЬЮ — ФОНОМ УПРАВЛЯЕТ FollowsFragment!
 }
