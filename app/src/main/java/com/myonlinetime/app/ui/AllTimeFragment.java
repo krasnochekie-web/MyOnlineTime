@@ -189,7 +189,9 @@ public class AllTimeFragment extends Fragment {
                                                 pkg.equals(launcherPkg);
                                                 
                         if (time > 1000 && userApps.contains(pkg) && !isSystemTrash) {
-                            appsMap.put(pkg, Math.max(appsMap.getOrDefault(pkg, 0L), time));
+                            // ИЗБАВЛЯЕМСЯ ОТ getOrDefault
+                            Long current = appsMap.get(pkg);
+                            appsMap.put(pkg, Math.max((current == null ? 0L : current), time));
                         }
                     }
                 }
@@ -213,7 +215,9 @@ public class AllTimeFragment extends Fragment {
                                             pkg.equals(launcherPkg);
                                             
                     if (time > 1000 && userApps.contains(pkg) && !isSystemTrash) {
-                        appsMap.put(pkg, appsMap.getOrDefault(pkg, 0L) + time);
+                        // ИЗБАВЛЯЕМСЯ ОТ getOrDefault
+                        Long current = appsMap.get(pkg);
+                        appsMap.put(pkg, (current == null ? 0L : current) + time);
                         totalMillis += time;
                     }
                 }
@@ -321,7 +325,11 @@ public class AllTimeFragment extends Fragment {
             } else if (event.getEventType() == UsageEvents.Event.ACTIVITY_PAUSED) {
                 if (openTimes.containsKey(pkg)) {
                     long duration = event.getTimeStamp() - openTimes.get(pkg);
-                    if (duration > 0) results.put(pkg, results.getOrDefault(pkg, 0L) + duration);
+                    if (duration > 0) {
+                        // ИЗБАВЛЯЕМСЯ ОТ getOrDefault
+                        Long current = results.get(pkg);
+                        results.put(pkg, (current == null ? 0L : current) + duration);
+                    }
                     openTimes.remove(pkg);
                 }
             }
