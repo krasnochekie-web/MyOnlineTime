@@ -27,6 +27,7 @@
             android:scaleType="centerCrop"
             android:visibility="gone" />
     </FrameLayout>
+
     <FrameLayout
         android:id="@+id/fragment_container"
         android:layout_width="match_parent"
@@ -76,15 +77,16 @@
 
             <FrameLayout
                 android:id="@+id/header_bell_container"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
                 android:clipChildren="false"
                 android:clipToPadding="false">
 
                 <ImageView
                     android:id="@+id/header_bell_btn"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="center"
                     android:padding="2dp"
                     android:src="@drawable/ic_bell"
                     android:clickable="true"
@@ -96,8 +98,8 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="top|end"
-                    android:layout_marginTop="-4dp"
-                    android:layout_marginEnd="-4dp"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginEnd="2dp"
                     android:background="@drawable/bg_notification_badge"
                     android:gravity="center"
                     android:minWidth="14dp"
@@ -165,4 +167,3 @@
         android:visibility="gone" /> 
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
-                    
