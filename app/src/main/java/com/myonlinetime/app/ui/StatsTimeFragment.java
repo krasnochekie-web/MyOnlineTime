@@ -267,7 +267,10 @@ public class StatsTimeFragment extends Fragment {
             } else if (event.getEventType() == UsageEvents.Event.ACTIVITY_PAUSED) {
                 if (openTimes.containsKey(pkg)) {
                     long duration = event.getTimeStamp() - openTimes.get(pkg);
-                    if (duration > 0) results.put(pkg, results.getOrDefault(pkg, 0L) + duration);
+                    if (duration > 0) {
+                        Long current = results.get(pkg);
+                        results.put(pkg, (current == null ? 0L : current) + duration);
+                    }
                     openTimes.remove(pkg);
                 }
             }
@@ -285,8 +288,15 @@ public class StatsTimeFragment extends Fragment {
             for (UsageStats s : stats) {
                 long time = s.getTotalTimeInForeground();
                 if (time > 0) {
-                    if (interval == UsageStatsManager.INTERVAL_YEARLY) results.put(s.getPackageName(), Math.max(results.getOrDefault(s.getPackageName(), 0L), time));
-                    else results.put(s.getPackageName(), results.getOrDefault(s.getPackageName(), 0L) + time);
+                    String pkg = s.getPackageName();
+                    Long current = results.get(pkg);
+                    long currentVal = (current == null) ? 0L : current;
+
+                    if (interval == UsageStatsManager.INTERVAL_YEARLY) {
+                        results.put(pkg, Math.max(currentVal, time));
+                    } else {
+                        results.put(pkg, currentVal + time);
+                    }
                 }
             }
         }
