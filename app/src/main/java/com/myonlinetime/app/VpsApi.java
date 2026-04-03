@@ -1,5 +1,6 @@
 package com.myonlinetime.app;
 
+import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -42,7 +43,8 @@ public class VpsApi {
     public interface BooleanCallback { void onResult(boolean result); }
     public interface LoginCallback { void onSuccess(String ourServerToken); void onError(String error); }
 
-    public static void authenticateWithGoogle(String googleIdToken, final LoginCallback callback) {
+    // ДОБАВЛЕН CONTEXT ДЛЯ ПОЛУЧЕНИЯ СТРОК ИЗ РЕСУРСОВ
+    public static void authenticateWithGoogle(Context context, String googleIdToken, final LoginCallback callback) {
         String jsonBody = "{\"idToken\":\"" + googleIdToken + "\"}";
         RequestBody body = RequestBody.create(jsonBody, JSON);
         
@@ -67,10 +69,10 @@ public class VpsApi {
                             });
                         }
                     } catch (Exception e) {
-                        postError(callback, "Failed to parse server token");
+                        postError(callback, context.getString(R.string.err_parse_token));
                     }
                 } else {
-                    postError(callback, "Server auth failed: " + response.code());
+                    postError(callback, context.getString(R.string.err_server_auth) + response.code());
                 }
             }
         });
@@ -87,7 +89,8 @@ public class VpsApi {
         enqueueCall(request, callback);
     }
 
-    public static void getUser(String ourServerToken, String uid, final UserCallback callback) {
+    // ДОБАВЛЕН CONTEXT ДЛЯ ПОЛУЧЕНИЯ СТРОК ИЗ РЕСУРСОВ
+    public static void getUser(Context context, String ourServerToken, String uid, final UserCallback callback) {
         HttpUrl url = HttpUrl.parse(BASE_URL + "get_user").newBuilder().addQueryParameter("uid", uid).build();
         Request request = createAuthedRequest(url, ourServerToken).build();
         client.newCall(request).enqueue(new okhttp3.Callback() {
@@ -101,7 +104,7 @@ public class VpsApi {
                         });
                     }
                 } else {
-                    postError(callback, "Get user failed: " + response.message());
+                    postError(callback, context.getString(R.string.err_get_user) + response.message());
                 }
             }
         });
