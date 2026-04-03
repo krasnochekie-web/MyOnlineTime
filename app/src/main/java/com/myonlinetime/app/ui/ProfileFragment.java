@@ -122,14 +122,12 @@ public class ProfileFragment extends Fragment {
 
         if (!isMe) btnBack.setVisibility(View.VISIBLE);
 
-        // ОПТИМИЗАЦИЯ 1: Асинхронная загрузка кэша без фризов
         loadLocalCacheAsync(() -> {
             if (isMe && isAdded()) {
-                // Вызываем подгрузку статистики только после того, как кэш прогрузился
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     if (!isAdded()) return;
                     StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
-                }, 150); // Уменьшили задержку, так как мы уже в фоне
+                }, 150); 
             }
         });
 
@@ -137,7 +135,6 @@ public class ProfileFragment extends Fragment {
             nameView.setText(activity.prefs.getString("my_nickname", account.getDisplayName()));
             aboutView.setText(activity.prefs.getString("my_about", ""));
 
-            // ОПТИМИЗАЦИЯ 2: Убрали блокирующий file.exists(). Glide сам проверит файл в фоне!
             Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + myUid);
             if (cachedAvatar != null) {
                 Glide.with(activity).load(cachedAvatar).circleCrop().into(avatarView);
@@ -146,7 +143,7 @@ public class ProfileFragment extends Fragment {
                 Glide.with(activity)
                      .load(file)
                      .circleCrop()
-                     .error(R.drawable.bg_edit_circle) // Если файла нет, Glide сам поставит заглушку
+                     .error(R.drawable.bg_edit_circle) 
                      .into(avatarView);
             }
 
@@ -167,7 +164,8 @@ public class ProfileFragment extends Fragment {
         final Runnable fetchProfileData = new Runnable() {
             @Override
             public void run() {
-                VpsApi.getUser(activity.vpsToken, finalTargetUid, new VpsApi.UserCallback() {
+                // ИСПРАВЛЕН ВЫЗОВ: Добавлен activity
+                VpsApi.getUser(activity, activity.vpsToken, finalTargetUid, new VpsApi.UserCallback() {
                     @Override
                     public void onLoaded(User user) {
                         if (!isAdded()) return;
@@ -189,12 +187,11 @@ public class ProfileFragment extends Fragment {
                             if (user.photo != null && user.photo.length() > 10) {
                                 File localAvatar = new File(activity.getFilesDir(), "avatar_" + myUid + ".png");
                                 if (isMe && localAvatar.exists() && user.photo.startsWith("http")) {
-                                    // Ничего не делаем, локальная свежее
+                                    // Оставляем локальную
                                 } else {
                                     if (user.photo.startsWith("http")) {
                                         Glide.with(activity).load(user.photo).circleCrop().into(avatarView);
                                     } else {
-                                        // ОПТИМИЗАЦИЯ 3: Тяжелый Base64 декодируем в фоне!
                                         Executors.newSingleThreadExecutor().execute(() -> {
                                             try {
                                                 byte[] imageByteArray = android.util.Base64.decode(user.photo, android.util.Base64.DEFAULT);
@@ -291,7 +288,8 @@ public class ProfileFragment extends Fragment {
         if (activity.vpsToken != null) {
             fetchProfileData.run();
         } else {
-            VpsApi.authenticateWithGoogle(account.getIdToken(), new VpsApi.LoginCallback() {
+            // ИСПРАВЛЕН ВЫЗОВ: Добавлен activity
+            VpsApi.authenticateWithGoogle(activity, account.getIdToken(), new VpsApi.LoginCallback() {
                 @Override
                 public void onSuccess(final String token) {
                     activity.vpsToken = token;
@@ -304,7 +302,6 @@ public class ProfileFragment extends Fragment {
         return view;
     }
 
-    // --- УПРАВЛЕНИЕ ГЛОБАЛЬНЫМ ФОНОМ ---
     @Override
     public void onResume() {
         super.onResume();
@@ -323,12 +320,9 @@ public class ProfileFragment extends Fragment {
                 activity.resetHeader();
                 activity.updateGlobalBackground(true);
             }
-            // ИСПРАВЛЕНИЕ: Мы удалили блок else, чтобы при скрытии профиля фон не выключался.
         }
     }
-    // ------------------------------------
 
-    // ОПТИМИЗАЦИЯ: Вынесли тяжелый парсинг JSON в фон
     private void loadLocalCacheAsync(Runnable onLoaded) {
         Executors.newSingleThreadExecutor().execute(() -> {
             Set<String> hidden = new HashSet<>(prefs.getStringSet("hidden_apps", new HashSet<>()));
@@ -414,7 +408,12 @@ public class ProfileFragment extends Fragment {
             long minutes = totalVisibleTime / 1000 / 60;
             long hours = minutes / 60;
             long mins = minutes % 60;
-            weekTimeText.setText(hours > 0 ? hours + " ч " + mins + " мин" : mins + " мин");
+            // РАЗХАРДКОРЕНО: Используем getString с плейсхолдерами
+            if (hours > 0) {
+                weekTimeText.setText(activity.getString(R.string.format_hours_mins, hours, mins));
+            } else {
+                weekTimeText.setText(activity.getString(R.string.format_mins, mins));
+            }
             weekTimeText.setOnClickListener(null); 
         }
 
