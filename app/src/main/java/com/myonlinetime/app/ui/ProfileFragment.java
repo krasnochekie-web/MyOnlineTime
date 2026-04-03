@@ -164,7 +164,6 @@ public class ProfileFragment extends Fragment {
         final Runnable fetchProfileData = new Runnable() {
             @Override
             public void run() {
-                // ИСПРАВЛЕН ВЫЗОВ: Добавлен activity
                 VpsApi.getUser(activity, activity.vpsToken, finalTargetUid, new VpsApi.UserCallback() {
                     @Override
                     public void onLoaded(User user) {
@@ -288,7 +287,6 @@ public class ProfileFragment extends Fragment {
         if (activity.vpsToken != null) {
             fetchProfileData.run();
         } else {
-            // ИСПРАВЛЕН ВЫЗОВ: Добавлен activity
             VpsApi.authenticateWithGoogle(activity, account.getIdToken(), new VpsApi.LoginCallback() {
                 @Override
                 public void onSuccess(final String token) {
@@ -302,13 +300,18 @@ public class ProfileFragment extends Fragment {
         return view;
     }
 
+    // ========================================================
+    // ИСПРАВЛЕННЫЙ МЕТОД onResume
+    // ========================================================
     @Override
     public void onResume() {
         super.onResume();
-        if (getActivity() instanceof MainActivity) {
+        // ДОБАВЛЕНО: Проверка !isHidden()
+        if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(true);
         }
     }
+    // ========================================================
 
     @Override
     public void onHiddenChanged(boolean hidden) {
@@ -408,7 +411,6 @@ public class ProfileFragment extends Fragment {
             long minutes = totalVisibleTime / 1000 / 60;
             long hours = minutes / 60;
             long mins = minutes % 60;
-            // РАЗХАРДКОРЕНО: Используем getString с плейсхолдерами
             if (hours > 0) {
                 weekTimeText.setText(activity.getString(R.string.format_hours_mins, hours, mins));
             } else {
