@@ -270,7 +270,10 @@ public class MainActivity extends AppCompatActivity {
         if (!show || path == null) {
             if (playerView != null) playerView.setVisibility(View.GONE);
             if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
-            if (globalImageView != null) globalImageView.setVisibility(View.GONE);
+            if (globalImageView != null) {
+                globalImageView.setVisibility(View.GONE);
+                Glide.with(this).clear(globalImageView); // Очищаем память
+            }
             return;
         }
 
@@ -282,7 +285,10 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 if (playerView != null) playerView.setVisibility(View.GONE);
                 if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
-                if (globalImageView != null) globalImageView.setVisibility(View.VISIBLE);
+                if (globalImageView != null) {
+                    globalImageView.setVisibility(View.VISIBLE);
+                    // Glide не перевызываем, картинка/GIF уже в памяти и работает
+                }
             }
             return;
         }
@@ -292,7 +298,10 @@ public class MainActivity extends AppCompatActivity {
         if (!file.exists()) return;
 
         if (isVideo) {
-            if (globalImageView != null) globalImageView.setVisibility(View.GONE);
+            if (globalImageView != null) {
+                globalImageView.setVisibility(View.GONE);
+                Glide.with(this).clear(globalImageView); // Высвобождаем память от прошлой картинки
+            }
             if (playerView != null) playerView.setVisibility(View.VISIBLE);
             MediaItem mediaItem = MediaItem.fromUri(Uri.fromFile(file));
             exoPlayer.setMediaItem(mediaItem);
@@ -303,7 +312,13 @@ public class MainActivity extends AppCompatActivity {
             if (exoPlayer != null) exoPlayer.pause();
             if (globalImageView != null) {
                 globalImageView.setVisibility(View.VISIBLE);
-                Glide.with(this).load(file).centerCrop().into(globalImageView);
+                
+                // Передаем масштабирование самому ImageView
+                globalImageView.setScaleType(ImageView.ScaleType.CENTER_CROP); 
+                
+                Glide.with(this)
+                     .load(file)
+                     .into(globalImageView); // Никакого .centerCrop() внутри Glide!
             }
         }
     }
@@ -324,8 +339,11 @@ public class MainActivity extends AppCompatActivity {
         updateNotificationBadge(); 
         
         // === ПУЛЕНЕПРОБИВАЕМОЕ ВОССТАНОВЛЕНИЕ ФОНА ===
-        // Обнуляем путь, заставляя плеер загрузить поверхность с нуля
-        currentBgPath = null; 
+        // Обнуляем путь ТОЛЬКО для видео, заставляя плеер загрузить поверхность с нуля
+        boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
+        if (isVideo) {
+            currentBgPath = null; 
+        }
         updateGlobalBackground(true);
         // =============================================
         
