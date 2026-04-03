@@ -32,13 +32,14 @@ public class FeedFragment extends Fragment {
     } // <-- Здесь заканчивается onCreateView
 
     // ========================================================
-    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ИСПРАВЛЕННЫЙ МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА
     // ========================================================
     @Override
     public void onResume() {
         super.onResume();
-        if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(false); // Выключает видео-фон
+        // ДОБАВЛЕНО: Проверка !isHidden(), чтобы фон не отключался в скрытом состоянии
+        if (!isHidden() && getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).updateGlobalBackground(false); // Выключает видео/фото-фон
         }
     }
     // ========================================================
