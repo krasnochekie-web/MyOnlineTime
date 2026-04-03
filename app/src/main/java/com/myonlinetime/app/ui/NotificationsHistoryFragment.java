@@ -7,7 +7,6 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -197,7 +196,13 @@ public class NotificationsHistoryFragment extends Fragment {
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
             NotifItem item = items.get(position);
             holder.mainText.setText(item.mainText);
-            holder.actionText.setText(item.actionText);
+            
+            // ========================================================
+            // ИСПРАВЛЕНИЕ ПЕРЕВОДА: Убрали перезапись текста из JSON!
+            // Теперь работает строка @string/action_view из XML-разметки
+            // holder.actionText.setText(item.actionText); // <-- УДАЛЕНО
+            // ========================================================
+            
             holder.dateText.setText(sdf.format(new Date(item.timestamp)));
 
             holder.actionText.setOnClickListener(v -> {
