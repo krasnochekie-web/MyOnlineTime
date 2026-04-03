@@ -27,6 +27,9 @@ public class SearchFragment extends Fragment {
     private String lastSearchQuery = "";
     private RecyclerView resultsList; 
     private UserListAdapter adapter;  
+    
+    // Переменная для отложенной задачи выключения фона
+    private Runnable hideBgRunnable;
 
     public SearchFragment() {
         // Обязательный пустой конструктор
@@ -73,15 +76,32 @@ public class SearchFragment extends Fragment {
     @Override
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
+        MainActivity activity = (MainActivity) getActivity();
+        if (activity == null) return;
+
         if (!hidden) {
-            MainActivity activity = (MainActivity) getActivity();
-            if (activity != null) {
-                activity.mainHeader.setVisibility(View.VISIBLE);
-                activity.resetHeader();
-                
-                // Если твоя навигация использует show/hide, 
-                // на всякий случай дублируем выключение здесь
+            activity.mainHeader.setVisibility(View.VISIBLE);
+            activity.resetHeader();
+            
+            // Плавное отключение: ждем 300 мс, пока пройдет анимация перехода
+            if (hideBgRunnable == null) {
+                hideBgRunnable = () -> {
+                    // Проверяем, что фрагмент всё ещё открыт
+                    if (isAdded() && !isHidden()) {
+                        activity.updateGlobalBackground(false);
+                    }
+                };
+            }
+            if (getView() != null) {
+                getView().postDelayed(hideBgRunnable, 300);
+            } else {
                 activity.updateGlobalBackground(false);
+            }
+        } else {
+            // Если мы быстро ушли с экрана поиска до окончания анимации, 
+            // отменяем команду на отключение фона, чтобы не сломать профиль
+            if (hideBgRunnable != null && getView() != null) {
+                getView().removeCallbacks(hideBgRunnable);
             }
         }
     }
@@ -110,13 +130,25 @@ public class SearchFragment extends Fragment {
     }
 
     // ========================================================
-    // НАШ ПРЕДОХРАНИТЕЛЬ: Гасим фон сразу при входе
+    // НАШ ПРЕДОХРАНИТЕЛЬ: Гасим фон с задержкой при входе
     // ========================================================
     @Override
     public void onResume() {
         super.onResume();
         if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+            MainActivity activity = (MainActivity) getActivity();
+            if (hideBgRunnable == null) {
+                hideBgRunnable = () -> {
+                    if (isAdded() && !isHidden()) {
+                        activity.updateGlobalBackground(false);
+                    }
+                };
+            }
+            if (getView() != null) {
+                getView().postDelayed(hideBgRunnable, 300);
+            } else {
+                activity.updateGlobalBackground(false);
+            }
         }
     }
 }
