@@ -110,7 +110,8 @@ public class SearchFragment extends Fragment {
         if(query.length() > 1) {
             GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
             if(acct != null) {
-                VpsApi.authenticateWithGoogle(acct.getIdToken(), new VpsApi.LoginCallback() {
+                // ИСПРАВЛЕН ВЫЗОВ: Добавлен activity для работы с ресурсами внутри VpsApi
+                VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
                     @Override
                     public void onSuccess(String token) {
                         activity.vpsToken = token;
