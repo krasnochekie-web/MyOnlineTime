@@ -145,7 +145,7 @@
     <string name="settings_section_account">Аккаунт</string>
     <string name="settings_change_email">Изменить почту</string>
     <string name="settings_switch_account">Сменить аккаунт</string>
-    <string name="settings_sign_out">Выйти с аккаунта</string>
+    <string name="settings_sign_out">Выйти из аккаунта</string>
     <string name="settings_delete_account">Удалить аккаунт</string>
     
     <string name="settings_section_appearance">Оформление</string>
@@ -156,7 +156,8 @@
     <string name="settings_section_general">Общие настройки</string>
     <string name="settings_notifications">Настройки уведомлений</string>
     <string name="settings_saved">Сохранённое</string>
-    <string name="settings_clear_cache">Очистить кэш данные</string>
+    <string name="settings_clear_cache">Очистить кэш</string>
+	<string name="settings_clear_storage">Очистить данные</string>
     
     <string name="settings_section_other">Прочее</string>
     <string name="settings_share_app">Поделиться приложением</string>
