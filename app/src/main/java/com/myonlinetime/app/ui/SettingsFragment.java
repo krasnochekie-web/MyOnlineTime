@@ -77,7 +77,7 @@ public class SettingsFragment extends Fragment {
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
                         activity.vpsToken = null; 
                         loadUserData(view); 
-                        Toast.makeText(getContext(), "Вы вышли из аккаунта", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), getString(R.string.toast_signed_out), Toast.LENGTH_SHORT).show();
                     });
                 } else {
                     // НЕ авторизован -> Открываем окно входа
@@ -112,7 +112,7 @@ public class SettingsFragment extends Fragment {
 
         // Прочее
         View.OnClickListener openSiteListener = v -> {
-            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("http://map.krasnocraft.ru"));
+            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(getString(R.string.url_map)));
             startActivity(browserIntent);
         };
         view.findViewById(R.id.btn_share_app).setOnClickListener(openSiteListener);
@@ -132,10 +132,10 @@ public class SettingsFragment extends Fragment {
         
         if (account != null) {
             if (nicknameView != null) {
-                nicknameView.setText(account.getDisplayName() != null ? account.getDisplayName() : "Пользователь");
+                nicknameView.setText(account.getDisplayName() != null ? account.getDisplayName() : getString(R.string.default_user_name));
             }
             if (accountIdTxt != null) {
-                accountIdTxt.setText("ID аккаунта: " + account.getId());
+                accountIdTxt.setText(getString(R.string.account_id_label, account.getId()));
                 accountIdTxt.setVisibility(View.VISIBLE);
             }
             if (avatarView != null) {
@@ -153,7 +153,7 @@ public class SettingsFragment extends Fragment {
             }
         } else {
             // Гость: Сбрасываем данные
-            if (nicknameView != null) nicknameView.setText("Guest");
+            if (nicknameView != null) nicknameView.setText(getString(R.string.guest_user_name));
             if (accountIdTxt != null) {
                 accountIdTxt.setText(""); 
                 accountIdTxt.setVisibility(View.GONE); 
@@ -194,7 +194,7 @@ public class SettingsFragment extends Fragment {
     }
 
     // ========================================================
-    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА
     // ========================================================
     @Override
     public void onResume() {
