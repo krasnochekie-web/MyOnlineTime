@@ -122,13 +122,17 @@ public class MainActivity extends AppCompatActivity {
         
         // --- ОБРАБОТКА КОЛОКОЛЬЧИКА ---
         ImageView headerBellBtn = findViewById(R.id.header_bell_btn);
-        if (headerBellBtn != null) {
-            headerBellBtn.setOnClickListener(v -> {
-                if (navigator != null) {
-                    navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
-                }
-            });
-        }
+        View headerBellContainer = findViewById(R.id.header_bell_container);
+        
+        View.OnClickListener bellListener = v -> {
+            if (navigator != null) {
+                navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
+            }
+        };
+        
+        if (headerBellBtn != null) headerBellBtn.setOnClickListener(bellListener);
+        if (headerBellContainer != null) headerBellContainer.setOnClickListener(bellListener);
+        
         // Обновляем бейджик при запуске
         updateNotificationBadge();
 
@@ -180,7 +184,9 @@ public class MainActivity extends AppCompatActivity {
         
         headerBackBtn.setOnClickListener(v -> handleBackNavigation());
 
+        // --- ИНИЦИАЛИЗАЦИЯ И СТАРТ ФОНА ---
         initGlobalBackground();
+        updateGlobalBackground(true);
 
         int tabToOpen = 0; 
         if (savedInstanceState != null) {
@@ -222,7 +228,6 @@ public class MainActivity extends AppCompatActivity {
         TextView badge = findViewById(R.id.header_bell_badge);
         if (badge == null) return;
 
-        // Берем историю из AppPrefs (как в фрагменте истории)
         SharedPreferences appPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
         String historyJson = appPrefs.getString("notif_history_array", "[]");
         
@@ -312,11 +317,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         loadUserAvatarToBottomNav(); 
-        updateNotificationBadge(); // Обновляем при возврате в приложение
+        updateNotificationBadge(); 
         
-        if (exoPlayer != null && playerView != null && playerView.getVisibility() == View.VISIBLE) {
-            exoPlayer.play();
-        }
+        // --- ИСПРАВЛЕНИЕ: ПРИНУДИТЕЛЬНЫЙ ПЕРЕЗАПУСК ФОНА ---
+        updateGlobalBackground(true);
         
         if (permissionOverlay != null) {
             if (hasPermission()) {
@@ -426,9 +430,14 @@ public class MainActivity extends AppCompatActivity {
         headerTitle.setTextSize(20);
         headerBackBtn.setVisibility(View.GONE);
         
+        // --- ИСПРАВЛЕНИЕ: ВОЗВРАЩАЕМ ВИДИМОСТЬ КОЛОКОЛЬЧИКУ ---
         View bellContainer = findViewById(R.id.header_bell_container);
         if (bellContainer != null) {
             bellContainer.setVisibility(View.VISIBLE);
+        }
+        ImageView bellBtn = findViewById(R.id.header_bell_btn);
+        if (bellBtn != null) {
+            bellBtn.setVisibility(View.VISIBLE);
         }
     }
 
