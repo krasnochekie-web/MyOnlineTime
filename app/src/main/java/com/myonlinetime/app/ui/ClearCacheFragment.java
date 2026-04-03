@@ -67,12 +67,13 @@ public class ClearCacheFragment extends Fragment {
     }
 
     // ========================================================
-    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
+    // ИСПРАВЛЕННЫЙ МЕТОД onResume
     // ========================================================
     @Override
     public void onResume() {
         super.onResume();
-        if (getActivity() instanceof MainActivity) {
+        // ДОБАВЛЕНО: Проверка !isHidden()
+        if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(false); 
         }
     }
