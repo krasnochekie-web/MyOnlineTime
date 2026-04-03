@@ -19,7 +19,6 @@
 <string name="header_settings_sub">Notifications</string>
 <string name="title_notifications">Notifications</string>
 <string name="date_format">MM/dd/yyyy</string>
-<string name="format_mins">%1$d min</string>
 <string name="toast_signed_out">You have signed out</string>
     <string name="default_user_name">User</string>
     <string name="account_id_label">Account ID: %1$s</string>
