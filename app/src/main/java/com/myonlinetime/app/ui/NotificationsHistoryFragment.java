@@ -26,6 +26,8 @@ import java.util.Locale;
 
 public class NotificationsHistoryFragment extends Fragment {
 
+    private Runnable hideBgRunnable;
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
@@ -109,10 +111,50 @@ public class NotificationsHistoryFragment extends Fragment {
     }
 
     @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        MainActivity activity = (MainActivity) getActivity();
+        if (activity == null) return;
+
+        if (!hidden) {
+            setupHeader(); // Восстанавливаем шапку при возврате
+            
+            if (hideBgRunnable == null) {
+                hideBgRunnable = () -> {
+                    if (isAdded() && !isHidden()) {
+                        activity.updateGlobalBackground(false);
+                    }
+                };
+            }
+            if (getView() != null) {
+                getView().postDelayed(hideBgRunnable, 300);
+            } else {
+                activity.updateGlobalBackground(false);
+            }
+        } else {
+            if (hideBgRunnable != null && getView() != null) {
+                getView().removeCallbacks(hideBgRunnable);
+            }
+        }
+    }
+
+    @Override
     public void onResume() {
         super.onResume();
         if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+            MainActivity activity = (MainActivity) getActivity();
+            if (hideBgRunnable == null) {
+                hideBgRunnable = () -> {
+                    if (isAdded() && !isHidden()) {
+                        activity.updateGlobalBackground(false);
+                    }
+                };
+            }
+            if (getView() != null) {
+                getView().postDelayed(hideBgRunnable, 300);
+            } else {
+                activity.updateGlobalBackground(false);
+            }
         }
     }
 
@@ -147,8 +189,6 @@ public class NotificationsHistoryFragment extends Fragment {
             holder.actionText.setText(item.actionText);
             holder.dateText.setText(sdf.format(new Date(item.timestamp)));
 
-            // ТУТ БЫЛА ЖИРНОСТЬ — ТЕПЕРЬ ЕЁ НЕТ
-            
             holder.actionText.setOnClickListener(v -> {
                 if (activity != null) {
                     Intent intent = new Intent(activity, MainActivity.class);
