@@ -73,6 +73,15 @@ public class MainActivity extends AppCompatActivity {
     private ImageView globalImageView;
     private String currentBgPath = null;
 
+    // --- ИСПРАВЛЕНИЕ: СЛУШАТЕЛЬ ИЗМЕНЕНИЙ В ПАМЯТИ ---
+    // Если пришел пуш и записался в историю, бейджик загорится сам
+    private final SharedPreferences.OnSharedPreferenceChangeListener notifListener = (sharedPrefs, key) -> {
+        if ("notif_history_array".equals(key)) {
+            runOnUiThread(this::updateNotificationBadge);
+        }
+    };
+    // --------------------------------------------------
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // --- ПРОВЕРКА ТЕМЫ ДО ОТРИСОВКИ ИНТЕРФЕЙСА ---
@@ -311,6 +320,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
+        
+        // --- ОТПИСЫВАЕМСЯ ОТ СЛУШАТЕЛЯ ---
+        getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+            .unregisterOnSharedPreferenceChangeListener(notifListener);
     }
 
     @Override
@@ -319,8 +332,12 @@ public class MainActivity extends AppCompatActivity {
         loadUserAvatarToBottomNav(); 
         updateNotificationBadge(); 
         
-        // --- ИСПРАВЛЕНИЕ: ПРИНУДИТЕЛЬНЫЙ ПЕРЕЗАПУСК ФОНА ---
+        // --- ПРИНУДИТЕЛЬНЫЙ ПЕРЕЗАПУСК ФОНА ---
         updateGlobalBackground(true);
+        
+        // --- ПОДПИСЫВАЕМСЯ НА СЛУШАТЕЛЯ ---
+        getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+            .registerOnSharedPreferenceChangeListener(notifListener);
         
         if (permissionOverlay != null) {
             if (hasPermission()) {
@@ -439,6 +456,10 @@ public class MainActivity extends AppCompatActivity {
         if (bellBtn != null) {
             bellBtn.setVisibility(View.VISIBLE);
         }
+        
+        // --- ИСПРАВЛЕНИЕ: ОБНОВЛЯЕМ БЕЙДЖ ПРИ ВОЗВРАТЕ ИЗ ИСТОРИИ ---
+        updateNotificationBadge();
+        // -----------------------------------------------------------
     }
 
     private void checkAuthAndLoad(int tabIndex) {
