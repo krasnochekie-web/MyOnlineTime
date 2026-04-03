@@ -27,6 +27,7 @@ public class FollowsListFragment extends Fragment {
     private String listType; // "followers" или "following"
     private UserListAdapter adapter;
     private TextView statusText;
+    private Runnable hideBgRunnable;
 
     public static FollowsListFragment newInstance(String uid, String type) {
         FollowsListFragment f = new FollowsListFragment();
@@ -90,15 +91,23 @@ public class FollowsListFragment extends Fragment {
         }
     }
 
-    // ========================================================
-    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
-    // ========================================================
     @Override
     public void onResume() {
         super.onResume();
         if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+            MainActivity activity = (MainActivity) getActivity();
+            if (hideBgRunnable == null) {
+                hideBgRunnable = () -> {
+                    if (isAdded() && !isHidden()) {
+                        activity.updateGlobalBackground(false);
+                    }
+                };
+            }
+            if (getView() != null) {
+                getView().postDelayed(hideBgRunnable, 300);
+            } else {
+                activity.updateGlobalBackground(false);
+            }
         }
     }
-    // ========================================================
 }
