@@ -33,7 +33,6 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import android.util.Base64;
 
-// === ИМПОРТЫ ДЛЯ JSON И ПЛЕЕРА ===
 import org.json.JSONArray;
 import org.json.JSONObject;
 import androidx.media3.common.MediaItem;
@@ -50,7 +49,6 @@ public class MainActivity extends AppCompatActivity {
     public TextView headerTitle;
     public ImageView headerBackBtn;
     
-    // Иконки меню
     private ImageView iconFeed, iconSearch, iconUsage, iconProfile, iconSettings;
     
     private int currentTab = 0;
@@ -67,13 +65,11 @@ public class MainActivity extends AppCompatActivity {
 
     private View permissionOverlay;
 
-    // --- ПЕРЕМЕННЫЕ ГЛОБАЛЬНОГО ФОНА (НОВЫЙ ПЛЕЕР) ---
     private PlayerView playerView;
     private ExoPlayer exoPlayer;
     private ImageView globalImageView;
     private String currentBgPath = null;
 
-    // Слушатель изменений в памяти для бейджика
     private final SharedPreferences.OnSharedPreferenceChangeListener notifListener = (sharedPrefs, key) -> {
         if ("notif_history_array".equals(key)) {
             runOnUiThread(this::updateNotificationBadge);
@@ -82,7 +78,6 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // --- ПРОВЕРКА ТЕМЫ ДО ОТРИСОВКИ ИНТЕРФЕЙСА ---
         SharedPreferences appPrefs = getSharedPreferences("AppPrefs", MODE_PRIVATE);
         int savedTheme = appPrefs.getInt("selected_theme", AppCompatDelegate.MODE_NIGHT_YES);
         AppCompatDelegate.setDefaultNightMode(savedTheme);
@@ -127,7 +122,6 @@ public class MainActivity extends AppCompatActivity {
         headerBackBtn = (ImageView) findViewById(R.id.header_back_btn);
         bottomNav = (View) findViewById(R.id.bottom_nav_container);
         
-        // --- ОБРАБОТКА КОЛОКОЛЬЧИКА ---
         ImageView headerBellBtn = findViewById(R.id.header_bell_btn);
         View headerBellContainer = findViewById(R.id.header_bell_container);
         
@@ -329,14 +323,11 @@ public class MainActivity extends AppCompatActivity {
         loadUserAvatarToBottomNav(); 
         updateNotificationBadge(); 
         
-        // === ПУЛЕНЕПРОБИВАЕМОЕ ВОССТАНОВЛЕНИЕ ФОНА ===
         boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
         if (isVideo) {
-            // Обнуляем путь ТОЛЬКО для видео, так как плеер теряет поверхность
             currentBgPath = null; 
         }
         updateGlobalBackground(true);
-        // =============================================
         
         getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(notifListener);
@@ -518,7 +509,8 @@ public class MainActivity extends AppCompatActivity {
             Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
             try {
                 final GoogleSignInAccount acct = task.getResult(ApiException.class);
-                VpsApi.authenticateWithGoogle(acct.getIdToken(), new VpsApi.LoginCallback() {
+                // ИСПРАВЛЕН ВЫЗОВ: Добавлен context (MainActivity.this)
+                VpsApi.authenticateWithGoogle(MainActivity.this, acct.getIdToken(), new VpsApi.LoginCallback() {
                     @Override
                     public void onSuccess(String ourServerToken) {
                         vpsToken = ourServerToken;
@@ -561,7 +553,8 @@ public class MainActivity extends AppCompatActivity {
                 scaled.compress(Bitmap.CompressFormat.JPEG, 70, baos);
                 final String base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
                 
-                VpsApi.authenticateWithGoogle(acct.getIdToken(), new VpsApi.LoginCallback() {
+                // ИСПРАВЛЕН ВЫЗОВ: Добавлен context (MainActivity.this)
+                VpsApi.authenticateWithGoogle(MainActivity.this, acct.getIdToken(), new VpsApi.LoginCallback() {
                     @Override
                     public void onSuccess(String token) {
                         vpsToken = token;
