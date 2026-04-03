@@ -105,17 +105,7 @@ public class AllTimeFragment extends Fragment {
         return view;
     }
 
-    // ========================================================
-    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
-    // ========================================================
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(false); 
-        }
-    }
-    // ========================================================
+    // МЕТОД onResume УДАЛЕН ПОЛНОСТЬЮ — ФОНОМ УПРАВЛЯЕТ StatsHostFragment!
 
     // =====================================================================
     // >>> МЕТОД ДЛЯ ПОКАЗА ДИАЛОГА "КАК ЭТО РАБОТАЕТ" <<<
