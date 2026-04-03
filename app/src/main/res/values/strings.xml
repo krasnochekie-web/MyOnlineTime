@@ -4,6 +4,7 @@
     <string name="feed_placeholder_desc">We are actively working on this section.\nStay tuned!</string>
     <!-- Твои старые строки -->
     <string name="app_name">My Online Time</string>
+	<string name="settings_clear_storage">Clear data</string>
     <string name="feed">Feed</string>
     <string name="find">Find</string>
     <string name="time">Time</string>
