@@ -21,6 +21,7 @@ public class FollowsFragment extends Fragment {
 
     private String targetUid = "";
     private boolean startOnFollowers = true;
+    private Runnable hideBgRunnable;
 
     public static FollowsFragment newInstance(String targetUid, boolean isFollowersTab) {
         FollowsFragment fragment = new FollowsFragment();
@@ -137,14 +138,52 @@ public class FollowsFragment extends Fragment {
         return mainLayout; 
     }
 
-    // ========================================================
-    // ВОТ ОН - МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА!
-    // ========================================================
+    @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        MainActivity activity = (MainActivity) getActivity();
+        if (activity == null) return;
+
+        if (!hidden) {
+            activity.mainHeader.setVisibility(View.VISIBLE);
+            // Восстановление шапки тут можно опустить, так как её настраивает ViewPager
+            
+            if (hideBgRunnable == null) {
+                hideBgRunnable = () -> {
+                    if (isAdded() && !isHidden()) {
+                        activity.updateGlobalBackground(false);
+                    }
+                };
+            }
+            if (getView() != null) {
+                getView().postDelayed(hideBgRunnable, 300);
+            } else {
+                activity.updateGlobalBackground(false);
+            }
+        } else {
+            if (hideBgRunnable != null && getView() != null) {
+                getView().removeCallbacks(hideBgRunnable);
+            }
+        }
+    }
+
     @Override
     public void onResume() {
         super.onResume();
         if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+            MainActivity activity = (MainActivity) getActivity();
+            if (hideBgRunnable == null) {
+                hideBgRunnable = () -> {
+                    if (isAdded() && !isHidden()) {
+                        activity.updateGlobalBackground(false);
+                    }
+                };
+            }
+            if (getView() != null) {
+                getView().postDelayed(hideBgRunnable, 300);
+            } else {
+                activity.updateGlobalBackground(false);
+            }
         }
     }
 }
