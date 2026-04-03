@@ -323,11 +323,11 @@ public class MainActivity extends AppCompatActivity {
         loadUserAvatarToBottomNav(); 
         updateNotificationBadge(); 
         
-        boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
-        if (isVideo) {
-            currentBgPath = null; 
-        }
+        // === ИСПРАВЛЕНИЕ: Сбрасываем кэш пути ДЛЯ ВСЕХ фонов (и видео, и фото) ===
+        // Это заставит Glide заново отрисовать картинку при возврате в приложение
+        currentBgPath = null; 
         updateGlobalBackground(true);
+        // =======================================================================
         
         getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(notifListener);
@@ -509,7 +509,6 @@ public class MainActivity extends AppCompatActivity {
             Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
             try {
                 final GoogleSignInAccount acct = task.getResult(ApiException.class);
-                // ИСПРАВЛЕН ВЫЗОВ: Добавлен context (MainActivity.this)
                 VpsApi.authenticateWithGoogle(MainActivity.this, acct.getIdToken(), new VpsApi.LoginCallback() {
                     @Override
                     public void onSuccess(String ourServerToken) {
@@ -553,7 +552,6 @@ public class MainActivity extends AppCompatActivity {
                 scaled.compress(Bitmap.CompressFormat.JPEG, 70, baos);
                 final String base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
                 
-                // ИСПРАВЛЕН ВЫЗОВ: Добавлен context (MainActivity.this)
                 VpsApi.authenticateWithGoogle(MainActivity.this, acct.getIdToken(), new VpsApi.LoginCallback() {
                     @Override
                     public void onSuccess(String token) {
