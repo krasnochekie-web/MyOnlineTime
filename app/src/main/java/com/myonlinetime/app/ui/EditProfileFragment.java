@@ -78,7 +78,6 @@ public class EditProfileFragment extends Fragment {
                 Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
                 intent.setType("*/*");
                 intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "video/*"});
-                // === Избавились от хардкода: тянем строку из ресурсов ===
                 activity.startActivityForResult(Intent.createChooser(intent, activity.getString(R.string.chooser_select_background)), RC_PICK_BACKGROUND);
             });
         }
@@ -87,7 +86,6 @@ public class EditProfileFragment extends Fragment {
              final String n = inputName.getText().toString();
              final String a = inputAbout.getText().toString();
              
-             // === ДОБАВЛЕН activity для компиляции с обновленным VpsApi ===
              VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
                  @Override public void onSuccess(String token) {
                      activity.vpsToken = token;
@@ -113,12 +111,12 @@ public class EditProfileFragment extends Fragment {
         return view;
     }
 
-    // --- УПРАВЛЕНИЕ ГЛОБАЛЬНЫМ ФОНОМ (Оригинальная логика, без анимаций) ---
+    // --- УПРАВЛЕНИЕ ГЛОБАЛЬНЫМ ФОНОМ ---
     @Override
     public void onResume() {
         super.onResume();
-        if (getActivity() instanceof MainActivity) {
-            // При входе на экран редактирования гарантируем, что фон включен
+        // ДОБАВЛЕНО: Проверка !isHidden()
+        if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(true); 
         }
     }
@@ -131,8 +129,6 @@ public class EditProfileFragment extends Fragment {
                 // Если экран снова стал видимым (вернулись на него), включаем фон
                 ((MainActivity) getActivity()).updateGlobalBackground(true);
             }
-            // УБРАЛИ БЛОК else { updateGlobalBackground(false) }
-            // Теперь фон не гаснет при переходе между Профилем и Редактированием!
         }
     }
     // ------------------------------------
