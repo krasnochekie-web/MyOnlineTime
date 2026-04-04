@@ -64,9 +64,17 @@ public class WeeklyBarChartView extends View {
         this.maxMillis = 1;
         for (long m : millis) if (m > maxMillis) maxMillis = m;
 
-        long hours = (maxMillis / (1000 * 60 * 60)) + 1;
-        if (hours < 5) hours = 5;
-        maxMillis = hours * 1000 * 60 * 60;
+        // Используем суффикс L для предотвращения переполнения int
+        long hours = (maxMillis / (1000L * 60 * 60)) + 1;
+        
+        // Округляем до четного числа, чтобы центральная линия (50%) всегда была точной
+        if (hours % 2 != 0) {
+            hours++;
+        }
+        // Устанавливаем минимальную шкалу в 4 часа (получим линии: 0, 2, 4)
+        if (hours < 4) hours = 4; 
+
+        maxMillis = hours * 1000L * 60 * 60;
 
         startAnimation();
     }
@@ -78,7 +86,6 @@ public class WeeklyBarChartView extends View {
         }
     }
 
-    // --- ИСПРАВЛЕННЫЙ МЕТОД ---
     private void startAnimation() {
         // 1. Прячем графики до начала анимации
         animationProgress = 0f;
@@ -96,7 +103,6 @@ public class WeeklyBarChartView extends View {
             animator.start();
         }, 200);
     }
-    // --------------------------
 
     @Override
     protected void onDraw(Canvas canvas) {
@@ -111,23 +117,27 @@ public class WeeklyBarChartView extends View {
         float chartWidth = width - rightPadding;
         float chartHeight = height - bottomPadding - topPadding; 
 
-        long maxHours = maxMillis / (1000 * 60 * 60);
+        // Теперь maxHours гарантированно четное число
+        long maxHours = maxMillis / (1000L * 60 * 60);
         
-        // Линии разметки
+        // 1. Рисуем линии разметки
         for (int i = 0; i <= 2; i++) {
             float y = topPadding + chartHeight - (chartHeight / 2f * i); 
             canvas.drawLine(0, y, chartWidth, y, linePaint);
             
-String hourText = getContext().getString(R.string.format_chart_hour, (maxHours / 2 * i));
+            // Вычисляем точное значение для лейбла
+            long labelValue = (maxHours / 2) * i;
+            String hourText = getContext().getString(R.string.format_chart_hour, labelValue);
+            
             textPaint.setTextAlign(Paint.Align.LEFT);
-            canvas.drawText(hourText, chartWidth + 15, y + 10, textPaint);
+            // Выравниваем текст чуть аккуратнее относительно линии
+            canvas.drawText(hourText, chartWidth + 15, y + (textPaint.getTextSize() / 3f), textPaint);
         }
 
         float barWidth = chartWidth / 7f * 0.6f; 
         float spacing = chartWidth / 7f;
-        textPaint.setTextAlign(Paint.Align.CENTER);
 
-        // Рисуем столбцы
+        // 2. Рисуем столбцы
         for (int i = 0; i < 7; i++) {
             float xCenter = (spacing * i) + (spacing / 2f);
             float barHeight = ((float) dataMillis[i] / maxMillis) * chartHeight * animationProgress;
@@ -135,14 +145,18 @@ String hourText = getContext().getString(R.string.format_chart_hour, (maxHours /
             float left = xCenter - (barWidth / 2f);
             float right = xCenter + (barWidth / 2f);
             float top = topPadding + chartHeight - barHeight; 
-            float bottom = topPadding + chartHeight; 
+            
+            // Поднимаем низ столбца на половину толщины линии, 
+            // чтобы он стоял ровно на ней, а не перекрывал её центр
+            float bottom = topPadding + chartHeight - (linePaint.getStrokeWidth() / 2f); 
 
             barRects[i].set(left, top, right, bottom);
 
             Paint currentPaint = (i == selectedIndex) ? barSelectedPaint : barPaint;
             canvas.drawRect(barRects[i], currentPaint);
             
-            // Текст дней недели (остается в самом низу)
+            // Текст дней недели
+            textPaint.setTextAlign(Paint.Align.CENTER);
             canvas.drawText(labels[i], xCenter, height - 10, textPaint);
         }
     }
