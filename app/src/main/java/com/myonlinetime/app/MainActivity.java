@@ -162,7 +162,7 @@ public class MainActivity extends AppCompatActivity {
             hideLoginScreen(); 
             updateNavState(0);
             navigator.switchScreen(0, null);
-            if (!navigator.hasSubScreen()) headerManager.headerManager.resetHeader();
+            if (!navigator.hasSubScreen()) headerManager.resetHeader();
         });
 
         findViewById(R.id.nav_search).setOnClickListener(v -> { 
@@ -179,14 +179,14 @@ public class MainActivity extends AppCompatActivity {
             hideLoginScreen(); 
             updateNavState(3);
             navigator.switchScreen(3, null);
-            if (!navigator.hasSubScreen()) headerManager.headerManager.resetHeader();
+            if (!navigator.hasSubScreen()) headerManager.resetHeader();
         });
 
         findViewById(R.id.nav_settings).setOnClickListener(v -> {
             hideLoginScreen(); 
             updateNavState(5);
             navigator.switchScreen(5, null);
-            if (!navigator.hasSubScreen()) headerManager.headerManager.resetHeader();
+            if (!navigator.hasSubScreen()) headerManager.resetHeader();
         });
         
         headerBackBtn.setOnClickListener(v -> handleBackNavigation());
@@ -200,7 +200,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         updateNavState(tabToOpen);
-        headerManager.headerManager.resetHeader();
+        headerManager.resetHeader();
         navigator.switchScreen(tabToOpen, null);
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -385,7 +385,7 @@ public class MainActivity extends AppCompatActivity {
                 hideLoginScreen(); 
                 updateNavState(3); 
                 navigator.switchScreen(3, null);
-                if (!navigator.hasSubScreen()) headerManager.headerManager.resetHeader();
+                if (!navigator.hasSubScreen()) headerManager.resetHeader();
                 intent.removeExtra("open_tab");
             }
         }
@@ -446,7 +446,7 @@ public class MainActivity extends AppCompatActivity {
         if (currentTab != 0) {
             updateNavState(0);
             navigator.switchScreen(0, null);
-            headerManager.headerManager.resetHeader();
+            headerManager.resetHeader();
         } else {
             super.onBackPressed();
         }
@@ -460,12 +460,12 @@ public class MainActivity extends AppCompatActivity {
             hideLoginScreen(); 
             if (tabIndex == 1) {
                 navigator.switchScreen(1, null); 
-                if (!navigator.hasSubScreen()) headerManager.headerManager.resetHeader();
+                if (!navigator.hasSubScreen()) headerManager.resetHeader();
             }
             if (tabIndex == 4) {
                 StatsHelper.syncUserProfile(MainActivity.this);
                 navigator.switchScreen(4, account.getId()); 
-                if (!navigator.hasSubScreen()) headerManager.headerManager.resetHeader();
+                if (!navigator.hasSubScreen()) headerManager.resetHeader();
             }
         }
     } 
@@ -484,7 +484,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void showLoginScreen() {
         mainHeader.setVisibility(View.VISIBLE);
-        headerManager.headerManager.resetHeader();
+        headerManager.resetHeader();
         if (container.findViewWithTag("login_screen_overlay") != null) return; 
         
         View view = getLayoutInflater().inflate(R.layout.layout_login_required, container, false);
