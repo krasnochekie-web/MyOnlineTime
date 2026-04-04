@@ -5,9 +5,9 @@ import android.text.TextWatcher;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 
+import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 
 import java.util.HashMap;
@@ -16,18 +16,18 @@ import java.util.Map;
 
 public class SmartHeaderManager {
 
-    private final AppCompatActivity activity;
+    private final MainActivity activity; // Изменили на MainActivity, чтобы иметь доступ к навигатору
     private final TextView headerTitle;
     private final ImageView headerBackBtn;
     private final View bellContainer;
     private final ImageView bellBtn;
     private final Runnable updateBadgeCallback;
 
-    // СЛОВАРЬ ПАМЯТИ: Связывает конкретный фрагмент с его заголовком
-    private final Map<Fragment, CharSequence> fragmentTitles = new HashMap<>();
+    // Память: привязываем названия к конкретным классам фрагментов
+    private final Map<String, CharSequence> fragmentTitles = new HashMap<>();
     private boolean isRestoringTitle = false;
 
-    public SmartHeaderManager(AppCompatActivity activity, Runnable updateBadgeCallback) {
+    public SmartHeaderManager(MainActivity activity, Runnable updateBadgeCallback) {
         this.activity = activity;
         this.updateBadgeCallback = updateBadgeCallback;
         this.headerTitle = activity.findViewById(R.id.header_title);
@@ -45,22 +45,21 @@ public class SmartHeaderManager {
             @Override
             public void afterTextChanged(Editable s) {
                 if (!isRestoringTitle) {
-                    // Как только любой экран меняет текст шапки, мы намертво привязываем этот текст к нему
                     Fragment top = getTopFragment();
                     if (top != null) {
-                        fragmentTitles.put(top, s.toString());
+                        // Запоминаем, какое название установил этот фрагмент
+                        fragmentTitles.put(top.getClass().getSimpleName(), s.toString());
                     }
                 }
             }
         });
     }
 
-    // Умный поиск: находит реальный активный экран, ИГНОРИРУЯ те, которые сейчас закрываются/исчезают
+    // Ищет реальный видимый фрагмент, игнорируя те, которые сейчас в процессе анимации закрытия
     private Fragment getTopFragment() {
         List<Fragment> fragments = activity.getSupportFragmentManager().getFragments();
         for (int i = fragments.size() - 1; i >= 0; i--) {
             Fragment f = fragments.get(i);
-            // Условие !f.isRemoving() - это та самая магия, которая убивает задержку анимации!
             if (f != null && f.isAdded() && !f.isHidden() && !f.isRemoving() && f.getView() != null) {
                 return f;
             }
@@ -69,27 +68,40 @@ public class SmartHeaderManager {
     }
 
     public void updateHeaderAfterBack() {
-        Fragment top = getTopFragment();
-        
-        // Включаем второстепенный дизайн
+        forceRestoreCurrentSubScreen();
+    }
+
+    private void forceRestoreCurrentSubScreen() {
         headerBackBtn.setVisibility(View.VISIBLE);
         if (bellContainer != null) bellContainer.setVisibility(View.GONE);
         if (bellBtn != null) bellBtn.setVisibility(View.GONE);
 
-        // Достаем заголовок из памяти именно для этого экрана
-        if (top != null && fragmentTitles.containsKey(top)) {
+        // Ищем фрагмент, который остался на экране, и достаем ЕГО заголовок из памяти
+        Fragment top = getTopFragment();
+        if (top != null && fragmentTitles.containsKey(top.getClass().getSimpleName())) {
             isRestoringTitle = true;
-            headerTitle.setText(fragmentTitles.get(top));
+            headerTitle.setText(fragmentTitles.get(top.getClass().getSimpleName()));
             isRestoringTitle = false;
         }
     }
 
     public void resetHeader() {
+        // =========================================================================
+        // АБСОЛЮТНАЯ ЗАЩИТА ОТ "УМИРАЮЩИХ" ФРАГМЕНТОВ
+        // Если фрагмент перед смертью просит сбросить шапку, но навигатор говорит, 
+        // что у нас ЕСТЬ открытый второстепенный экран -> ИГНОРИРУЕМ СБРОС!
+        // =========================================================================
+        if (activity.navigator != null && activity.navigator.hasSubScreen()) {
+            forceRestoreCurrentSubScreen();
+            return; 
+        }
+
+        // Если второстепенных экранов реально нет — честно сбрасываем шапку
         isRestoringTitle = true;
         headerTitle.setText(R.string.app_name);
         headerTitle.setTextSize(20);
         isRestoringTitle = false;
-        
+
         headerBackBtn.setVisibility(View.GONE);
 
         if (bellContainer != null) bellContainer.setVisibility(View.VISIBLE);
