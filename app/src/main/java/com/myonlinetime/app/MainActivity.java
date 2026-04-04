@@ -4,6 +4,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 
 import com.myonlinetime.app.utils.StatsHelper;
+import com.myonlinetime.app.utils.SmartHeaderManager;
 import android.app.AppOpsManager;
 import android.content.Context;
 import android.content.Intent;
@@ -62,6 +63,7 @@ public class MainActivity extends AppCompatActivity {
     
     public String vpsToken = null;
     public com.myonlinetime.app.utils.AppNavigator navigator;
+    public SmartHeaderManager headerManager; // НАШ НОВЫЙ МЕНЕДЖЕР
 
     private View permissionOverlay;
 
@@ -69,9 +71,6 @@ public class MainActivity extends AppCompatActivity {
     private ExoPlayer exoPlayer;
     private ImageView globalImageView;
     private String currentBgPath = null;
-    
-    // Переменная для запоминания заголовка второстепенного экрана
-    private CharSequence savedSubScreenTitle = "";
 
     private final SharedPreferences.OnSharedPreferenceChangeListener notifListener = (sharedPrefs, key) -> {
         if ("notif_history_array".equals(key)) {
@@ -125,15 +124,17 @@ public class MainActivity extends AppCompatActivity {
         headerBackBtn = (ImageView) findViewById(R.id.header_back_btn);
         bottomNav = (View) findViewById(R.id.bottom_nav_container);
         
+        // ==========================================
+        // ИНИЦИАЛИЗАЦИЯ УМНОЙ ШАПКИ
+        // Мы передаем ссылку на метод updateNotificationBadge
+        headerManager = new SmartHeaderManager(this, this::updateNotificationBadge);
+        // ==========================================
+
         ImageView headerBellBtn = findViewById(R.id.header_bell_btn);
         View headerBellContainer = findViewById(R.id.header_bell_container);
         
         View.OnClickListener bellListener = v -> {
             if (navigator != null) {
-                // ЗАПОМИНАЕМ текущий текст шапки перед открытием уведомлений
-                if (headerTitle != null) {
-                    savedSubScreenTitle = headerTitle.getText();
-                }
                 navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
             }
         };
@@ -161,7 +162,7 @@ public class MainActivity extends AppCompatActivity {
             hideLoginScreen(); 
             updateNavState(0);
             navigator.switchScreen(0, null);
-            if (!navigator.hasSubScreen()) resetHeader();
+            if (!navigator.hasSubScreen()) headerManager.resetHeader();
         });
 
         findViewById(R.id.nav_search).setOnClickListener(v -> { 
@@ -178,14 +179,14 @@ public class MainActivity extends AppCompatActivity {
             hideLoginScreen(); 
             updateNavState(3);
             navigator.switchScreen(3, null);
-            if (!navigator.hasSubScreen()) resetHeader();
+            if (!navigator.hasSubScreen()) headerManager.resetHeader();
         });
 
         findViewById(R.id.nav_settings).setOnClickListener(v -> {
             hideLoginScreen(); 
             updateNavState(5);
             navigator.switchScreen(5, null);
-            if (!navigator.hasSubScreen()) resetHeader();
+            if (!navigator.hasSubScreen()) headerManager.resetHeader();
         });
         
         headerBackBtn.setOnClickListener(v -> handleBackNavigation());
@@ -199,7 +200,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         updateNavState(tabToOpen);
-        resetHeader();
+        headerManager.resetHeader();
         navigator.switchScreen(tabToOpen, null);
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -384,7 +385,7 @@ public class MainActivity extends AppCompatActivity {
                 hideLoginScreen(); 
                 updateNavState(3); 
                 navigator.switchScreen(3, null);
-                if (!navigator.hasSubScreen()) resetHeader();
+                if (!navigator.hasSubScreen()) headerManager.resetHeader();
                 intent.removeExtra("open_tab");
             }
         }
@@ -438,59 +439,17 @@ public class MainActivity extends AppCompatActivity {
     public void onBackPressed() { handleBackNavigation(); }  
 
     private void handleBackNavigation() {
-        // Мы пытаемся закрыть текущий саб-скрин.
         if (navigator.closeSubScreen()) {
-            if (!navigator.hasSubScreen()) {
-                // Если закрыли последний саб-скрин — возвращаем стандартную шапку
-                resetHeader();
-            } else {
-                // ВОССТАНАВЛИВАЕМ ВИД ДЛЯ ОСТАВШЕГОСЯ САБ-СКРИНА:
-                // Если после закрытия (например, Уведомлений) мы остались на другом саб-скрине,
-                // принудительно возвращаем стрелочку "Назад"
-                headerBackBtn.setVisibility(View.VISIBLE);
-                
-                // Прячем колокольчик, так как мы всё ещё находимся в глубине навигации
-                View bellContainer = findViewById(R.id.header_bell_container);
-                if (bellContainer != null) bellContainer.setVisibility(View.GONE);
-                
-                ImageView bellBtn = findViewById(R.id.header_bell_btn);
-                if (bellBtn != null) bellBtn.setVisibility(View.GONE);
-
-                // ВОССТАНАВЛИВАЕМ ЗАГОЛОВОК из памяти
-                if (savedSubScreenTitle != null && savedSubScreenTitle.length() > 0) {
-                    headerTitle.setText(savedSubScreenTitle);
-                    savedSubScreenTitle = ""; // очищаем память после восстановления
-                }
-            }
             return; 
         }
         
-        // Если саб-скринов нет, переходим на первую вкладку
         if (currentTab != 0) {
             updateNavState(0);
             navigator.switchScreen(0, null);
-            if (!navigator.hasSubScreen()) resetHeader();
+            headerManager.resetHeader();
         } else {
-            // Если мы уже на первой вкладке, закрываем приложение
             super.onBackPressed();
         }
-    }
-
-    public void resetHeader() {
-        headerTitle.setText(R.string.app_name);
-        headerTitle.setTextSize(20);
-        headerBackBtn.setVisibility(View.GONE);
-        
-        View bellContainer = findViewById(R.id.header_bell_container);
-        if (bellContainer != null) {
-            bellContainer.setVisibility(View.VISIBLE);
-        }
-        ImageView bellBtn = findViewById(R.id.header_bell_btn);
-        if (bellBtn != null) {
-            bellBtn.setVisibility(View.VISIBLE);
-        }
-        
-        updateNotificationBadge();
     }
 
     private void checkAuthAndLoad(int tabIndex) {
@@ -501,12 +460,12 @@ public class MainActivity extends AppCompatActivity {
             hideLoginScreen(); 
             if (tabIndex == 1) {
                 navigator.switchScreen(1, null); 
-                if (!navigator.hasSubScreen()) resetHeader();
+                if (!navigator.hasSubScreen()) headerManager.resetHeader();
             }
             if (tabIndex == 4) {
                 StatsHelper.syncUserProfile(MainActivity.this);
                 navigator.switchScreen(4, account.getId()); 
-                if (!navigator.hasSubScreen()) resetHeader();
+                if (!navigator.hasSubScreen()) headerManager.resetHeader();
             }
         }
     } 
@@ -525,7 +484,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void showLoginScreen() {
         mainHeader.setVisibility(View.VISIBLE);
-        resetHeader();
+        headerManager.resetHeader();
         if (container.findViewWithTag("login_screen_overlay") != null) return; 
         
         View view = getLayoutInflater().inflate(R.layout.layout_login_required, container, false);
