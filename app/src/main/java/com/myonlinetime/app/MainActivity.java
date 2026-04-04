@@ -63,7 +63,7 @@ public class MainActivity extends AppCompatActivity {
     
     public String vpsToken = null;
     public com.myonlinetime.app.utils.AppNavigator navigator;
-    public SmartHeaderManager headerManager; // НАШ НОВЫЙ МЕНЕДЖЕР
+    public SmartHeaderManager headerManager;
 
     private View permissionOverlay;
 
@@ -124,11 +124,7 @@ public class MainActivity extends AppCompatActivity {
         headerBackBtn = (ImageView) findViewById(R.id.header_back_btn);
         bottomNav = (View) findViewById(R.id.bottom_nav_container);
         
-        // ==========================================
-        // ИНИЦИАЛИЗАЦИЯ УМНОЙ ШАПКИ
-        // Мы передаем ссылку на метод updateNotificationBadge
         headerManager = new SmartHeaderManager(this, this::updateNotificationBadge);
-        // ==========================================
 
         ImageView headerBellBtn = findViewById(R.id.header_bell_btn);
         View headerBellContainer = findViewById(R.id.header_bell_container);
@@ -440,6 +436,15 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleBackNavigation() {
         if (navigator.closeSubScreen()) {
+            // ФОРСИРУЕМ выполнение транзакции закрытия экрана до обновления шапки.
+            // Это мгновенно убивает любую "задержку анимации", так как Android сразу удалит верхний экран.
+            getSupportFragmentManager().executePendingTransactions();
+            
+            if (!navigator.hasSubScreen()) {
+                headerManager.resetHeader();
+            } else {
+                headerManager.updateHeaderAfterBack();
+            }
             return; 
         }
         
