@@ -158,7 +158,7 @@ public class MainActivity extends AppCompatActivity {
             hideLoginScreen(); 
             updateNavState(0);
             navigator.switchScreen(0, null);
-            if (!navigator.hasSubScreen()) headerManager.resetHeader();
+            syncHeaderState(); 
         });
 
         findViewById(R.id.nav_search).setOnClickListener(v -> { 
@@ -175,14 +175,14 @@ public class MainActivity extends AppCompatActivity {
             hideLoginScreen(); 
             updateNavState(3);
             navigator.switchScreen(3, null);
-            if (!navigator.hasSubScreen()) headerManager.resetHeader();
+            syncHeaderState(); 
         });
 
         findViewById(R.id.nav_settings).setOnClickListener(v -> {
             hideLoginScreen(); 
             updateNavState(5);
             navigator.switchScreen(5, null);
-            if (!navigator.hasSubScreen()) headerManager.resetHeader();
+            syncHeaderState(); 
         });
         
         headerBackBtn.setOnClickListener(v -> handleBackNavigation());
@@ -196,8 +196,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
         updateNavState(tabToOpen);
-        headerManager.resetHeader();
         navigator.switchScreen(tabToOpen, null);
+        syncHeaderState();
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -222,6 +222,22 @@ public class MainActivity extends AppCompatActivity {
             loadUserAvatarToBottomNav(); 
         });
     } 
+
+    // =========================================================================
+    // ГЛАВНЫЙ СИНХРОНИЗАТОР ШАПКИ
+    // =========================================================================
+    public void syncHeaderState() {
+        // Заставляем Android мгновенно завершить все транзакции фрагментов
+        getSupportFragmentManager().executePendingTransactions();
+        
+        if (navigator != null && navigator.hasSubScreen()) {
+            // Если на открытом табе есть вложенный экран — применяем его правила (стрелочка, заголовок, колокольчик)
+            headerManager.updateHeaderAfterBack();
+        } else if (headerManager != null) {
+            // Если это главный экран (чистая Лента, Профиль) — сбрасываем в стандарт
+            headerManager.resetHeader();
+        }
+    }
 
     public void updateNotificationBadge() {
         TextView badge = findViewById(R.id.header_bell_badge);
@@ -381,7 +397,7 @@ public class MainActivity extends AppCompatActivity {
                 hideLoginScreen(); 
                 updateNavState(3); 
                 navigator.switchScreen(3, null);
-                if (!navigator.hasSubScreen()) headerManager.resetHeader();
+                syncHeaderState(); 
                 intent.removeExtra("open_tab");
             }
         }
@@ -436,22 +452,14 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleBackNavigation() {
         if (navigator.closeSubScreen()) {
-            // ФОРСИРУЕМ выполнение транзакции закрытия экрана до обновления шапки.
-            // Это мгновенно убивает любую "задержку анимации", так как Android сразу удалит верхний экран.
-            getSupportFragmentManager().executePendingTransactions();
-            
-            if (!navigator.hasSubScreen()) {
-                headerManager.resetHeader();
-            } else {
-                headerManager.updateHeaderAfterBack();
-            }
+            syncHeaderState(); 
             return; 
         }
         
         if (currentTab != 0) {
             updateNavState(0);
             navigator.switchScreen(0, null);
-            headerManager.resetHeader();
+            syncHeaderState(); 
         } else {
             super.onBackPressed();
         }
@@ -465,12 +473,12 @@ public class MainActivity extends AppCompatActivity {
             hideLoginScreen(); 
             if (tabIndex == 1) {
                 navigator.switchScreen(1, null); 
-                if (!navigator.hasSubScreen()) headerManager.resetHeader();
+                syncHeaderState(); 
             }
             if (tabIndex == 4) {
                 StatsHelper.syncUserProfile(MainActivity.this);
                 navigator.switchScreen(4, account.getId()); 
-                if (!navigator.hasSubScreen()) headerManager.resetHeader();
+                syncHeaderState(); 
             }
         }
     } 
