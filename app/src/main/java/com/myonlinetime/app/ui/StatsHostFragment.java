@@ -35,6 +35,8 @@ public class StatsHostFragment extends Fragment {
         final View lineAllTime = view.findViewById(R.id.line_tab_all_time);
 
         final ViewPager2 viewPager = view.findViewById(R.id.stats_view_pager);
+        // МАГИЯ ПЛАВНОСТИ: Заставляем Android заранее отрисовать обе соседние вкладки в фоне!
+        viewPager.setOffscreenPageLimit(2);
 
         viewPager.setAdapter(new FragmentStateAdapter(this) {
             @NonNull
