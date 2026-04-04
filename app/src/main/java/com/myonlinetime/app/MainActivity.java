@@ -69,6 +69,9 @@ public class MainActivity extends AppCompatActivity {
     private ExoPlayer exoPlayer;
     private ImageView globalImageView;
     private String currentBgPath = null;
+    
+    // Переменная для запоминания заголовка второстепенного экрана
+    private CharSequence savedSubScreenTitle = "";
 
     private final SharedPreferences.OnSharedPreferenceChangeListener notifListener = (sharedPrefs, key) -> {
         if ("notif_history_array".equals(key)) {
@@ -127,6 +130,10 @@ public class MainActivity extends AppCompatActivity {
         
         View.OnClickListener bellListener = v -> {
             if (navigator != null) {
+                // ЗАПОМИНАЕМ текущий текст шапки перед открытием уведомлений
+                if (headerTitle != null) {
+                    savedSubScreenTitle = headerTitle.getText();
+                }
                 navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
             }
         };
@@ -433,9 +440,27 @@ public class MainActivity extends AppCompatActivity {
     private void handleBackNavigation() {
         // Мы пытаемся закрыть текущий саб-скрин.
         if (navigator.closeSubScreen()) {
-            // ИСПРАВЛЕНИЕ: Сбрасываем шапку ТОЛЬКО если после удаления мы остались без саб-скринов вообще
             if (!navigator.hasSubScreen()) {
+                // Если закрыли последний саб-скрин — возвращаем стандартную шапку
                 resetHeader();
+            } else {
+                // ВОССТАНАВЛИВАЕМ ВИД ДЛЯ ОСТАВШЕГОСЯ САБ-СКРИНА:
+                // Если после закрытия (например, Уведомлений) мы остались на другом саб-скрине,
+                // принудительно возвращаем стрелочку "Назад"
+                headerBackBtn.setVisibility(View.VISIBLE);
+                
+                // Прячем колокольчик, так как мы всё ещё находимся в глубине навигации
+                View bellContainer = findViewById(R.id.header_bell_container);
+                if (bellContainer != null) bellContainer.setVisibility(View.GONE);
+                
+                ImageView bellBtn = findViewById(R.id.header_bell_btn);
+                if (bellBtn != null) bellBtn.setVisibility(View.GONE);
+
+                // ВОССТАНАВЛИВАЕМ ЗАГОЛОВОК из памяти
+                if (savedSubScreenTitle != null && savedSubScreenTitle.length() > 0) {
+                    headerTitle.setText(savedSubScreenTitle);
+                    savedSubScreenTitle = ""; // очищаем память после восстановления
+                }
             }
             return; 
         }
