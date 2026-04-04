@@ -22,6 +22,8 @@ public class FollowsFragment extends Fragment {
     private String targetUid = "";
     private boolean startOnFollowers = true;
     private Runnable hideBgRunnable;
+    
+    private ViewPager2 viewPager; // Сделали полем класса для доступа в onHiddenChanged
 
     public static FollowsFragment newInstance(String targetUid, boolean isFollowersTab) {
         FollowsFragment fragment = new FollowsFragment();
@@ -45,10 +47,8 @@ public class FollowsFragment extends Fragment {
             startOnFollowers = getArguments().getBoolean("IS_FOLLOWERS_TAB", true);
         }
 
-        // Настройка шапки
-        activity.mainHeader.setVisibility(View.VISIBLE);
-        activity.resetHeader();
-        activity.headerBackBtn.setVisibility(View.VISIBLE);
+        // Вызываем новый метод настройки шапки
+        setupHeader(activity, startOnFollowers);
 
         // Находим элементы вкладок
         final TextView txtFollowers = mainLayout.findViewById(R.id.tab_txt_followers);
@@ -58,8 +58,7 @@ public class FollowsFragment extends Fragment {
         final TextView countFollowers = mainLayout.findViewById(R.id.tab_count_followers);
         final TextView countFollowing = mainLayout.findViewById(R.id.tab_count_following);
         
-        // Находим ViewPager2
-        final ViewPager2 viewPager = mainLayout.findViewById(R.id.follows_view_pager);
+        viewPager = mainLayout.findViewById(R.id.follows_view_pager);
 
         // Устанавливаем адаптер
         viewPager.setAdapter(new FragmentStateAdapter(this) {
@@ -80,8 +79,8 @@ public class FollowsFragment extends Fragment {
                 super.onPageSelected(position);
                 boolean isFollowers = (position == 0);
                 
-                // Обновляем шапку
-                activity.headerTitle.setText(activity.getString(isFollowers ? R.string.followers : R.string.following));
+                // Обновляем шапку при перелистывании
+                setupHeader(activity, isFollowers);
                 
                 // Умная смена цвета текста
                 int activeColor = ContextCompat.getColor(activity, R.color.burgundyRed);
@@ -114,7 +113,6 @@ public class FollowsFragment extends Fragment {
         // Загружаем счетчики
         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
         if(acct != null) {
-            // ИСПРАВЛЕН ВЫЗОВ VPS API (Добавлен контекст activity)
             VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
                 @Override
                 public void onSuccess(String token) {
@@ -139,6 +137,18 @@ public class FollowsFragment extends Fragment {
         return mainLayout; 
     }
 
+    // ========================================================
+    // МЕТОД ДЛЯ НАСТРОЙКИ ШАПКИ
+    // ========================================================
+    private void setupHeader(MainActivity activity, boolean isFollowers) {
+        if (activity != null) {
+            activity.mainHeader.setVisibility(View.VISIBLE);
+            activity.headerTitle.setText(activity.getString(isFollowers ? R.string.followers : R.string.following));
+            activity.headerBackBtn.setVisibility(View.VISIBLE);
+            activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow); 
+        }
+    }
+
     @Override
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
@@ -146,8 +156,9 @@ public class FollowsFragment extends Fragment {
         if (activity == null) return;
 
         if (!hidden) {
-            activity.mainHeader.setVisibility(View.VISIBLE);
-            // Восстановление шапки тут можно опустить, так как её настраивает ViewPager
+            // ИСПРАВЛЕНИЕ: Принудительно восстанавливаем шапку, опираясь на текущую страницу ViewPager
+            boolean isFollowers = (viewPager == null || viewPager.getCurrentItem() == 0);
+            setupHeader(activity, isFollowers);
             
             if (hideBgRunnable == null) {
                 hideBgRunnable = () -> {
