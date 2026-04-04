@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.SwitchCompat;
@@ -70,29 +71,49 @@ public class NotificationsFragment extends Fragment {
             // Показываем стрелку назад
             activity.headerBackBtn.setVisibility(View.VISIBLE);
             activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow); 
+            
+            // На всякий случай оставляем колокольчик видимым (единый стиль)
+            ImageView bellBtn = activity.findViewById(R.id.header_bell_btn);
+            if (bellBtn != null) {
+                bellBtn.setVisibility(View.VISIBLE);
+            }
         }
     }
 
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        // Возвращаем шапку в исходное состояние при выходе
+        // Возвращаем шапку в исходное состояние при выходе, 
+        // ТОЛЬКО если под нами больше нет других саб-скринов
         MainActivity activity = (MainActivity) getActivity();
-        if (activity != null) {
+        if (activity != null && !activity.navigator.hasSubScreen()) {
             activity.resetHeader();
         }
     }
 
     // ========================================================
-    // ИСПРАВЛЕННЫЙ МЕТОД onResume
+    // ВОССТАНОВЛЕНИЕ ШАПКИ И ФОНА ПРИ ВОЗВРАТЕ ИЗ СТЕКА
+    // ========================================================
+    @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        if (!hidden && getActivity() instanceof MainActivity) {
+            MainActivity activity = (MainActivity) getActivity();
+            setupHeader();
+            // Выключаем глобальный фон, так как это меню настроек
+            activity.updateGlobalBackground(false); 
+        }
+    }
+
+    // ========================================================
+    // МЕТОД onResume С ПРОВЕРКОЙ
     // ========================================================
     @Override
     public void onResume() {
         super.onResume();
-        // ДОБАВЛЕНО: Проверка !isHidden(), чтобы скрытый фрагмент не выключал фон
+        // Проверка !isHidden(), чтобы скрытый фрагмент не выключал фон
         if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(false); 
         }
     }
-    // ========================================================
 }
