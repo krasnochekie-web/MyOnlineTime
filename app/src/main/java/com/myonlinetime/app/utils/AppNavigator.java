@@ -193,4 +193,8 @@ public class AppNavigator {
     private void showMainTab(int index, FragmentTransaction ft) {
         showMainTab(index, ft, null);
     }
+// Возвращает true, если на текущей вкладке сейчас открыт второстепенный экран
+    public boolean hasSubScreen() {
+        return currentTabIndex != -1 && subScreensMap.containsKey(currentTabIndex);
+    }
 }
