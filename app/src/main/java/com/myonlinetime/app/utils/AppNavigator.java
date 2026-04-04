@@ -13,7 +13,9 @@ import com.myonlinetime.app.ui.SearchFragment;
 import com.myonlinetime.app.ui.SettingsFragment; 
 import com.myonlinetime.app.ui.StatsHostFragment; 
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class AppNavigator {
@@ -28,82 +30,106 @@ public class AppNavigator {
     private ProfileFragment profileFragment;
     private SettingsFragment settingsFragment; 
 
-    // Хранилище саб-скринов: теперь у КАЖДОЙ главной вкладки может быть свой саб-скрин!
-    // Ключ - индекс вкладки, Значение - открытый поверх нее саб-скрин.
-    private final Map<Integer, Fragment> subScreensMap = new HashMap<>();
+    // ИСПРАВЛЕНО: Теперь хранилище — это СТЕК (Список) фрагментов для каждой вкладки
+    // Ключ - индекс вкладки, Значение - стопка (List) открытых саб-скринов
+    private final Map<Integer, List<Fragment>> subStacks = new HashMap<>();
     
     private int currentTabIndex = -1;
-    
-    // Защита от "Дабл-клика" (не разрешаем открывать саб-скрины чаще, чем раз в 500 мс)
     private long lastSubScreenOpenTime = 0;
 
     public AppNavigator(AppCompatActivity activity, int containerId) {
         this.fm = activity.getSupportFragmentManager();
         this.containerId = containerId;
 
-        // Восстанавливаем фрагменты
+        // Восстанавливаем главные фрагменты
         feedFragment = (FeedFragment) fm.findFragmentByTag("FEED");
         searchFragment = (SearchFragment) fm.findFragmentByTag("SEARCH");
         statsFragment = (StatsHostFragment) fm.findFragmentByTag("STATS"); 
         profileFragment = (ProfileFragment) fm.findFragmentByTag("PROFILE");
         settingsFragment = (SettingsFragment) fm.findFragmentByTag("SETTINGS");
         
-        // Восстанавливаем саб-скрины, если они были привязаны к вкладкам
-        for (int i = 0; i <= 5; i++) {
-            Fragment sub = fm.findFragmentByTag("SUB_SCREEN_" + i);
-            if (sub != null) {
-                subScreensMap.put(i, sub);
+        // Восстанавливаем стеки саб-скринов (если система убивала приложение)
+        for (int tab = 0; tab <= 5; tab++) {
+            List<Fragment> stack = new ArrayList<>();
+            // Ищем слои (до 10 экранов в глубину)
+            for (int depth = 0; depth < 10; depth++) {
+                Fragment sub = fm.findFragmentByTag("SUB_" + tab + "_" + depth);
+                if (sub != null) {
+                    stack.add(sub);
+                } else {
+                    break; // Дальше слоев нет
+                }
+            }
+            if (!stack.isEmpty()) {
+                subStacks.put(tab, stack);
             }
         }
     }
 
     public void openSubScreen(Fragment fragment) {
-        // ЗАЩИТА ОТ ДАБЛ-КЛИКА: Блокируем множественные вызовы подряд
+        // ЗАЩИТА ОТ ДАБЛ-КЛИКА
         if (SystemClock.elapsedRealtime() - lastSubScreenOpenTime < 500) {
             return; 
         }
         lastSubScreenOpenTime = SystemClock.elapsedRealtime();
 
-        // Проверяем, не открыт ли УЖЕ точно такой же класс фрагмента (двойная защита)
-        Fragment currentActiveSub = subScreensMap.get(currentTabIndex);
-        if (currentActiveSub != null && currentActiveSub.getClass().equals(fragment.getClass())) {
-            return; // Если мы уже открыли настройки уведомлений, не открываем их поверх еще раз
+        // Получаем стек текущей вкладки (или создаем новый, если пуст)
+        List<Fragment> stack = subStacks.get(currentTabIndex);
+        if (stack == null) {
+            stack = new ArrayList<>();
+            subStacks.put(currentTabIndex, stack);
+        }
+
+        // Двойная защита: не даем открыть поверх точно такой же экран
+        if (!stack.isEmpty()) {
+            Fragment currentTop = stack.get(stack.size() - 1);
+            if (currentTop.getClass().equals(fragment.getClass())) {
+                return;
+            }
         }
 
         FragmentTransaction ft = fm.beginTransaction();
         ft.setCustomAnimations(R.anim.slide_in_up, android.R.anim.fade_out);
+        
+        // Прячем всё текущее
         hideAll(ft);
 
-        if (currentActiveSub != null) {
-            ft.hide(currentActiveSub);
-        }
-
-        // Привязываем новый саб-скрин к ТЕКУЩЕЙ открытой вкладке
-        subScreensMap.put(currentTabIndex, fragment);
-        ft.add(containerId, fragment, "SUB_SCREEN_" + currentTabIndex);
+        // Добавляем новый фрагмент НАВЕРХ стека
+        ft.add(containerId, fragment, "SUB_" + currentTabIndex + "_" + stack.size());
+        stack.add(fragment);
+        
         ft.commit();
     }
 
     public boolean closeSubScreen() {
-        Fragment currentActiveSub = subScreensMap.get(currentTabIndex);
+        List<Fragment> stack = subStacks.get(currentTabIndex);
         
-        if (currentActiveSub != null) {
-            FragmentTransaction ft = fm.beginTransaction();
-            ft.setCustomAnimations(android.R.anim.fade_in, R.anim.slide_out_down);
-            
-            // Мы не просто скрываем, мы УДАЛЯЕМ саб-скрин при закрытии (кнопка "назад")
-            ft.remove(currentActiveSub); 
-            subScreensMap.remove(currentTabIndex); 
-            
-            showMainTab(currentTabIndex, ft);
-            ft.commit();
-            return true;
+        // Если стек пуст, значит саб-скринов нет, возвращаем false (передаем управление MainActivity)
+        if (stack == null || stack.isEmpty()) {
+            return false;
         }
-        return false;
+
+        FragmentTransaction ft = fm.beginTransaction();
+        ft.setCustomAnimations(android.R.anim.fade_in, R.anim.slide_out_down);
+        
+        // Берем самый верхний "блин" из стопки и удаляем его
+        Fragment topFragment = stack.remove(stack.size() - 1);
+        ft.remove(topFragment); 
+        
+        // Если после удаления стопка опустела — показываем главную вкладку
+        if (stack.isEmpty()) {
+            showMainTab(currentTabIndex, ft);
+        } else {
+            // Иначе показываем предыдущий саб-скрин, который лежал ПОД удаленным
+            Fragment previousFragment = stack.get(stack.size() - 1);
+            ft.show(previousFragment);
+        }
+        
+        ft.commit();
+        return true;
     }
 
     public void switchScreen(int tabIndex, String uid) {
-        // Если мы уже находимся на этой вкладке — ничего не делаем
         if (currentTabIndex == tabIndex) return;
 
         FragmentTransaction ft = fm.beginTransaction();
@@ -121,15 +147,14 @@ public class AppNavigator {
         // Прячем ВСЕ главные вкладки и ВСЕ саб-скрины
         hideAll(ft);
 
-        // ИСПРАВЛЕНИЕ: Мы БОЛЬШЕ НЕ УДАЛЯЕМ саб-скрины при переходе!
-        // Проверяем, есть ли у ВЫБРАННОЙ вкладки свой открытый саб-скрин?
-        Fragment savedSubScreenForTab = subScreensMap.get(tabIndex);
+        // Проверяем стек ВЫБРАННОЙ вкладки
+        List<Fragment> stack = subStacks.get(tabIndex);
         
-        if (savedSubScreenForTab != null) {
-            // Если мы вернулись на вкладку, где был открыт саб-скрин — показываем его!
-            ft.show(savedSubScreenForTab);
+        if (stack != null && !stack.isEmpty()) {
+            // Если в стеке что-то есть, показываем самый ВЕРХНИЙ элемент
+            ft.show(stack.get(stack.size() - 1));
         } else {
-            // Если саб-скрина нет — показываем главную вкладку
+            // Иначе показываем главную вкладку
             showMainTab(tabIndex, ft, uid);
         }
 
@@ -143,10 +168,12 @@ public class AppNavigator {
         if (profileFragment != null) ft.hide(profileFragment);
         if (settingsFragment != null) ft.hide(settingsFragment); 
         
-        // Прячем все саб-скрины
-        for (Fragment sub : subScreensMap.values()) {
-            if (sub != null && !sub.isHidden()) {
-                ft.hide(sub);
+        // Прячем все саб-скрины во всех стеках
+        for (List<Fragment> stack : subStacks.values()) {
+            for (Fragment sub : stack) {
+                if (sub != null && !sub.isHidden()) {
+                    ft.hide(sub);
+                }
             }
         }
     }
@@ -193,8 +220,10 @@ public class AppNavigator {
     private void showMainTab(int index, FragmentTransaction ft) {
         showMainTab(index, ft, null);
     }
-// Возвращает true, если на текущей вкладке сейчас открыт второстепенный экран
+
+    // Возвращает true, если в стеке текущей вкладки есть экраны
     public boolean hasSubScreen() {
-        return currentTabIndex != -1 && subScreensMap.containsKey(currentTabIndex);
+        List<Fragment> stack = subStacks.get(currentTabIndex);
+        return stack != null && !stack.isEmpty();
     }
 }
