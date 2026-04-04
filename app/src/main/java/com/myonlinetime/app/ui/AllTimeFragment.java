@@ -21,7 +21,6 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
-import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
@@ -61,6 +60,16 @@ public class AllTimeFragment extends Fragment {
     private static final String KEY_TOTAL_TIME = "total_time_millis";
     private static final String KEY_APPS_JSON = "apps_data_json";
 
+    // =========================================================================
+    // ПЕРЕМЕННЫЕ ДЛЯ УМНОЙ АНИМАЦИИ
+    // =========================================================================
+    private boolean isDataReady = false; 
+    private boolean isAnimated = false; 
+    
+    private long cachedTotalMillis = 0;
+    private long cachedYesterdayTotal = 0;
+    private long cachedStartDate = 0;
+
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.layout_all_time, container, false);
@@ -75,28 +84,22 @@ public class AllTimeFragment extends Fragment {
         descTxt = view.findViewById(R.id.all_time_desc);
         yesterdayValTxt = view.findViewById(R.id.all_time_yesterday_val);
         
-        // МАГИЯ СЛИЯНИЯ: Достаем плашку из разметки и удаляем её с экрана
         View headerWrapper = view.findViewById(R.id.yesterday_banner_wrapper);
         ViewGroup parent = (ViewGroup) headerWrapper.getParent();
         if (parent != null) {
             parent.removeView(headerWrapper);
         }
 
-        // =========================================================================
-        // >>> ВЕШАЕМ КЛИК НА КНОПКУ "КАК ЭТО РАБОТАЕТ" <<<
-        // =========================================================================
         View howItWorksBtn = view.findViewById(R.id.how_it_works_btn);
         if (howItWorksBtn != null) {
             howItWorksBtn.setOnClickListener(v -> showHowItWorksDialog(true));
         }
-        // =========================================================================
 
         recyclerView = view.findViewById(R.id.all_time_apps_list);
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         
         adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, false);
         
-        // Оборачиваем твой адаптер вместе с плашкой и отдаем списку
         HeaderWrapperAdapter wrapperAdapter = new HeaderWrapperAdapter(headerWrapper, adapter);
         recyclerView.setAdapter(wrapperAdapter);
 
@@ -105,11 +108,27 @@ public class AllTimeFragment extends Fragment {
         return view;
     }
 
-    // МЕТОД onResume УДАЛЕН ПОЛНОСТЬЮ — ФОНОМ УПРАВЛЯЕТ StatsHostFragment!
+    // =========================================================================
+    // СПУСКОВОЙ КРЮЧОК АНИМАЦИИ (Срабатывает только когда вкладка видима)
+    // =========================================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Если пользователь перелистнул на эту вкладку, а данные уже были посчитаны в фоне:
+        if (isDataReady && !isAnimated) {
+            runNumbersAnimation();
+        }
+    }
 
-    // =====================================================================
-    // >>> МЕТОД ДЛЯ ПОКАЗА ДИАЛОГА "КАК ЭТО РАБОТАЕТ" <<<
-    // =====================================================================
+    // Если хотите, чтобы цифры крутились ЗАНОВО при каждом перелистывании свайпом - раскомментируйте onPause
+    /*
+    @Override
+    public void onPause() {
+        super.onPause();
+        isAnimated = false; 
+    }
+    */
+
     private void showHowItWorksDialog(boolean isAllTime) {
         final Dialog dialog = new Dialog(requireContext());
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -131,12 +150,11 @@ public class AllTimeFragment extends Fragment {
         }
 
         btnOk.setOnClickListener(v -> dialog.dismiss());
-
         dialog.show();
     }
-    // =====================================================================
     
     private void loadAndCalculateStats() {
+        // Ставим "нули" на время загрузки
         mainValTxt.setText(getString(R.string.format_days_hours, 0, 0));
         subValTxt.setText(getString(R.string.format_total_hours_mins, 0, 0));
         yesterdayValTxt.setText(getString(R.string.format_plus_hours_mins, 0, 0));
@@ -189,7 +207,6 @@ public class AllTimeFragment extends Fragment {
                                                 pkg.equals(launcherPkg);
                                                 
                         if (time > 1000 && userApps.contains(pkg) && !isSystemTrash) {
-                            // ИЗБАВЛЯЕМСЯ ОТ getOrDefault
                             Long current = appsMap.get(pkg);
                             appsMap.put(pkg, Math.max((current == null ? 0L : current), time));
                         }
@@ -215,7 +232,6 @@ public class AllTimeFragment extends Fragment {
                                             pkg.equals(launcherPkg);
                                             
                     if (time > 1000 && userApps.contains(pkg) && !isSystemTrash) {
-                        // ИЗБАВЛЯЕМСЯ ОТ getOrDefault
                         Long current = appsMap.get(pkg);
                         appsMap.put(pkg, (current == null ? 0L : current) + time);
                         totalMillis += time;
@@ -246,18 +262,33 @@ public class AllTimeFragment extends Fragment {
                 if (!isAdded()) return;
                 
                 adapter.updateData(sortedApps, appsMap);
-                updateUIWithAnimation(finalTotalMillis, finalYesterdayTotal, finalStartDate);
+                
+                // Сохраняем готовые цифры
+                cachedTotalMillis = finalTotalMillis;
+                cachedYesterdayTotal = finalYesterdayTotal;
+                cachedStartDate = finalStartDate;
+                isDataReady = true;
+
+                // Если загрузка закончилась и мы прямо сейчас смотрим на экран - запускаем анимацию
+                if (isResumed() && !isAnimated) {
+                    runNumbersAnimation();
+                }
             });
         });
     }
 
-    private void updateUIWithAnimation(long totalMillis, long yesterdayTotal, long startDate) {
+    // =========================================================================
+    // ЛОГИКА САМОЙ АНИМАЦИИ (Вынесена в отдельный метод)
+    // =========================================================================
+    private void runNumbersAnimation() {
+        isAnimated = true; // Запоминаем, что мы уже проиграли анимацию
+
         SimpleDateFormat sdf = new SimpleDateFormat("d MMMM yyyy", Locale.getDefault());
-        String dateStr = sdf.format(startDate);
+        String dateStr = sdf.format(cachedStartDate);
         descTxt.setText(getString(R.string.text_all_time_desc, dateStr));
 
-        long yHours = yesterdayTotal / (1000 * 60 * 60);
-        long yMins = (yesterdayTotal / (1000 * 60)) % 60;
+        long yHours = cachedYesterdayTotal / (1000 * 60 * 60);
+        long yMins = (cachedYesterdayTotal / (1000 * 60)) % 60;
         yesterdayValTxt.setText(getString(R.string.format_plus_hours_mins, yHours, yMins));
 
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
@@ -265,7 +296,7 @@ public class AllTimeFragment extends Fragment {
         animator.setInterpolator(new DecelerateInterpolator());
         animator.addUpdateListener(animation -> {
             float fraction = (float) animation.getAnimatedValue();
-            long currentMillis = (long) (totalMillis * fraction);
+            long currentMillis = (long) (cachedTotalMillis * fraction);
 
             long totalHoursAll = currentMillis / (1000 * 60 * 60);
             long totalMinsAll = (currentMillis / (1000 * 60)) % 60;
@@ -326,7 +357,6 @@ public class AllTimeFragment extends Fragment {
                 if (openTimes.containsKey(pkg)) {
                     long duration = event.getTimeStamp() - openTimes.get(pkg);
                     if (duration > 0) {
-                        // ИЗБАВЛЯЕМСЯ ОТ getOrDefault
                         Long current = results.get(pkg);
                         results.put(pkg, (current == null ? 0L : current) + duration);
                     }
@@ -400,4 +430,5 @@ public class AllTimeFragment extends Fragment {
             return innerAdapter.getItemCount() + 1;
         }
     }
-}
+                                 }
+                            
