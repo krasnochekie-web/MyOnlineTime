@@ -16,14 +16,13 @@ import java.util.Map;
 
 public class SmartHeaderManager {
 
-    private final MainActivity activity; // Изменили на MainActivity, чтобы иметь доступ к навигатору
+    private final MainActivity activity;
     private final TextView headerTitle;
     private final ImageView headerBackBtn;
     private final View bellContainer;
     private final ImageView bellBtn;
     private final Runnable updateBadgeCallback;
 
-    // Память: привязываем названия к конкретным классам фрагментов
     private final Map<String, CharSequence> fragmentTitles = new HashMap<>();
     private boolean isRestoringTitle = false;
 
@@ -47,7 +46,6 @@ public class SmartHeaderManager {
                 if (!isRestoringTitle) {
                     Fragment top = getTopFragment();
                     if (top != null) {
-                        // Запоминаем, какое название установил этот фрагмент
                         fragmentTitles.put(top.getClass().getSimpleName(), s.toString());
                     }
                 }
@@ -55,7 +53,6 @@ public class SmartHeaderManager {
         });
     }
 
-    // Ищет реальный видимый фрагмент, игнорируя те, которые сейчас в процессе анимации закрытия
     private Fragment getTopFragment() {
         List<Fragment> fragments = activity.getSupportFragmentManager().getFragments();
         for (int i = fragments.size() - 1; i >= 0; i--) {
@@ -73,35 +70,49 @@ public class SmartHeaderManager {
 
     private void forceRestoreCurrentSubScreen() {
         headerBackBtn.setVisibility(View.VISIBLE);
-        if (bellContainer != null) bellContainer.setVisibility(View.GONE);
-        if (bellBtn != null) bellBtn.setVisibility(View.GONE);
-
-        // Ищем фрагмент, который остался на экране, и достаем ЕГО заголовок из памяти
+        
         Fragment top = getTopFragment();
-        if (top != null && fragmentTitles.containsKey(top.getClass().getSimpleName())) {
-            isRestoringTitle = true;
-            headerTitle.setText(fragmentTitles.get(top.getClass().getSimpleName()));
-            isRestoringTitle = false;
+        if (top != null) {
+            String className = top.getClass().getSimpleName();
+
+            // =========================================================================
+            // ЛОГИКА КОЛОКОЛЬЧИКА:
+            // Прячем только если мы на экране истории уведомлений.
+            // На всех остальных второстепенных экранах (подписчики и т.д.) - ПОКАЗЫВАЕМ.
+            // =========================================================================
+            boolean isHistoryScreen = className.contains("NotificationsHistory");
+            
+            int bellVisibility = isHistoryScreen ? View.GONE : View.VISIBLE;
+            
+            if (bellContainer != null) bellContainer.setVisibility(bellVisibility);
+            if (bellBtn != null) bellBtn.setVisibility(bellVisibility);
+
+            // Если колокольчик стал видимым, обновляем на нем цифру уведомлений
+            if (!isHistoryScreen && updateBadgeCallback != null) {
+                updateBadgeCallback.run();
+            }
+
+            // Восстанавливаем заголовок
+            if (fragmentTitles.containsKey(className)) {
+                isRestoringTitle = true;
+                headerTitle.setText(fragmentTitles.get(className));
+                isRestoringTitle = false;
+            }
         }
     }
 
     public void resetHeader() {
-        // =========================================================================
-        // АБСОЛЮТНАЯ ЗАЩИТА ОТ "УМИРАЮЩИХ" ФРАГМЕНТОВ
-        // Если фрагмент перед смертью просит сбросить шапку, но навигатор говорит, 
-        // что у нас ЕСТЬ открытый второстепенный экран -> ИГНОРИРУЕМ СБРОС!
-        // =========================================================================
+        // Если фрагмент умирает и пытается сбросить шапку, проверяем, нет ли под ним другого саб-скрина
         if (activity.navigator != null && activity.navigator.hasSubScreen()) {
             forceRestoreCurrentSubScreen();
             return; 
         }
 
-        // Если второстепенных экранов реально нет — честно сбрасываем шапку
         isRestoringTitle = true;
         headerTitle.setText(R.string.app_name);
         headerTitle.setTextSize(20);
         isRestoringTitle = false;
-
+        
         headerBackBtn.setVisibility(View.GONE);
 
         if (bellContainer != null) bellContainer.setVisibility(View.VISIBLE);
