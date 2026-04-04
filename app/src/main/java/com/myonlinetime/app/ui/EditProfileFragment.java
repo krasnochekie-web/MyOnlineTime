@@ -40,9 +40,8 @@ public class EditProfileFragment extends Fragment {
 
         if (activity == null) return view;
 
-        activity.mainHeader.setVisibility(View.VISIBLE);
-        activity.headerTitle.setText(activity.getString(R.string.edit_profile_title));
-        activity.headerBackBtn.setVisibility(View.VISIBLE);
+        // Вызываем метод настройки шапки
+        setupHeader(activity);
 
         final GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
         if (acct == null) return view;
@@ -94,8 +93,9 @@ public class EditProfileFragment extends Fragment {
                              if (!isAdded()) return;
                              activity.prefs.edit().putString("my_nickname", n).putString("my_about", a).apply();
                              Toast.makeText(activity, activity.getString(R.string.err_saving) + s, Toast.LENGTH_LONG).show();
-                             activity.resetHeader();
-                             activity.navigator.switchScreen(4, acct.getId());
+                             
+                             // Закрываем этот саб-скрин через навигатор
+                             activity.navigator.closeSubScreen();
                          }
                          @Override public void onError(String s) { 
                              if (isAdded()) Toast.makeText(activity, activity.getString(R.string.err_saving) + s, Toast.LENGTH_LONG).show(); 
@@ -111,25 +111,55 @@ public class EditProfileFragment extends Fragment {
         return view;
     }
 
+    // ========================================================
+    // МЕТОД ДЛЯ НАСТРОЙКИ ШАПКИ
+    // ========================================================
+    private void setupHeader(MainActivity activity) {
+        if (activity != null) {
+            activity.mainHeader.setVisibility(View.VISIBLE);
+            activity.headerTitle.setText(activity.getString(R.string.edit_profile_title));
+            activity.headerBackBtn.setVisibility(View.VISIBLE);
+            activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow); 
+            
+            // Оставляем колокольчик видимым
+            ImageView bellBtn = activity.findViewById(R.id.header_bell_btn);
+            if (bellBtn != null) bellBtn.setVisibility(View.VISIBLE);
+        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        MainActivity activity = (MainActivity) getActivity();
+        // Возвращаем шапку (надпись My Online Time) при выходе (только если под нами ничего нет)
+        if (activity != null && !activity.navigator.hasSubScreen()) {
+            activity.resetHeader();
+        }
+    }
+
     // --- УПРАВЛЕНИЕ ГЛОБАЛЬНЫМ ФОНОМ ---
     @Override
     public void onResume() {
         super.onResume();
-        // ДОБАВЛЕНО: Проверка !isHidden()
         if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(true); 
         }
     }
 
+    // ========================================================
+    // ВОССТАНОВЛЕНИЕ ШАПКИ ПРИ ВОЗВРАТЕ ИЗ СТЕКА / ВКЛАДОК
+    // ========================================================
     @Override
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
         if (getActivity() instanceof MainActivity) {
+            MainActivity activity = (MainActivity) getActivity();
             if (!hidden) {
-                // Если экран снова стал видимым (вернулись на него), включаем фон
-                ((MainActivity) getActivity()).updateGlobalBackground(true);
+                // Если экран снова стал видимым, возвращаем шапку редактирования профиля
+                setupHeader(activity);
+                // И включаем фон профиля
+                activity.updateGlobalBackground(true);
             }
         }
     }
-    // ------------------------------------
 }
