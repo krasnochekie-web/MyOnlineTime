@@ -154,7 +154,8 @@ public class MainActivity extends AppCompatActivity {
             hideLoginScreen(); 
             updateNavState(0);
             navigator.switchScreen(0, null);
-            resetHeader();
+            // ПРОВЕРКА: Сбрасываем шапку, только если нет саб-скрина
+            if (!navigator.hasSubScreen()) resetHeader();
         });
 
         findViewById(R.id.nav_search).setOnClickListener(v -> { 
@@ -171,14 +172,16 @@ public class MainActivity extends AppCompatActivity {
             hideLoginScreen(); 
             updateNavState(3);
             navigator.switchScreen(3, null);
-            resetHeader();
+            // ПРОВЕРКА: Сбрасываем шапку, только если нет саб-скрина
+            if (!navigator.hasSubScreen()) resetHeader();
         });
 
         findViewById(R.id.nav_settings).setOnClickListener(v -> {
             hideLoginScreen(); 
             updateNavState(5);
             navigator.switchScreen(5, null);
-            resetHeader();
+            // ПРОВЕРКА: Сбрасываем шапку, только если нет саб-скрина
+            if (!navigator.hasSubScreen()) resetHeader();
         });
         
         headerBackBtn.setOnClickListener(v -> handleBackNavigation());
@@ -322,19 +325,12 @@ public class MainActivity extends AppCompatActivity {
             .unregisterOnSharedPreferenceChangeListener(notifListener);
     }
 
-    // =======================================================================
-    // ИДЕАЛЬНОЕ МЯГКОЕ ВОССТАНОВЛЕНИЕ ФОНА (Без лишних вспышек)
-    // =======================================================================
     @Override
     protected void onResume() {
         super.onResume();
         loadUserAvatarToBottomNav(); 
         updateNotificationBadge(); 
         
-        // Мы больше не "включаем" фон насильно для всех экранов подряд.
-        // Вместо этого мы проверяем: если фон СЕЙЧАС физически на экране (он VISIBLE),
-        // значит мы на экране профиля. В этом случае мягко просим Glide/Плеер проснуться.
-        // На других экранах (Поиск, Настройки) этот код просто ничего не сделает!
         String path = prefs.getString("custom_bg_path", null);
         if (path != null) {
             boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
@@ -384,7 +380,8 @@ public class MainActivity extends AppCompatActivity {
                 hideLoginScreen(); 
                 updateNavState(3); 
                 navigator.switchScreen(3, null);
-                resetHeader();
+                // ПРОВЕРКА: Сбрасываем шапку, только если нет саб-скрина
+                if (!navigator.hasSubScreen()) resetHeader();
                 intent.removeExtra("open_tab");
             }
         }
@@ -445,7 +442,8 @@ public class MainActivity extends AppCompatActivity {
         if (currentTab != 0) {
             updateNavState(0);
             navigator.switchScreen(0, null);
-            resetHeader();
+            // ПРОВЕРКА: Сбрасываем шапку, только если нет саб-скрина
+            if (!navigator.hasSubScreen()) resetHeader();
         } else {
             super.onBackPressed();
         }
@@ -474,11 +472,16 @@ public class MainActivity extends AppCompatActivity {
             showLoginScreen(); 
         } else {
             hideLoginScreen(); 
-            if (tabIndex == 1) navigator.switchScreen(1, null); 
+            if (tabIndex == 1) {
+                navigator.switchScreen(1, null); 
+                // ПРОВЕРКА: Сбрасываем шапку, только если нет саб-скрина
+                if (!navigator.hasSubScreen()) resetHeader();
+            }
             if (tabIndex == 4) {
-                resetHeader();
                 StatsHelper.syncUserProfile(MainActivity.this);
                 navigator.switchScreen(4, account.getId()); 
+                // ПРОВЕРКА: Сбрасываем шапку, только если нет саб-скрина
+                if (!navigator.hasSubScreen()) resetHeader();
             }
         }
     } 
