@@ -107,8 +107,20 @@ public class NotificationsHistoryFragment extends Fragment {
             activity.headerBackBtn.setVisibility(View.VISIBLE);
             activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow); 
 
+            // Скрываем иконку колокольчика
             ImageView bellBtn = activity.findViewById(R.id.header_bell_btn);
-            if (bellBtn != null) bellBtn.setVisibility(View.GONE);
+            if (bellBtn != null) {
+                bellBtn.setVisibility(View.GONE);
+                bellBtn.setOnClickListener(null); // Убиваем клик на всякий случай
+            }
+
+            // ИСПРАВЛЕНИЕ БАГА: Скрываем сам невидимый контейнер, который ловил нажатия
+            // (Если в твоей XML-разметке этот контейнер называется иначе, просто поменяй ID)
+            View bellContainer = activity.findViewById(R.id.header_bell_container);
+            if (bellContainer != null) {
+                bellContainer.setVisibility(View.GONE);
+                bellContainer.setOnClickListener(null); // Тоже убиваем клик
+            }
         }
     }
 
@@ -182,7 +194,6 @@ public class NotificationsHistoryFragment extends Fragment {
         NotifAdapter(List<NotifItem> items, MainActivity activity) {
             this.items = items;
             this.activity = activity;
-            // Перенос формата даты в ресурсы
             this.sdf = new SimpleDateFormat(activity.getString(R.string.date_format), Locale.getDefault());
         }
 
@@ -197,12 +208,6 @@ public class NotificationsHistoryFragment extends Fragment {
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
             NotifItem item = items.get(position);
             holder.mainText.setText(item.mainText);
-            
-            // ========================================================
-            // ИСПРАВЛЕНИЕ ПЕРЕВОДА: Убрали перезапись текста из JSON!
-            // Теперь работает строка @string/action_view из XML-разметки
-            // holder.actionText.setText(item.actionText); // <-- УДАЛЕНО
-            // ========================================================
             
             holder.dateText.setText(sdf.format(new Date(item.timestamp)));
 
