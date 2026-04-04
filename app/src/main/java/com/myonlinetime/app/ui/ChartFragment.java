@@ -50,6 +50,14 @@ public class ChartFragment extends Fragment {
     private final List<DayData> weeklyData = new ArrayList<>();
     private int currentIndex = 6; 
 
+    // =========================================================================
+    // ПЕРЕМЕННЫЕ ДЛЯ УМНОЙ АНИМАЦИИ
+    // =========================================================================
+    private boolean isDataReady = false;
+    private boolean isAnimated = false;
+    private long[] cachedBarMillis;
+    private String[] cachedDayLabels;
+
     static class DayData {
         long totalMillis;
         String dayOfWeekShort;
@@ -72,14 +80,10 @@ public class ChartFragment extends Fragment {
         btnNext = view.findViewById(R.id.btn_next_day);
         recyclerView = view.findViewById(R.id.chart_apps_list);
 
-        // =========================================================================
-        // >>> ВЕШАЕМ КЛИК НА КНОПКУ "КАК ЭТО РАБОТАЕТ" <<<
-        // =========================================================================
         View howItWorksBtn = view.findViewById(R.id.how_it_works_btn);
         if (howItWorksBtn != null) {
             howItWorksBtn.setOnClickListener(v -> showHowItWorksDialog(false));
         }
-        // =========================================================================
 
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         
@@ -100,7 +104,17 @@ public class ChartFragment extends Fragment {
         return view;
     }
 
-    // МЕТОД onResume УДАЛЕН ПОЛНОСТЬЮ — ФОНОМ УПРАВЛЯЕТ StatsHostFragment!
+    // =========================================================================
+    // СПУСКОВОЙ КРЮЧОК АНИМАЦИИ
+    // =========================================================================
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Запускаем отрисовку графиков ТОЛЬКО если пользователь смотрит на экран
+        if (isDataReady && !isAnimated) {
+            runChartAnimation();
+        }
+    }
 
     private void showHowItWorksDialog(boolean isAllTime) {
         final Dialog dialog = new Dialog(requireContext());
@@ -123,7 +137,6 @@ public class ChartFragment extends Fragment {
         }
 
         btnOk.setOnClickListener(v -> dialog.dismiss());
-
         dialog.show();
     }
 
@@ -217,10 +230,27 @@ public class ChartFragment extends Fragment {
 
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
-                barChart.setData(barMillis, dayLabels);
-                selectDay(6); 
+                
+                // Сохраняем данные в память, но график пока не строим
+                cachedBarMillis = barMillis;
+                cachedDayLabels = dayLabels;
+                isDataReady = true;
+
+                // Если вкладка активна прямо сейчас - стартуем!
+                if (isResumed() && !isAnimated) {
+                    runChartAnimation();
+                }
             });
         });
+    }
+
+    // =========================================================================
+    // ЛОГИКА ОТРИСОВКИ ГРАФИКОВ
+    // =========================================================================
+    private void runChartAnimation() {
+        isAnimated = true; // Блокируем повторную анимацию при свайпе туда-сюда
+        barChart.setData(cachedBarMillis, cachedDayLabels);
+        selectDay(6); // Выбираем сегодняшний день, что заполняет тексты и список приложений
     }
 
     private Map<String, Long> calculateFromEventsDay(Context context, long start, long end) {
@@ -241,7 +271,6 @@ public class ChartFragment extends Fragment {
                 if (openTimes.containsKey(pkg)) {
                     long duration = event.getTimeStamp() - openTimes.get(pkg);
                     if (duration > 0) {
-                        // ИЗБАВЛЯЕМСЯ ОТ getOrDefault ДЛЯ ПОДДЕРЖКИ ANDROID 5.1
                         Long current = results.get(pkg);
                         results.put(pkg, (current == null ? 0L : current) + duration);
                     }
@@ -267,4 +296,5 @@ public class ChartFragment extends Fragment {
         ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
         return defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
     }
-}
+    }
+                
