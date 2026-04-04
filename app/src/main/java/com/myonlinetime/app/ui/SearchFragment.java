@@ -40,7 +40,7 @@ public class SearchFragment extends Fragment {
         final MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
-            activity.resetHeader();
+            activity.headerManager.resetHeader();
         }
 
         View view = inflater.inflate(R.layout.layout_search, container, false);
@@ -81,7 +81,7 @@ public class SearchFragment extends Fragment {
 
         if (!hidden) {
             activity.mainHeader.setVisibility(View.VISIBLE);
-            activity.resetHeader();
+            activity.headerManager.resetHeader();
             
             // Плавное отключение: ждем 300 мс, пока пройдет анимация перехода
             if (hideBgRunnable == null) {

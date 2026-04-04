@@ -87,7 +87,7 @@ public class NotificationsFragment extends Fragment {
         // ТОЛЬКО если под нами больше нет других саб-скринов
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null && !activity.navigator.hasSubScreen()) {
-            activity.resetHeader();
+            activity.headerManager.resetHeader();
         }
     }
 

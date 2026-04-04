@@ -62,7 +62,7 @@ public class ClearCacheFragment extends Fragment {
         // Возвращаем шапку (надпись My Online Time) при выходе
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
-            activity.resetHeader();
+            activity.headerManager.resetHeader();
         }
     }
 

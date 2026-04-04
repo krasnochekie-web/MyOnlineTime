@@ -24,7 +24,7 @@ public class StatsHostFragment extends Fragment {
         if (activity == null) return view;
 
         activity.mainHeader.setVisibility(View.VISIBLE);
-        activity.resetHeader();
+        activity.headerManager.resetHeader();
 
         final TextView txtTime = view.findViewById(R.id.txt_tab_time);
         final TextView txtChart = view.findViewById(R.id.txt_tab_chart);

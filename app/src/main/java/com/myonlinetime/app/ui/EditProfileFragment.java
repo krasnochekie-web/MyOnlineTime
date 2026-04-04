@@ -133,7 +133,7 @@ public class EditProfileFragment extends Fragment {
         MainActivity activity = (MainActivity) getActivity();
         // Возвращаем шапку (надпись My Online Time) при выходе (только если под нами ничего нет)
         if (activity != null && !activity.navigator.hasSubScreen()) {
-            activity.resetHeader();
+            activity.headerManager.resetHeader();
         }
     }
 

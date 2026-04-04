@@ -25,7 +25,7 @@ public class FeedFragment extends Fragment {
         if (activity != null) {
             // Обязательно восстанавливаем дефолтную шапку при открытии ленты
             activity.mainHeader.setVisibility(View.VISIBLE);
-            activity.resetHeader();
+            activity.headerManager.resetHeader();
         }
 
         return view;

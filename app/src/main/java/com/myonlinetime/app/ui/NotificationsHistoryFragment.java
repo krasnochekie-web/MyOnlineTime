@@ -125,7 +125,7 @@ public class NotificationsHistoryFragment extends Fragment {
     public void onDestroyView() {
         super.onDestroyView();
         MainActivity activity = (MainActivity) getActivity();
-        if (activity != null) activity.resetHeader(); 
+        if (activity != null) activity.headerManager.resetHeader(); 
     }
 
     @Override

@@ -58,7 +58,7 @@ public class StatsTimeFragment extends Fragment {
         final MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
-            activity.resetHeader();
+            activity.headerManager.resetHeader();
         }
 
         final androidx.core.widget.NestedScrollView scrollView = view.findViewById(R.id.scroll_view_time);

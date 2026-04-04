@@ -69,7 +69,7 @@ public class ProfileFragment extends Fragment {
         if (activity == null) return view;
 
         activity.mainHeader.setVisibility(View.VISIBLE);
-        activity.resetHeader();
+        activity.headerManager.resetHeader();
 
         String targetUid = getArguments() != null ? getArguments().getString("TARGET_UID") : "";
 
@@ -320,7 +320,7 @@ public class ProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!hidden) {
                 activity.mainHeader.setVisibility(View.VISIBLE);
-                activity.resetHeader();
+                activity.headerManager.resetHeader();
                 activity.updateGlobalBackground(true);
             }
         }

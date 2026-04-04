@@ -56,7 +56,7 @@ public class SmartHeaderManager {
         activity.getSupportFragmentManager().addOnBackStackChangedListener(() -> {
             int depth = activity.getSupportFragmentManager().getBackStackEntryCount();
             if (depth == 0) {
-                resetHeader();
+                headerManager.resetHeader();
             } else {
                 showSecondaryHeader(depth);
             }
@@ -76,7 +76,7 @@ public class SmartHeaderManager {
         }
     }
 
-    public void resetHeader() {
+    public void headerManager.resetHeader() {
         headerTitle.setText(R.string.app_name);
         headerTitle.setTextSize(20);
         headerBackBtn.setVisibility(View.GONE);
