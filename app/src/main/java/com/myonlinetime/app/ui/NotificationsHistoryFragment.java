@@ -107,19 +107,16 @@ public class NotificationsHistoryFragment extends Fragment {
             activity.headerBackBtn.setVisibility(View.VISIBLE);
             activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow); 
 
-            // Скрываем иконку колокольчика
+            // Скрываем иконку колокольчика (БЕЗ setOnClickListener(null))
             ImageView bellBtn = activity.findViewById(R.id.header_bell_btn);
             if (bellBtn != null) {
                 bellBtn.setVisibility(View.GONE);
-                bellBtn.setOnClickListener(null); // Убиваем клик на всякий случай
             }
 
-            // ИСПРАВЛЕНИЕ БАГА: Скрываем сам невидимый контейнер, который ловил нажатия
-            // (Если в твоей XML-разметке этот контейнер называется иначе, просто поменяй ID)
+            // Скрываем невидимый контейнер (БЕЗ setOnClickListener(null))
             View bellContainer = activity.findViewById(R.id.header_bell_container);
             if (bellContainer != null) {
                 bellContainer.setVisibility(View.GONE);
-                bellContainer.setOnClickListener(null); // Тоже убиваем клик
             }
         }
     }
