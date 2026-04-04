@@ -76,7 +76,7 @@ public class SmartHeaderManager {
         }
     }
 
-    public void headerManager.resetHeader() {
+public void resetHeader() {
         headerTitle.setText(R.string.app_name);
         headerTitle.setTextSize(20);
         headerBackBtn.setVisibility(View.GONE);
