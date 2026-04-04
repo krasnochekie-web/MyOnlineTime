@@ -154,7 +154,6 @@ public class MainActivity extends AppCompatActivity {
             hideLoginScreen(); 
             updateNavState(0);
             navigator.switchScreen(0, null);
-            // ПРОВЕРКА: Сбрасываем шапку, только если нет саб-скрина
             if (!navigator.hasSubScreen()) resetHeader();
         });
 
@@ -172,7 +171,6 @@ public class MainActivity extends AppCompatActivity {
             hideLoginScreen(); 
             updateNavState(3);
             navigator.switchScreen(3, null);
-            // ПРОВЕРКА: Сбрасываем шапку, только если нет саб-скрина
             if (!navigator.hasSubScreen()) resetHeader();
         });
 
@@ -180,7 +178,6 @@ public class MainActivity extends AppCompatActivity {
             hideLoginScreen(); 
             updateNavState(5);
             navigator.switchScreen(5, null);
-            // ПРОВЕРКА: Сбрасываем шапку, только если нет саб-скрина
             if (!navigator.hasSubScreen()) resetHeader();
         });
         
@@ -380,7 +377,6 @@ public class MainActivity extends AppCompatActivity {
                 hideLoginScreen(); 
                 updateNavState(3); 
                 navigator.switchScreen(3, null);
-                // ПРОВЕРКА: Сбрасываем шапку, только если нет саб-скрина
                 if (!navigator.hasSubScreen()) resetHeader();
                 intent.removeExtra("open_tab");
             }
@@ -435,16 +431,22 @@ public class MainActivity extends AppCompatActivity {
     public void onBackPressed() { handleBackNavigation(); }  
 
     private void handleBackNavigation() {
+        // Мы пытаемся закрыть текущий саб-скрин.
         if (navigator.closeSubScreen()) {
-            resetHeader();
+            // ИСПРАВЛЕНИЕ: Сбрасываем шапку ТОЛЬКО если после удаления мы остались без саб-скринов вообще
+            if (!navigator.hasSubScreen()) {
+                resetHeader();
+            }
             return; 
         }
+        
+        // Если саб-скринов нет, переходим на первую вкладку
         if (currentTab != 0) {
             updateNavState(0);
             navigator.switchScreen(0, null);
-            // ПРОВЕРКА: Сбрасываем шапку, только если нет саб-скрина
             if (!navigator.hasSubScreen()) resetHeader();
         } else {
+            // Если мы уже на первой вкладке, закрываем приложение
             super.onBackPressed();
         }
     }
@@ -474,13 +476,11 @@ public class MainActivity extends AppCompatActivity {
             hideLoginScreen(); 
             if (tabIndex == 1) {
                 navigator.switchScreen(1, null); 
-                // ПРОВЕРКА: Сбрасываем шапку, только если нет саб-скрина
                 if (!navigator.hasSubScreen()) resetHeader();
             }
             if (tabIndex == 4) {
                 StatsHelper.syncUserProfile(MainActivity.this);
                 navigator.switchScreen(4, account.getId()); 
-                // ПРОВЕРКА: Сбрасываем шапку, только если нет саб-скрина
                 if (!navigator.hasSubScreen()) resetHeader();
             }
         }
