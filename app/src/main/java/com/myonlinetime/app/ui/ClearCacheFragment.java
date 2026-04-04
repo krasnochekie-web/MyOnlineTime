@@ -79,6 +79,23 @@ public class ClearCacheFragment extends Fragment {
     }
     // ========================================================
 
+    // ========================================================
+    // ВОССТАНОВЛЕНИЕ ШАПКИ ПРИ ВОЗВРАТЕ ИЗ СТЕКА
+    // ========================================================
+    @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        if (!hidden) {
+            MainActivity activity = (MainActivity) getActivity();
+            setupHeader(activity);
+            
+            // Также восстанавливаем фон (чтобы видео не играло под меню настроек)
+            if (activity != null) {
+                activity.updateGlobalBackground(false);
+            }
+        }
+    }
+
     // ==========================================
     // ЛОГИКА ОЧИСТКИ ФОНА
     // ==========================================
