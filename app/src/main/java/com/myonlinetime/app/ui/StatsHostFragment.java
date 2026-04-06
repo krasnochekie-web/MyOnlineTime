@@ -76,16 +76,32 @@ public class StatsHostFragment extends Fragment {
         return view;
     }
 
-    // ========================================================
-    // ИСПРАВЛЕННЫЙ МЕТОД onResume
-    // ========================================================
+    // =========================================================================
+    // УПРАВЛЕНИЕ ГЛОБАЛЬНЫМ ФОНОМ ДЛЯ BOTTOM NAV
+    // =========================================================================
+    
+    // 1. Срабатывает при самом первом запуске (добавлении фрагмента)
     @Override
     public void onResume() {
         super.onResume();
-        // ДОБАВЛЕНО: Проверка !isHidden(), чтобы скрытый фрагмент не выключал фон
-        if (!isHidden() && getActivity() instanceof MainActivity) {
+        if (!isHidden()) {
+            updateBackgroundBasedOnTab();
+        }
+    }
+
+    // 2. Срабатывает при переключении вкладок через AppNavigator (hide/show)
+    @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        if (!hidden) {
+            updateBackgroundBasedOnTab();
+        }
+    }
+
+    // 3. Единый метод, который отключает фон (так как это статистика, тут фона нет)
+    private void updateBackgroundBasedOnTab() {
+        if (getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(false); 
         }
     }
-    // ========================================================
 }
