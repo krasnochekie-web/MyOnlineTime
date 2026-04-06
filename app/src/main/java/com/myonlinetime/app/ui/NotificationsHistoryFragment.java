@@ -1,7 +1,6 @@
 package com.myonlinetime.app.ui;
 
 import android.content.Context;
-import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -33,8 +32,6 @@ public class NotificationsHistoryFragment extends Fragment {
     private static final String JSON_ACTION_TEXT = "actionText";
     private static final String JSON_TIMESTAMP = "timestamp";
     private static final String JSON_IS_READ = "isRead";
-    private static final String EXTRA_OPEN_TAB = "open_tab";
-    private static final String TAB_TIME = "time";
 
     private Runnable hideBgRunnable;
 
@@ -184,7 +181,7 @@ public class NotificationsHistoryFragment extends Fragment {
     }
 
     // =========================================================================
-    // ОБНОВЛЕННЫЙ АДАПТЕР (Клик обрабатывается на всей карточке)
+    // ОБНОВЛЕННЫЙ АДАПТЕР (Имитация нажатия кнопок для родной анимации)
     // =========================================================================
     private static class NotifAdapter extends RecyclerView.Adapter<NotifAdapter.ViewHolder> {
         private final List<NotifItem> items;
@@ -211,13 +208,20 @@ public class NotificationsHistoryFragment extends Fragment {
             
             holder.dateText.setText(sdf.format(new Date(item.timestamp)));
 
-            // ВЕШАЕМ КЛИК НА ВСЮ КАРТОЧКУ (itemView)
+            // ВЕШАЕМ КЛИК НА ВСЮ КАРТОЧКУ
             holder.itemView.setOnClickListener(v -> {
                 if (activity != null) {
-                    Intent intent = new Intent(activity, MainActivity.class);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                    intent.putExtra(EXTRA_OPEN_TAB, TAB_TIME);
-                    activity.startActivity(intent);
+                    // 1. Имитируем клик по кнопке "Назад" (экран уедет вниз)
+                    ImageView backBtn = activity.findViewById(R.id.header_back_btn);
+                    if (backBtn != null) {
+                        backBtn.performClick();
+                    }
+
+                    // 2. Имитируем клик по вкладке "Время" в нижнем меню
+                    View navTime = activity.findViewById(R.id.nav_usage);
+                    if (navTime != null) {
+                        navTime.performClick();
+                    }
                 }
             });
         }
