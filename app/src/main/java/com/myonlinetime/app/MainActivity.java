@@ -411,10 +411,16 @@ public class MainActivity extends AppCompatActivity {
         handleNotificationIntent(intent);
     }
     
-    private void handleNotificationIntent(Intent intent) {
+private void handleNotificationIntent(Intent intent) {
         if (intent != null && intent.hasExtra("open_tab")) {
             String tab = intent.getStringExtra("open_tab");
             if ("time".equals(tab)) {
+                // >>> УМНОЕ ЗАКРЫТИЕ <<<
+                // Если мы находимся внутри саб-скрина (например, смотрим уведомления), закрываем его!
+                if (navigator != null && navigator.hasSubScreen()) {
+                    navigator.closeSubScreen();
+                }
+                
                 hideLoginScreen(); 
                 updateNavState(3); 
                 navigator.switchScreen(3, null);
