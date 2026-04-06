@@ -30,7 +30,7 @@ public class AppNavigator {
     private ProfileFragment profileFragment;
     private SettingsFragment settingsFragment; 
 
-    // ИСПРАВЛЕНО: Теперь хранилище — это СТЕК (Список) фрагментов для каждой вкладки
+    // Хранилище — это СТЕК (Список) фрагментов для каждой вкладки
     // Ключ - индекс вкладки, Значение - стопка (List) открытых саб-скринов
     private final Map<Integer, List<Fragment>> subStacks = new HashMap<>();
     
@@ -225,5 +225,18 @@ public class AppNavigator {
     public boolean hasSubScreen() {
         List<Fragment> stack = subStacks.get(currentTabIndex);
         return stack != null && !stack.isEmpty();
+    }
+
+    // =========================================================
+    // МАГИЯ ПРЕДЗАГРУЗКИ (Фоновое создание экрана профиля)
+    // =========================================================
+    public void preloadProfile(String uid) {
+        if (profileFragment == null) {
+            profileFragment = ProfileFragment.newInstance(uid);
+            fm.beginTransaction()
+              .add(containerId, profileFragment, "PROFILE")
+              .hide(profileFragment) // Прячем, чтобы не перекрыть текущий экран
+              .commitAllowingStateLoss();
+        }
     }
 }
