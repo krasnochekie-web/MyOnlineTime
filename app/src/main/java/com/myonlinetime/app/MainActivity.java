@@ -71,6 +71,12 @@ public class MainActivity extends AppCompatActivity {
     private ExoPlayer exoPlayer;
     private ImageView globalImageView;
     private String currentBgPath = null;
+    
+    // =========================================================================
+    // ПРЕДОХРАНИТЕЛЬ ОТ МОРГАНИЯ ФОНА ПРИ БЫСТРЫХ КЛИКАХ
+    // =========================================================================
+    private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable hideBgRunnable;
 
     private final SharedPreferences.OnSharedPreferenceChangeListener notifListener = (sharedPrefs, key) -> {
         if ("notif_history_array".equals(key)) {
@@ -220,6 +226,16 @@ public class MainActivity extends AppCompatActivity {
         mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
             StatsHelper.syncUserProfile(MainActivity.this);
             loadUserAvatarToBottomNav(); 
+            
+            // =========================================================================
+            // МАГИЯ ПРЕДЗАГРУЗКИ ПРОФИЛЯ (Фоновая загрузка при старте)
+            // =========================================================================
+            try {
+                GoogleSignInAccount account = task.getResult(ApiException.class);
+                if (account != null && navigator != null) {
+                    navigator.preloadProfile(account.getId());
+                }
+            } catch (Exception ignored) { }
         });
     } 
 
@@ -227,14 +243,11 @@ public class MainActivity extends AppCompatActivity {
     // ГЛАВНЫЙ СИНХРОНИЗАТОР ШАПКИ
     // =========================================================================
     public void syncHeaderState() {
-        // Заставляем Android мгновенно завершить все транзакции фрагментов
         getSupportFragmentManager().executePendingTransactions();
         
         if (navigator != null && navigator.hasSubScreen()) {
-            // Если на открытом табе есть вложенный экран — применяем его правила (стрелочка, заголовок, колокольчик)
             headerManager.updateHeaderAfterBack();
         } else if (headerManager != null) {
-            // Если это главный экран (чистая Лента, Профиль) — сбрасываем в стандарт
             headerManager.resetHeader();
         }
     }
@@ -277,32 +290,44 @@ public class MainActivity extends AppCompatActivity {
         exoPlayer.setVolume(0f);
     }
 
+    // =========================================================================
+    // УМНЫЙ ОБНОВИТЕЛЬ ФОНА С ЗАДЕРЖКОЙ (DEBOUNCE 200ms)
+    // =========================================================================
     public void updateGlobalBackground(boolean show) {
         String path = prefs.getString("custom_bg_path", null);
         boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
 
+        if (hideBgRunnable == null) {
+            hideBgRunnable = () -> {
+                // ИСПОЛЬЗУЕМ INVISIBLE ВМЕСТО GONE
+                if (playerView != null) playerView.setVisibility(View.INVISIBLE);
+                if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
+                if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+            };
+        }
+
         if (!show || path == null) {
-            if (playerView != null) playerView.setVisibility(View.GONE);
-            if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
-            if (globalImageView != null) globalImageView.setVisibility(View.GONE);
+            // Отменяем старые задачи и ждем 200мс перед отключением фона
+            bgHandler.removeCallbacks(hideBgRunnable);
+            bgHandler.postDelayed(hideBgRunnable, 200);
             return;
         }
 
+        // Пользователь вернулся на вкладку с фоном! Отменяем выключение.
+        bgHandler.removeCallbacks(hideBgRunnable);
+
         if (path.equals(currentBgPath)) {
             if (isVideo) {
-                if (globalImageView != null) globalImageView.setVisibility(View.GONE);
+                if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
                 if (playerView != null) playerView.setVisibility(View.VISIBLE);
                 if (exoPlayer != null && !exoPlayer.isPlaying()) exoPlayer.play();
             } else {
-                if (playerView != null) playerView.setVisibility(View.GONE);
+                if (playerView != null) playerView.setVisibility(View.INVISIBLE);
                 if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
                 if (globalImageView != null) {
                     globalImageView.setVisibility(View.VISIBLE);
                     File file = new File(path);
-                    Glide.with(this)
-                         .load(file)
-                         .centerCrop()
-                         .into(globalImageView);
+                    Glide.with(this).load(file).centerCrop().into(globalImageView);
                 }
             }
             return;
@@ -313,22 +338,18 @@ public class MainActivity extends AppCompatActivity {
         if (!file.exists()) return;
 
         if (isVideo) {
-            if (globalImageView != null) globalImageView.setVisibility(View.GONE);
+            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
             if (playerView != null) playerView.setVisibility(View.VISIBLE);
             MediaItem mediaItem = MediaItem.fromUri(Uri.fromFile(file));
             exoPlayer.setMediaItem(mediaItem);
             exoPlayer.prepare();
             exoPlayer.play();
         } else {
-            if (playerView != null) playerView.setVisibility(View.GONE);
+            if (playerView != null) playerView.setVisibility(View.INVISIBLE);
             if (exoPlayer != null) exoPlayer.pause();
             if (globalImageView != null) {
                 globalImageView.setVisibility(View.VISIBLE);
-                
-                Glide.with(this)
-                     .load(file)
-                     .centerCrop()
-                     .into(globalImageView);
+                Glide.with(this).load(file).centerCrop().into(globalImageView);
             }
         }
     }    
