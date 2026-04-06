@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId "com.myonlinetime.app"
-        minSdk 21
+        minSdk 15
         targetSdk 33
         versionCode 19
         versionName "0.1.2"
