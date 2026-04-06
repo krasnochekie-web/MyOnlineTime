@@ -415,8 +415,8 @@ private void handleNotificationIntent(Intent intent) {
         if (intent != null && intent.hasExtra("open_tab")) {
             String tab = intent.getStringExtra("open_tab");
             if ("time".equals(tab)) {
-                // >>> УМНОЕ ЗАКРЫТИЕ <<<
-                // Если мы находимся внутри саб-скрина (например, смотрим уведомления), закрываем его!
+                
+                // Просто закрываем саб-скрин родным методом (уедет вниз)
                 if (navigator != null && navigator.hasSubScreen()) {
                     navigator.closeSubScreen();
                 }
