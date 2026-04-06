@@ -136,7 +136,9 @@ public class AppNavigator {
 
         // Анимация слайда между главными вкладками
         if (currentTabIndex != -1) {
-            if (tabIndex > currentTabIndex) {
+            // ЖЕСТКОЕ ПРАВИЛО: Если идем во Время (3) или Настройки (5),
+            // ИЛИ если идем вперед по индексам -> выкатываем экран СПРАВА.
+            if (tabIndex > currentTabIndex || tabIndex == 3 || tabIndex == 5) {
                 ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left);
             } else {
                 ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
