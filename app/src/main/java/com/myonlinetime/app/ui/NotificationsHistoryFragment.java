@@ -183,6 +183,9 @@ public class NotificationsHistoryFragment extends Fragment {
         }
     }
 
+    // =========================================================================
+    // ОБНОВЛЕННЫЙ АДАПТЕР (Клик обрабатывается на всей карточке)
+    // =========================================================================
     private static class NotifAdapter extends RecyclerView.Adapter<NotifAdapter.ViewHolder> {
         private final List<NotifItem> items;
         private final MainActivity activity;
@@ -208,7 +211,8 @@ public class NotificationsHistoryFragment extends Fragment {
             
             holder.dateText.setText(sdf.format(new Date(item.timestamp)));
 
-            holder.actionText.setOnClickListener(v -> {
+            // ВЕШАЕМ КЛИК НА ВСЮ КАРТОЧКУ (itemView)
+            holder.itemView.setOnClickListener(v -> {
                 if (activity != null) {
                     Intent intent = new Intent(activity, MainActivity.class);
                     intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -222,11 +226,11 @@ public class NotificationsHistoryFragment extends Fragment {
         public int getItemCount() { return items.size(); }
 
         static class ViewHolder extends RecyclerView.ViewHolder {
-            TextView mainText, actionText, dateText;
+            TextView mainText, dateText;
+            
             ViewHolder(View v) {
                 super(v);
                 mainText = v.findViewById(R.id.notif_text_main);
-                actionText = v.findViewById(R.id.notif_text_action);
                 dateText = v.findViewById(R.id.notif_date);
             }
         }
