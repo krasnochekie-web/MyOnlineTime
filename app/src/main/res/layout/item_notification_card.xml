@@ -1,52 +1,61 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.cardview.widget.CardView 
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginHorizontal="16dp"
     android:layout_marginBottom="10dp"
-    android:background="@drawable/bg_app_card"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="0dp"
+    app:cardBackgroundColor="@android:color/transparent"
     android:clickable="true"
     android:focusable="true"
-    android:foreground="?attr/selectableItemBackground"
-    android:clipToOutline="true"
-    android:orientation="horizontal"
-    android:padding="10dp">
+    android:foreground="?attr/selectableItemBackground">
 
-    <ImageView
-        android:layout_width="26dp"
-        android:layout_height="26dp"
-        android:layout_gravity="center_vertical"
-        android:src="@drawable/ic_nav_time_h"
-        android:tint="@color/textDynamic" />
-
-    <View
-        android:layout_width="1dp"
-        android:layout_height="match_parent"
-        android:layout_marginHorizontal="10dp"
-        android:background="@color/chartLineDynamic" />
-
-    <RelativeLayout
-        android:layout_width="0dp"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1">
+        android:background="@drawable/bg_app_card"
+        android:orientation="horizontal"
+        android:padding="10dp">
 
-        <TextView
-            android:id="@+id/notif_text_main"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textColor="@color/textDynamic"
-            android:textSize="13sp"
-            android:textStyle="bold" />
+        <ImageView
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_gravity="center_vertical"
+            android:src="@drawable/ic_nav_time_h"
+            android:tint="@color/textDynamic" />
 
-        <TextView
-            android:id="@+id/notif_date"
-            android:layout_width="wrap_content"
+        <View
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:layout_marginHorizontal="10dp"
+            android:background="@color/chartLineDynamic" />
+
+        <RelativeLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_below="@id/notif_text_main"
-            android:layout_alignParentEnd="true"
-            android:layout_marginTop="4dp"
-            android:textColor="@color/textGrayDynamic"
-            android:textSize="11sp"
-            android:textStyle="bold" />
-    </RelativeLayout>
-</LinearLayout>
+            android:layout_weight="1">
+
+            <TextView
+                android:id="@+id/notif_text_main"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/textDynamic"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/notif_date"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/notif_text_main"
+                android:layout_alignParentEnd="true"
+                android:layout_marginTop="4dp"
+                android:textColor="@color/textGrayDynamic"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </RelativeLayout>
+    </LinearLayout>
+</androidx.cardview.widget.CardView>
