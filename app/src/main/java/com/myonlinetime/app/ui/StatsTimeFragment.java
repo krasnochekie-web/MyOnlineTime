@@ -31,8 +31,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class StatsTimeFragment extends Fragment {
 
@@ -152,8 +150,8 @@ public class StatsTimeFragment extends Fragment {
                         if (!isAdded()) return;
                         totalTimeText.setText(activity.getString(R.string.loading));
                         
-                        ExecutorService executor = Executors.newSingleThreadExecutor();
-                        executor.execute(() -> {
+                        // ИСПОЛЬЗУЕМ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ
+                        Utils.backgroundExecutor.execute(() -> {
                             Calendar cal = Calendar.getInstance(); 
                             long endTime = System.currentTimeMillis();
                             long startTime; int interval;
@@ -210,8 +208,8 @@ public class StatsTimeFragment extends Fragment {
             return;
         }
 
-        ExecutorService executor = Executors.newSingleThreadExecutor();
-        executor.execute(() -> {
+        // ИСПОЛЬЗУЕМ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ
+        Utils.backgroundExecutor.execute(() -> {
             long now = System.currentTimeMillis();
             Calendar calW = Calendar.getInstance(); calW.add(Calendar.DAY_OF_YEAR, -7);
             long weekTotal = filterAndSumUserApps(context, calculateFromStats(context, UsageStatsManager.INTERVAL_DAILY, calW.getTimeInMillis(), now));
