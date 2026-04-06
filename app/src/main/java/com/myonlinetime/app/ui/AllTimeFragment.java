@@ -30,6 +30,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.adapters.AppsAdapter;
+import com.myonlinetime.app.utils.Utils;
 
 import org.json.JSONObject;
 
@@ -44,8 +45,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class AllTimeFragment extends Fragment {
 
@@ -120,15 +119,6 @@ public class AllTimeFragment extends Fragment {
         }
     }
 
-    // Если хотите, чтобы цифры крутились ЗАНОВО при каждом перелистывании свайпом - раскомментируйте onPause
-    /*
-    @Override
-    public void onPause() {
-        super.onPause();
-        isAnimated = false; 
-    }
-    */
-
     private void showHowItWorksDialog(boolean isAllTime) {
         final Dialog dialog = new Dialog(requireContext());
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -159,8 +149,8 @@ public class AllTimeFragment extends Fragment {
         subValTxt.setText(getString(R.string.format_total_hours_mins, 0, 0));
         yesterdayValTxt.setText(getString(R.string.format_plus_hours_mins, 0, 0));
 
-        ExecutorService executor = Executors.newSingleThreadExecutor();
-        executor.execute(() -> {
+        // ИСПОЛЬЗУЕМ НАШ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ (Без утечек и с низким приоритетом)
+        Utils.backgroundExecutor.execute(() -> {
             MainActivity activity = (MainActivity) getActivity();
             if (activity == null || !isAdded()) return;
 
@@ -430,5 +420,4 @@ public class AllTimeFragment extends Fragment {
             return innerAdapter.getItemCount() + 1;
         }
     }
-                                 }
-                            
+}
