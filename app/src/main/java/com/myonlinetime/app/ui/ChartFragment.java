@@ -36,8 +36,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class ChartFragment extends Fragment {
 
@@ -160,8 +158,8 @@ public class ChartFragment extends Fragment {
     private void loadWeeklyData() {
         topDateTxt.setText(getString(R.string.loading));
         
-        ExecutorService executor = Executors.newSingleThreadExecutor();
-        executor.execute(() -> {
+        // ИСПОЛЬЗУЕМ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ (с низким приоритетом для плавной отрисовки UI)
+        Utils.backgroundExecutor.execute(() -> {
             MainActivity activity = (MainActivity) getActivity();
             if (activity == null || !isAdded()) return;
 
@@ -296,5 +294,4 @@ public class ChartFragment extends Fragment {
         ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
         return defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
     }
-    }
-                
+}
