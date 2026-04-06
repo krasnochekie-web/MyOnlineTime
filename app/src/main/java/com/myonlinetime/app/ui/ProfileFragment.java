@@ -43,7 +43,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Executors;
 
 public class ProfileFragment extends Fragment {
 
@@ -191,7 +190,8 @@ public class ProfileFragment extends Fragment {
                                     if (user.photo.startsWith("http")) {
                                         Glide.with(activity).load(user.photo).circleCrop().into(avatarView);
                                     } else {
-                                        Executors.newSingleThreadExecutor().execute(() -> {
+                                        // ИСПОЛЬЗУЕМ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ ДЛЯ ДЕКОДИРОВАНИЯ
+                                        Utils.backgroundExecutor.execute(() -> {
                                             try {
                                                 byte[] imageByteArray = android.util.Base64.decode(user.photo, android.util.Base64.DEFAULT);
                                                 new Handler(Looper.getMainLooper()).post(() -> {
@@ -327,7 +327,8 @@ public class ProfileFragment extends Fragment {
     }
 
     private void loadLocalCacheAsync(Runnable onLoaded) {
-        Executors.newSingleThreadExecutor().execute(() -> {
+        // ИСПОЛЬЗУЕМ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ ДЛЯ ЗАГРУЗКИ КЭША
+        Utils.backgroundExecutor.execute(() -> {
             Set<String> hidden = new HashSet<>(prefs.getStringSet("hidden_apps", new HashSet<>()));
             String descJson = prefs.getString("app_descriptions", "{}");
             Map<String, String> map = null;
