@@ -3,14 +3,18 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginHorizontal="16dp"
-    android:layout_marginBottom="12dp"
+    android:layout_marginBottom="10dp"
     android:background="@drawable/bg_app_card"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
+    android:clipToOutline="true"
     android:orientation="horizontal"
-    android:padding="12dp">
+    android:padding="10dp">
 
     <ImageView
-        android:layout_width="32dp"
-        android:layout_height="32dp"
+        android:layout_width="26dp"
+        android:layout_height="26dp"
         android:layout_gravity="center_vertical"
         android:src="@drawable/ic_nav_time_h"
         android:tint="@color/textDynamic" />
@@ -18,7 +22,7 @@
     <View
         android:layout_width="1dp"
         android:layout_height="match_parent"
-        android:layout_marginHorizontal="12dp"
+        android:layout_marginHorizontal="10dp"
         android:background="@color/chartLineDynamic" />
 
     <RelativeLayout
@@ -31,34 +35,18 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="@color/textDynamic"
-            android:textSize="14sp"
+            android:textSize="13sp"
             android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/notif_text_action"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_below="@id/notif_text_main"
-            android:layout_marginTop="4dp"
-            android:text="@string/action_view"
-            android:textColor="@color/burgundyRed"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackground"
-            android:paddingHorizontal="4dp"
-            android:paddingVertical="2dp" />
 
         <TextView
             android:id="@+id/notif_date"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_below="@id/notif_text_action"
+            android:layout_below="@id/notif_text_main"
             android:layout_alignParentEnd="true"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="4dp"
             android:textColor="@color/textGrayDynamic"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:textStyle="bold" />
     </RelativeLayout>
 </LinearLayout>
