@@ -60,9 +60,6 @@ public class AppNavigator {
         }
     }
 
-    // =========================================================
-    // ОТКРЫТИЕ САБ-СКРИНА (С защитой от бага "Punch-Through")
-    // =========================================================
     public void openSubScreen(Fragment fragment) {
         if (SystemClock.elapsedRealtime() - lastSubScreenOpenTime < 500) {
             return; 
@@ -84,11 +81,11 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
         
-        // ПРАВКА 1: Убираем fade_out для нижнего слоя. 0 — значит экран остается видимым.
+        // 0 вместо fade_out блокирует баг плеера (экран не становится полупрозрачным)
         ft.setCustomAnimations(R.anim.slide_in_up, 0);
         
-        // ПРАВКА 2: Мы больше НЕ вызываем hideAll(ft). 
-        // Основная вкладка остается лежать под новым окном, работая как "щит".
+        // ВОЗВРАЩАЕМ ПРЯТКИ! Теперь нижний UI не будет торчать из-под нового экрана.
+        hideAll(ft);
 
         ft.add(containerId, fragment, "SUB_" + currentTabIndex + "_" + stack.size());
         stack.add(fragment);
@@ -96,9 +93,6 @@ public class AppNavigator {
         ft.commit();
     }
 
-    // =========================================================
-    // ЗАКРЫТИЕ САБ-СКРИНА (С родной анимацией вниз)
-    // =========================================================
     public boolean closeSubScreen() {
         List<Fragment> stack = subStacks.get(currentTabIndex);
         
@@ -108,7 +102,6 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
         
-        // ПРАВКА 3: Убираем fade_in для нижнего слоя (он и так там лежит).
         ft.setCustomAnimations(0, R.anim.slide_out_down);
         
         Fragment topFragment = stack.remove(stack.size() - 1);
@@ -117,8 +110,7 @@ public class AppNavigator {
         if (stack.isEmpty()) {
             showMainTab(currentTabIndex, ft);
         } else {
-            Fragment previousFragment = stack.get(stack.size() - 1);
-            ft.show(previousFragment);
+            ft.show(stack.get(stack.size() - 1));
         }
         
         ft.commit();
@@ -131,7 +123,6 @@ public class AppNavigator {
         FragmentTransaction ft = fm.beginTransaction();
 
         if (currentTabIndex != -1) {
-            // ЖЕСТКОЕ ПРАВИЛО: Время (3) и Настройки (5) всегда выезжают справа
             if (tabIndex > currentTabIndex || tabIndex == 3 || tabIndex == 5) {
                 ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left);
             } else {
