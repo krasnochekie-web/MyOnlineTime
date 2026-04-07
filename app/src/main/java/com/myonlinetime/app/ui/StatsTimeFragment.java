@@ -1,11 +1,7 @@
 package com.myonlinetime.app.ui;
 
-import android.app.usage.UsageEvents;
-import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
-import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -19,18 +15,19 @@ import android.widget.TextView;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.adapters.AppsAdapter;
+import com.myonlinetime.app.utils.UsageMath;
 import com.myonlinetime.app.utils.Utils;
+
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class StatsTimeFragment extends Fragment {
 
@@ -152,41 +149,55 @@ public class StatsTimeFragment extends Fragment {
                         
                         // ИСПОЛЬЗУЕМ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ
                         Utils.backgroundExecutor.execute(() -> {
-                            Calendar cal = Calendar.getInstance(); 
+                            // Подстраховка: если MainActivity еще не инициализировал границы
+                            if (UsageMath.todayStartMillis == 0) {
+                                Calendar cal = Calendar.getInstance();
+                                cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
+                                UsageMath.todayStartMillis = cal.getTimeInMillis();
+                                Calendar yCal = (Calendar) cal.clone();
+                                yCal.add(Calendar.DAY_OF_YEAR, -1);
+                                UsageMath.yesterdayStartMillis = yCal.getTimeInMillis();
+                            }
+
                             long endTime = System.currentTimeMillis();
-                            long startTime; int interval;
+                            Map<String, Long> exactTimes = null;
+                            Calendar cal = Calendar.getInstance(); 
                             
+                            // Запрашиваем данные через единый мозг UsageMath
                             switch (position) {
-                                case 0: cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); startTime = cal.getTimeInMillis(); interval = -1; break;
-                                case 1: cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); endTime = cal.getTimeInMillis(); cal.add(Calendar.DAY_OF_YEAR, -1); startTime = cal.getTimeInMillis(); interval = -1; break;
-                                case 2: cal.add(Calendar.DAY_OF_YEAR, -7); startTime = cal.getTimeInMillis(); interval = UsageStatsManager.INTERVAL_DAILY; break;
-                                case 3: cal.add(Calendar.MONTH, -1); startTime = cal.getTimeInMillis(); interval = UsageStatsManager.INTERVAL_WEEKLY; break;
-                                default: cal.add(Calendar.YEAR, -1); startTime = cal.getTimeInMillis(); interval = UsageStatsManager.INTERVAL_YEARLY; break;
+                                case 0: // Сегодня
+                                    exactTimes = UsageMath.todayExactCache != null ? 
+                                                 UsageMath.todayExactCache : 
+                                                 UsageMath.getFilteredExactTimes(activity, UsageMath.todayStartMillis, endTime);
+                                    break;
+                                case 1: // Вчера
+                                    exactTimes = UsageMath.yesterdayExactCache != null ? 
+                                                 UsageMath.yesterdayExactCache : 
+                                                 UsageMath.getFilteredExactTimes(activity, UsageMath.yesterdayStartMillis, UsageMath.todayStartMillis);
+                                    break;
+                                case 2: // Неделя
+                                    cal.add(Calendar.DAY_OF_YEAR, -7);
+                                    exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, cal.getTimeInMillis(), endTime);
+                                    break;
+                                case 3: // Месяц
+                                    cal.add(Calendar.MONTH, -1);
+                                    exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_WEEKLY, cal.getTimeInMillis(), endTime);
+                                    break;
+                                default: // Год
+                                    cal.add(Calendar.YEAR, -1);
+                                    exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime);
+                                    break;
                             }
                             
-                            final Map<String, Long> exactTimes = (interval == -1) ? calculateFromEvents(activity, startTime, endTime) : calculateFromStats(activity, interval, startTime, endTime);
-                            
-                            long tempTotalMillis = 0;
-                            PackageManager pm = activity.getPackageManager();
-                            Set<String> userApps = getUserApps(pm);
-                            String launcherPkg = getLauncherPackage(pm);
-                            
-                            final List<String> finalList = new ArrayList<>();
-                            for (Map.Entry<String, Long> entry : exactTimes.entrySet()) {
-                                String pkg = entry.getKey();
-                                long time = entry.getValue();
-                                boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || pkg.equals(launcherPkg);
-                                if (time > 1000 && userApps.contains(pkg) && !isSystemTrash) {
-                                    finalList.add(pkg);
-                                    tempTotalMillis += time;
-                                }
-                            }
-                            
+                            // Фильтрация мусора уже произошла внутри UsageMath, нам остается только отсортировать
+                            final List<String> finalList = new ArrayList<>(exactTimes.keySet());
                             Collections.sort(finalList, (left, right) -> Long.compare(exactTimes.get(right), exactTimes.get(left)));
-                            final long finalTotalMillis = tempTotalMillis;
+                            
+                            final long finalTotalMillis = UsageMath.sumMap(exactTimes);
+                            final Map<String, Long> finalTimesMap = exactTimes;
                             
                             new Handler(Looper.getMainLooper()).post(() -> {
-                                statsCache.put(position, new CachedStats(finalList, exactTimes, finalTotalMillis));
+                                statsCache.put(position, new CachedStats(finalList, finalTimesMap, finalTotalMillis));
                                 updateUI.run();
                             });
                         }); 
@@ -208,17 +219,18 @@ public class StatsTimeFragment extends Fragment {
             return;
         }
 
-        // ИСПОЛЬЗУЕМ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ
+        // ИСПОЛЬЗУЕМ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ И USAGE_MATH
         Utils.backgroundExecutor.execute(() -> {
             long now = System.currentTimeMillis();
+            
             Calendar calW = Calendar.getInstance(); calW.add(Calendar.DAY_OF_YEAR, -7);
-            long weekTotal = filterAndSumUserApps(context, calculateFromStats(context, UsageStatsManager.INTERVAL_DAILY, calW.getTimeInMillis(), now));
+            long weekTotal = UsageMath.sumMap(UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_DAILY, calW.getTimeInMillis(), now));
 
             Calendar calM = Calendar.getInstance(); calM.add(Calendar.MONTH, -1);
-            long monthTotal = filterAndSumUserApps(context, calculateFromStats(context, UsageStatsManager.INTERVAL_WEEKLY, calM.getTimeInMillis(), now));
+            long monthTotal = UsageMath.sumMap(UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_WEEKLY, calM.getTimeInMillis(), now));
 
             Calendar calY = Calendar.getInstance(); calY.add(Calendar.YEAR, -1);
-            long yearTotal = filterAndSumUserApps(context, calculateFromStats(context, UsageStatsManager.INTERVAL_YEARLY, calY.getTimeInMillis(), now));
+            long yearTotal = UsageMath.sumMap(UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_YEARLY, calY.getTimeInMillis(), now));
 
             cachedWeek = weekTotal;
             cachedMonth = monthTotal;
@@ -234,89 +246,5 @@ public class StatsTimeFragment extends Fragment {
         });
     }
 
-    private long filterAndSumUserApps(Context context, Map<String, Long> exactTimes) {
-        long total = 0;
-        PackageManager pm = context.getPackageManager();
-        Set<String> userApps = getUserApps(pm);
-        String launcherPkg = getLauncherPackage(pm);
-        for (Map.Entry<String, Long> entry : exactTimes.entrySet()) {
-            String pkg = entry.getKey();
-            long time = entry.getValue();
-            boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || pkg.equals(launcherPkg);
-            if (time > 1000 && userApps.contains(pkg) && !isSystemTrash) total += time;
-        }
-        return total;
-    }
-
-    private Map<String, Long> calculateFromEvents(Context context, long start, long end) {
-        Map<String, Long> results = new HashMap<>();
-        UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
-        if (usm == null) return results;
-
-        UsageEvents events = usm.queryEvents(start, end);
-        Map<String, Long> openTimes = new HashMap<>();
-        UsageEvents.Event event = new UsageEvents.Event();
-
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event);
-            String pkg = event.getPackageName();
-            if (event.getEventType() == UsageEvents.Event.ACTIVITY_RESUMED) {
-                openTimes.put(pkg, event.getTimeStamp());
-            } else if (event.getEventType() == UsageEvents.Event.ACTIVITY_PAUSED) {
-                if (openTimes.containsKey(pkg)) {
-                    long duration = event.getTimeStamp() - openTimes.get(pkg);
-                    if (duration > 0) {
-                        Long current = results.get(pkg);
-                        results.put(pkg, (current == null ? 0L : current) + duration);
-                    }
-                    openTimes.remove(pkg);
-                }
-            }
-        }
-        return results;
-    }
-
-    private Map<String, Long> calculateFromStats(Context context, int interval, long start, long end) {
-        Map<String, Long> results = new HashMap<>();
-        UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
-        if (usm == null) return results;
-
-        List<UsageStats> stats = usm.queryUsageStats(interval, start, end);
-        if (stats != null) {
-            for (UsageStats s : stats) {
-                long time = s.getTotalTimeInForeground();
-                if (time > 0) {
-                    String pkg = s.getPackageName();
-                    Long current = results.get(pkg);
-                    long currentVal = (current == null) ? 0L : current;
-
-                    if (interval == UsageStatsManager.INTERVAL_YEARLY) {
-                        results.put(pkg, Math.max(currentVal, time));
-                    } else {
-                        results.put(pkg, currentVal + time);
-                    }
-                }
-            }
-        }
-        return results;
-    }
-
-    private Set<String> getUserApps(PackageManager pm) {
-        Set<String> apps = new HashSet<>();
-        Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
-        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-        List<android.content.pm.ResolveInfo> resolvedInfos = pm.queryIntentActivities(mainIntent, 0);
-        for (android.content.pm.ResolveInfo info : resolvedInfos) apps.add(info.activityInfo.packageName);
-        return apps;
-    }
-    
-    private String getLauncherPackage(PackageManager pm) {
-        Intent homeIntent = new Intent(Intent.ACTION_MAIN);
-        homeIntent.addCategory(Intent.CATEGORY_HOME);
-        android.content.pm.ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
-        return defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
-    }
-
-    // МЕТОД onResume УДАЛЕН ПОЛНОСТЬЮ — ФОНОМ УПРАВЛЯЕТ StatsHostFragment!
-
+    // МЕТОДЫ calculateFromEvents, calculateFromStats, getUserApps, getLauncherPackage, filterAndSumUserApps УДАЛЕНЫ!
 }
