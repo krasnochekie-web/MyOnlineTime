@@ -60,6 +60,11 @@ public class AppNavigator {
         }
     }
 
+    // НОВЫЙ МЕТОД: Позволяет Профилю узнать, на какой мы сейчас вкладке
+    public int getCurrentTabIndex() {
+        return currentTabIndex;
+    }
+
     public void openSubScreen(Fragment fragment) {
         if (SystemClock.elapsedRealtime() - lastSubScreenOpenTime < 500) {
             return; 
@@ -81,11 +86,11 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
         
-        // 0 вместо fade_out блокирует баг плеера (экран не становится полупрозрачным)
+        // 0 блокирует выцветание (и баг с просвечивающим плеером)
         ft.setCustomAnimations(R.anim.slide_in_up, 0);
         
-        // УДАЛЕН ВЫЗОВ hideAll(ft)
-        // Главный экран остается лежать на месте, под саб-скрином.
+        // ВОЗВРАЩАЕМ ПРЯТКИ: Больше никакой каши из наслоившихся экранов!
+        hideAll(ft);
 
         ft.add(containerId, fragment, "SUB_" + currentTabIndex + "_" + stack.size());
         stack.add(fragment);
@@ -110,6 +115,7 @@ public class AppNavigator {
         if (stack.isEmpty()) {
             showMainTab(currentTabIndex, ft);
         } else {
+            // ВОЗВРАТ НА ПРОШЛЫЙ САБ-СКРИН: Сработает onHiddenChanged(false) и ШАПКА ОБНОВИТСЯ!
             ft.show(stack.get(stack.size() - 1));
         }
         
