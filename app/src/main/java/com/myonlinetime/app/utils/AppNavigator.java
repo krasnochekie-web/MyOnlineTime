@@ -64,9 +64,6 @@ public class AppNavigator {
         return currentTabIndex;
     }
 
-    // =========================================================
-    // ОТКРЫТИЕ: Экраны больше не исчезают!
-    // =========================================================
     public void openSubScreen(Fragment fragment) {
         if (SystemClock.elapsedRealtime() - lastSubScreenOpenTime < 500) {
             return; 
@@ -88,10 +85,11 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
         
-        ft.setCustomAnimations(R.anim.slide_in_up, 0, 0, R.anim.slide_out_down);
+        // 1. ВОЗВРАЩАЕМ ПЛАВНУЮ АНИМАЦИЮ (Элементы больше не будут "отваливаться" резко)
+        ft.setCustomAnimations(R.anim.slide_in_up, android.R.anim.fade_out, android.R.anim.fade_in, R.anim.slide_out_down);
         
-        // ЗДЕСЬ НЕТ hideAll(ft). Нижний экран остается видимым, элементы не пропадают.
-        // Он же служит "щитом", блокируя баг с просвечиванием плеера.
+        // 2. ВОЗВРАЩАЕМ ПРЯТКИ (Никакого наслоения экранов и UI каши!)
+        hideAll(ft);
 
         ft.add(containerId, fragment, "SUB_" + currentTabIndex + "_" + stack.size());
         stack.add(fragment);
@@ -99,9 +97,6 @@ public class AppNavigator {
         ft.commit();
     }
 
-    // =========================================================
-    // ЗАКРЫТИЕ: Железобетонный фикс шапки!
-    // =========================================================
     public boolean closeSubScreen() {
         List<Fragment> stack = subStacks.get(currentTabIndex);
         
@@ -110,34 +105,21 @@ public class AppNavigator {
         }
 
         FragmentTransaction ft = fm.beginTransaction();
-        ft.setCustomAnimations(0, R.anim.slide_out_down);
+        
+        // ВОЗВРАЩАЕМ ПЛАВНОЕ ПОЯВЛЕНИЕ ПРЕДЫДУЩЕГО ЭКРАНА
+        ft.setCustomAnimations(android.R.anim.fade_in, R.anim.slide_out_down);
         
         Fragment topFragment = stack.remove(stack.size() - 1);
         ft.remove(topFragment); 
         
-        Fragment revealedFragment = null;
-
         if (stack.isEmpty()) {
             showMainTab(currentTabIndex, ft);
-            revealedFragment = getMainFragment(currentTabIndex);
         } else {
-            revealedFragment = stack.get(stack.size() - 1);
-            ft.show(revealedFragment);
+            // ЭТОТ МЕТОД ft.show() ТЕПЕРЬ САМ АВТОМАТИЧЕСКИ ПОЧИНИТ ВАШУ ШАПКУ
+            ft.show(stack.get(stack.size() - 1));
         }
         
         ft.commit();
-
-        // >>> ТОТ САМЫЙ ФИКС ШАПКИ <<<
-        // Искусственно говорим нижнему экрану: "Ты снова активен, обнови шапку!"
-        if (revealedFragment != null) {
-            final Fragment finalFrag = revealedFragment;
-            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                if (finalFrag.isAdded()) {
-                    finalFrag.onHiddenChanged(false);
-                }
-            }, 50); // Микро-задержка, чтобы транзакция успела завершиться
-        }
-
         return true;
     }
 
@@ -224,18 +206,6 @@ public class AppNavigator {
     
     private void showMainTab(int index, FragmentTransaction ft) {
         showMainTab(index, ft, null);
-    }
-
-    // Вспомогательный метод для получения нужного фрагмента
-    private Fragment getMainFragment(int index) {
-        switch(index) {
-            case 0: return feedFragment;
-            case 1: return searchFragment;
-            case 3: return statsFragment;
-            case 4: return profileFragment;
-            case 5: return settingsFragment;
-            default: return null;
-        }
     }
 
     public boolean hasSubScreen() {
