@@ -188,7 +188,6 @@ public class StatsTimeFragment extends Fragment {
                                     exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime);
                                     break;
                             }
- // ... здесь заканчивается switch (position) { ... }
 
                             // 1. Создаем финальную копию
                             final Map<String, Long> finalExactTimes = exactTimes;
