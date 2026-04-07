@@ -326,8 +326,11 @@ public class ProfileFragment extends Fragment {
                 
                 // Возвращаемся на профиль - снова проверяем, чей он, и выставляем фон
                 activity.updateGlobalBackground(isMe);
+            } else {
+                // >>> ЖЕСТКОЕ ОТКЛЮЧЕНИЕ ФОНА <<<
+                // Мы переключились на Ленту или Настройки. УБИВАЕМ ФОН.
+                activity.updateGlobalBackground(false);
             }
-            // Блок ELSE удален. Профиль больше не убивает фон при скрытии!
         }
     }
 
