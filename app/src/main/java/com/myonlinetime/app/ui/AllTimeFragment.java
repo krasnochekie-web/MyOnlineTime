@@ -2,14 +2,10 @@ package com.myonlinetime.app.ui;
 
 import android.animation.ValueAnimator;
 import android.app.Dialog;
-import android.app.usage.UsageEvents;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
-import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
@@ -30,6 +26,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.adapters.AppsAdapter;
+import com.myonlinetime.app.utils.UsageMath;
 import com.myonlinetime.app.utils.Utils;
 
 import org.json.JSONObject;
@@ -39,12 +36,10 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 public class AllTimeFragment extends Fragment {
 
@@ -113,7 +108,6 @@ public class AllTimeFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        // Если пользователь перелистнул на эту вкладку, а данные уже были посчитаны в фоне:
         if (isDataReady && !isAnimated) {
             runNumbersAnimation();
         }
@@ -149,117 +143,102 @@ public class AllTimeFragment extends Fragment {
         subValTxt.setText(getString(R.string.format_total_hours_mins, 0, 0));
         yesterdayValTxt.setText(getString(R.string.format_plus_hours_mins, 0, 0));
 
-        // ИСПОЛЬЗУЕМ НАШ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ (Без утечек и с низким приоритетом)
         Utils.backgroundExecutor.execute(() -> {
             MainActivity activity = (MainActivity) getActivity();
             if (activity == null || !isAdded()) return;
 
             long startDate = prefs.getLong(KEY_START_DATE, 0);
             long lastUpdate = prefs.getLong(KEY_LAST_UPDATE, 0);
-            long totalMillis = prefs.getLong(KEY_TOTAL_TIME, 0);
-            Map<String, Long> appsMap = loadAppsFromCache();
+            long historicalTotalMillis = prefs.getLong(KEY_TOTAL_TIME, 0);
+            Map<String, Long> historicalAppsMap = loadAppsFromCache();
 
-            Calendar todayStart = Calendar.getInstance();
-            todayStart.set(Calendar.HOUR_OF_DAY, 0);
-            todayStart.set(Calendar.MINUTE, 0);
-            todayStart.set(Calendar.SECOND, 0);
-            todayStart.set(Calendar.MILLISECOND, 0);
-            long todayStartMillis = todayStart.getTimeInMillis();
+            // Подстраховка: если фрагмент загрузился быстрее, чем MainActivity успел инициализировать UsageMath
+            if (UsageMath.todayStartMillis == 0) {
+                Calendar cal = Calendar.getInstance();
+                cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
+                UsageMath.todayStartMillis = cal.getTimeInMillis();
+                Calendar yCal = (Calendar) cal.clone();
+                yCal.add(Calendar.DAY_OF_YEAR, -1);
+                UsageMath.yesterdayStartMillis = yCal.getTimeInMillis();
+            }
 
-            Calendar yesterdayStart = (Calendar) todayStart.clone();
-            yesterdayStart.add(Calendar.DAY_OF_YEAR, -1);
-            long yesterdayStartMillis = yesterdayStart.getTimeInMillis();
+            long todayStartMillis = UsageMath.todayStartMillis;
 
+            // 1. ОБНОВЛЕНИЕ ИСТОРИЧЕСКОГО КЭША (До начала сегодняшнего дня)
             if (startDate == 0) {
+                // Первый запуск: Грузим агрегированную историю за год через UsageMath
                 Calendar oneYearAgo = Calendar.getInstance();
                 oneYearAgo.add(Calendar.YEAR, -1);
                 
+                historicalAppsMap = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, oneYearAgo.getTimeInMillis(), todayStartMillis);
+                historicalTotalMillis = UsageMath.sumMap(historicalAppsMap);
+
+                // Легкий запрос просто чтобы найти самую раннюю точку отсчета
                 UsageStatsManager usm = (UsageStatsManager) activity.getSystemService(Context.USAGE_STATS_SERVICE);
                 List<UsageStats> yearlyStats = usm.queryUsageStats(UsageStatsManager.INTERVAL_YEARLY, oneYearAgo.getTimeInMillis(), System.currentTimeMillis());
-                
                 long earliestStart = System.currentTimeMillis();
-                appsMap.clear();
-                totalMillis = 0;
-
-                Set<String> userApps = getUserApps(activity.getPackageManager());
-                String launcherPkg = getLauncherPackage(activity.getPackageManager());
-
                 if (yearlyStats != null) {
                     for (UsageStats stat : yearlyStats) {
                         if (stat.getFirstTimeStamp() > 0 && stat.getFirstTimeStamp() < earliestStart) {
                             earliestStart = stat.getFirstTimeStamp();
                         }
-                        
-                        String pkg = stat.getPackageName();
-                        long time = stat.getTotalTimeInForeground();
-                        boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || 
-                                                pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || 
-                                                pkg.equals(launcherPkg);
-                                                
-                        if (time > 1000 && userApps.contains(pkg) && !isSystemTrash) {
-                            Long current = appsMap.get(pkg);
-                            appsMap.put(pkg, Math.max((current == null ? 0L : current), time));
-                        }
                     }
                 }
-                
-                for (long t : appsMap.values()) totalMillis += t;
                 startDate = earliestStart;
                 lastUpdate = todayStartMillis;
-                saveToCache(startDate, lastUpdate, totalMillis, appsMap);
-            } 
-            else if (lastUpdate < todayStartMillis) {
-                Map<String, Long> gapTimes = calculateExactTimes(activity, lastUpdate, todayStartMillis);
+                saveToCache(startDate, lastUpdate, historicalTotalMillis, historicalAppsMap);
                 
-                Set<String> userApps = getUserApps(activity.getPackageManager());
-                String launcherPkg = getLauncherPackage(activity.getPackageManager());
-
+            } else if (lastUpdate < todayStartMillis) {
+                // Пользователь не открывал приложение пару дней. Догружаем пропущенные дни.
+                Map<String, Long> gapTimes = UsageMath.getFilteredExactTimes(activity, lastUpdate, todayStartMillis);
                 for (Map.Entry<String, Long> entry : gapTimes.entrySet()) {
                     String pkg = entry.getKey();
                     long time = entry.getValue();
-                    boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || 
-                                            pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || 
-                                            pkg.equals(launcherPkg);
-                                            
-                    if (time > 1000 && userApps.contains(pkg) && !isSystemTrash) {
-                        Long current = appsMap.get(pkg);
-                        appsMap.put(pkg, (current == null ? 0L : current) + time);
-                        totalMillis += time;
-                    }
+                    Long current = historicalAppsMap.get(pkg);
+                    historicalAppsMap.put(pkg, (current == null ? 0L : current) + time);
                 }
+                historicalTotalMillis = UsageMath.sumMap(historicalAppsMap);
                 lastUpdate = todayStartMillis;
-                saveToCache(startDate, lastUpdate, totalMillis, appsMap);
+                saveToCache(startDate, lastUpdate, historicalTotalMillis, historicalAppsMap);
             }
 
-            Map<String, Long> yesterdayTimes = calculateExactTimes(activity, yesterdayStartMillis, todayStartMillis);
-            long yesterdayTotal = 0;
-            Set<String> uApps = getUserApps(activity.getPackageManager());
-            String lPkg = getLauncherPackage(activity.getPackageManager());
-            for (Map.Entry<String, Long> entry : yesterdayTimes.entrySet()) {
-                if (entry.getValue() > 1000 && uApps.contains(entry.getKey()) && !entry.getKey().equals(lPkg) && !entry.getKey().equals("com.android.systemui")) {
-                    yesterdayTotal += entry.getValue();
-                }
+            // 2. БЕРЕМ ГОТОВЫЕ ДАННЫЕ ЗА СЕГОДНЯ И ВЧЕРА (За 0 миллисекунд из кэша UsageMath)
+            Map<String, Long> todayTimes = UsageMath.todayExactCache != null ? 
+                                           UsageMath.todayExactCache : 
+                                           UsageMath.getFilteredExactTimes(activity, todayStartMillis, System.currentTimeMillis());
+
+            Map<String, Long> yesterdayTimes = UsageMath.yesterdayExactCache != null ? 
+                                               UsageMath.yesterdayExactCache : 
+                                               UsageMath.getFilteredExactTimes(activity, UsageMath.yesterdayStartMillis, todayStartMillis);
+            
+            long yesterdayTotal = UsageMath.sumMap(yesterdayTimes);
+
+            // 3. ФИКС БАГА: Сливаем исторический кэш с данными ЗА СЕГОДНЯ для отображения в UI
+            Map<String, Long> finalAppsMap = new HashMap<>(historicalAppsMap);
+            for (Map.Entry<String, Long> entry : todayTimes.entrySet()) {
+                String pkg = entry.getKey();
+                Long current = finalAppsMap.get(pkg);
+                finalAppsMap.put(pkg, (current == null ? 0L : current) + entry.getValue());
             }
 
-            List<String> sortedApps = new ArrayList<>(appsMap.keySet());
-            Collections.sort(sortedApps, (left, right) -> Long.compare(appsMap.get(right), appsMap.get(left)));
-
-            final long finalTotalMillis = totalMillis;
-            final long finalYesterdayTotal = yesterdayTotal;
+            long finalTotalMillis = UsageMath.sumMap(finalAppsMap);
             final long finalStartDate = startDate;
+            final long finalYesterdayTotal = yesterdayTotal;
 
+            List<String> sortedApps = new ArrayList<>(finalAppsMap.keySet());
+            Collections.sort(sortedApps, (left, right) -> Long.compare(finalAppsMap.get(right), finalAppsMap.get(left)));
+
+            // 4. ВОЗВРАЩАЕМСЯ В ГЛАВНЫЙ ПОТОК ДЛЯ ОТРИСОВКИ
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
                 
-                adapter.updateData(sortedApps, appsMap);
+                adapter.updateData(sortedApps, finalAppsMap);
                 
-                // Сохраняем готовые цифры
                 cachedTotalMillis = finalTotalMillis;
                 cachedYesterdayTotal = finalYesterdayTotal;
                 cachedStartDate = finalStartDate;
                 isDataReady = true;
 
-                // Если загрузка закончилась и мы прямо сейчас смотрим на экран - запускаем анимацию
                 if (isResumed() && !isAnimated) {
                     runNumbersAnimation();
                 }
@@ -268,10 +247,10 @@ public class AllTimeFragment extends Fragment {
     }
 
     // =========================================================================
-    // ЛОГИКА САМОЙ АНИМАЦИИ (Вынесена в отдельный метод)
+    // ЛОГИКА САМОЙ АНИМАЦИИ
     // =========================================================================
     private void runNumbersAnimation() {
-        isAnimated = true; // Запоминаем, что мы уже проиграли анимацию
+        isAnimated = true; 
 
         SimpleDateFormat sdf = new SimpleDateFormat("d MMMM yyyy", Locale.getDefault());
         String dateStr = sdf.format(cachedStartDate);
@@ -327,50 +306,6 @@ public class AllTimeFragment extends Fragment {
                 .putString(KEY_APPS_JSON, json.toString())
                 .apply();
         } catch (Exception e) { e.printStackTrace(); }
-    }
-
-    private Map<String, Long> calculateExactTimes(Context context, long start, long end) {
-        Map<String, Long> results = new HashMap<>();
-        UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
-        if (usm == null) return results;
-
-        UsageEvents events = usm.queryEvents(start, end);
-        Map<String, Long> openTimes = new HashMap<>();
-        UsageEvents.Event event = new UsageEvents.Event();
-
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event);
-            String pkg = event.getPackageName();
-            if (event.getEventType() == UsageEvents.Event.ACTIVITY_RESUMED) {
-                openTimes.put(pkg, event.getTimeStamp());
-            } else if (event.getEventType() == UsageEvents.Event.ACTIVITY_PAUSED) {
-                if (openTimes.containsKey(pkg)) {
-                    long duration = event.getTimeStamp() - openTimes.get(pkg);
-                    if (duration > 0) {
-                        Long current = results.get(pkg);
-                        results.put(pkg, (current == null ? 0L : current) + duration);
-                    }
-                    openTimes.remove(pkg);
-                }
-            }
-        }
-        return results;
-    }
-
-    private Set<String> getUserApps(PackageManager pm) {
-        Set<String> apps = new HashSet<>();
-        Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
-        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-        List<ResolveInfo> resolvedInfos = pm.queryIntentActivities(mainIntent, 0);
-        for (ResolveInfo info : resolvedInfos) { apps.add(info.activityInfo.packageName); }
-        return apps;
-    }
-    
-    private String getLauncherPackage(PackageManager pm) {
-        Intent homeIntent = new Intent(Intent.ACTION_MAIN);
-        homeIntent.addCategory(Intent.CATEGORY_HOME);
-        ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
-        return defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
     }
 
     private class HeaderWrapperAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
