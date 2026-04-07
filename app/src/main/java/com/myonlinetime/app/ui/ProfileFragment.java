@@ -51,7 +51,6 @@ public class ProfileFragment extends Fragment {
     private SharedPreferences prefs;
     private final Gson gson = new Gson();
     
-    // ВАЖНО: Выносим isMe в глобальную переменную класса, чтобы методы жизненного цикла имели к ней доступ
     private boolean isMe = false;
 
     public static ProfileFragment newInstance(String targetUid) {
@@ -79,7 +78,6 @@ public class ProfileFragment extends Fragment {
         if (account == null) return view;
 
         final String myUid = account.getId();
-        // Инициализируем глобальную переменную
         isMe = targetUid.equals(myUid);
         final String finalTargetUid = targetUid;
 
@@ -189,7 +187,6 @@ public class ProfileFragment extends Fragment {
                             if (user.photo != null && user.photo.length() > 10) {
                                 File localAvatar = new File(activity.getFilesDir(), "avatar_" + myUid + ".png");
                                 if (isMe && localAvatar.exists() && user.photo.startsWith("http")) {
-                                    // Оставляем локальную
                                 } else {
                                     if (user.photo.startsWith("http")) {
                                         Glide.with(activity).load(user.photo).circleCrop().into(avatarView);
@@ -303,14 +300,10 @@ public class ProfileFragment extends Fragment {
         return view;
     }
 
-    // ========================================================
-    // ИСПРАВЛЕННЫЕ МЕТОДЫ: Свой/Чужой и Редактирование
-    // ========================================================
     @Override
     public void onResume() {
         super.onResume();
         if (!isHidden() && getActivity() instanceof MainActivity) {
-            // Если это МОЙ профиль - включаем кастомный фон. Если ЧУЖОЙ - выключаем.
             ((MainActivity) getActivity()).updateGlobalBackground(isMe);
         }
     }
@@ -323,13 +316,13 @@ public class ProfileFragment extends Fragment {
             if (!hidden) {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.headerManager.resetHeader();
-                
-                // Возвращаемся на профиль - снова проверяем, чей он, и выставляем фон
                 activity.updateGlobalBackground(isMe);
             } else {
-                // >>> ЖЕСТКОЕ ОТКЛЮЧЕНИЕ ФОНА <<<
-                // Мы переключились на Ленту или Настройки. УБИВАЕМ ФОН.
-                activity.updateGlobalBackground(false);
+                // ИДЕАЛЬНЫЙ ФИКС: Если мы ушли из профиля куда угодно, кроме саб-скрина, убиваем фон!
+                // (4 - это индекс вкладки профиля)
+                if (activity.navigator != null && activity.navigator.getCurrentTabIndex() != 4) {
+                    activity.updateGlobalBackground(false);
+                }
             }
         }
     }
