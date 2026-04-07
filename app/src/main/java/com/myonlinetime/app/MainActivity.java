@@ -92,6 +92,11 @@ public class MainActivity extends AppCompatActivity {
 
         super.onCreate(savedInstanceState);
         
+        // =========================================================================
+        // ЗАПУСК ЕДИНОГО ДВИЖКА МАТЕМАТИКИ И КЭША (Фоновая предзагрузка)
+        // =========================================================================
+        com.myonlinetime.app.utils.UsageMath.preloadCoreStats(this);
+        
         Window window = getWindow();
         window.getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE 
@@ -411,7 +416,7 @@ public class MainActivity extends AppCompatActivity {
         handleNotificationIntent(intent);
     }
     
-private void handleNotificationIntent(Intent intent) {
+    private void handleNotificationIntent(Intent intent) {
         if (intent != null && intent.hasExtra("open_tab")) {
             String tab = intent.getStringExtra("open_tab");
             if ("time".equals(tab)) {
