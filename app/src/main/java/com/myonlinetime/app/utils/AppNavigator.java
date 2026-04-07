@@ -84,8 +84,8 @@ public class AppNavigator {
         // 0 вместо fade_out блокирует баг плеера (экран не становится полупрозрачным)
         ft.setCustomAnimations(R.anim.slide_in_up, 0);
         
-        // ВОЗВРАЩАЕМ ПРЯТКИ! Теперь нижний UI не будет торчать из-под нового экрана.
-        hideAll(ft);
+        // >>> УДАЛЕНО hideAll(ft); <<<
+        // Теперь нижний UI не пропадает, а остается лежать под новым экраном
 
         ft.add(containerId, fragment, "SUB_" + currentTabIndex + "_" + stack.size());
         stack.add(fragment);
