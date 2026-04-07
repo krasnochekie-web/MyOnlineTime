@@ -188,21 +188,27 @@ public class StatsTimeFragment extends Fragment {
                                     exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime);
                                     break;
                             }
-                            
-                            // Фильтрация мусора уже произошла внутри UsageMath, нам остается только отсортировать
+ // ... здесь заканчивается switch (position) { ... }
+
+                            // 1. Создаем финальную копию
                             final Map<String, Long> finalExactTimes = exactTimes;
-                            final List<String> finalList = new ArrayList<>(exactTimes.keySet());
-                            Collections.sort(finalList, (left, right) -> Long.compare(exactTimes.get(right), exactTimes.get(left)));
                             
-                            final long finalTotalMillis = UsageMath.sumMap(exactTimes);
-                            final Map<String, Long> finalTimesMap = exactTimes;
+                            // 2. Берем ключи именно из финальной копии
+                            final List<String> finalList = new ArrayList<>(finalExactTimes.keySet());
+                            
+                            // 3. ВАЖНО: Сортируем, используя finalExactTimes!
+                            Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
+                            
+                            // 4. Считаем сумму тоже из финальной копии
+                            final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
                             
                             new Handler(Looper.getMainLooper()).post(() -> {
-                                statsCache.put(position, new CachedStats(finalList, finalTimesMap, finalTotalMillis));
+                                // 5. Кладем в кэш
+                                statsCache.put(position, new CachedStats(finalList, finalExactTimes, finalTotalMillis));
                                 updateUI.run();
                             });
                         }); 
-                    }, 300);
+                    }, 300);                           
                 }
                 @Override public void onNothingSelected(AdapterView<?> parent) {}
             }); 
