@@ -50,6 +50,9 @@ public class ProfileFragment extends Fragment {
     private Map<String, String> localDescriptions = new HashMap<>();
     private SharedPreferences prefs;
     private final Gson gson = new Gson();
+    
+    // ВАЖНО: Выносим isMe в глобальную переменную класса, чтобы методы жизненного цикла имели к ней доступ
+    private boolean isMe = false;
 
     public static ProfileFragment newInstance(String targetUid) {
         ProfileFragment fragment = new ProfileFragment();
@@ -76,7 +79,8 @@ public class ProfileFragment extends Fragment {
         if (account == null) return view;
 
         final String myUid = account.getId();
-        final boolean isMe = targetUid.equals(myUid);
+        // Инициализируем глобальную переменную
+        isMe = targetUid.equals(myUid);
         final String finalTargetUid = targetUid;
 
         prefs = activity.getSharedPreferences("MyOnlineTime_Cache_" + myUid, Context.MODE_PRIVATE);
@@ -190,7 +194,6 @@ public class ProfileFragment extends Fragment {
                                     if (user.photo.startsWith("http")) {
                                         Glide.with(activity).load(user.photo).circleCrop().into(avatarView);
                                     } else {
-                                        // ИСПОЛЬЗУЕМ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ ДЛЯ ДЕКОДИРОВАНИЯ
                                         Utils.backgroundExecutor.execute(() -> {
                                             try {
                                                 byte[] imageByteArray = android.util.Base64.decode(user.photo, android.util.Base64.DEFAULT);
@@ -301,17 +304,16 @@ public class ProfileFragment extends Fragment {
     }
 
     // ========================================================
-    // ИСПРАВЛЕННЫЙ МЕТОД onResume
+    // ИСПРАВЛЕННЫЕ МЕТОДЫ: Свой/Чужой и Редактирование
     // ========================================================
     @Override
     public void onResume() {
         super.onResume();
-        // ДОБАВЛЕНО: Проверка !isHidden()
         if (!isHidden() && getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(true);
+            // Если это МОЙ профиль - включаем кастомный фон. Если ЧУЖОЙ - выключаем.
+            ((MainActivity) getActivity()).updateGlobalBackground(isMe);
         }
     }
-    // ========================================================
 
     @Override
     public void onHiddenChanged(boolean hidden) {
@@ -321,13 +323,15 @@ public class ProfileFragment extends Fragment {
             if (!hidden) {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.headerManager.resetHeader();
-                activity.updateGlobalBackground(true);
+                
+                // Возвращаемся на профиль - снова проверяем, чей он, и выставляем фон
+                activity.updateGlobalBackground(isMe);
             }
+            // Блок ELSE удален. Профиль больше не убивает фон при скрытии!
         }
     }
 
     private void loadLocalCacheAsync(Runnable onLoaded) {
-        // ИСПОЛЬЗУЕМ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ ДЛЯ ЗАГРУЗКИ КЭША
         Utils.backgroundExecutor.execute(() -> {
             Set<String> hidden = new HashSet<>(prefs.getStringSet("hidden_apps", new HashSet<>()));
             String descJson = prefs.getString("app_descriptions", "{}");
