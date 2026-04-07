@@ -190,6 +190,7 @@ public class StatsTimeFragment extends Fragment {
                             }
                             
                             // Фильтрация мусора уже произошла внутри UsageMath, нам остается только отсортировать
+                            final Map<String, Long> finalExactTimes = exactTimes;
                             final List<String> finalList = new ArrayList<>(exactTimes.keySet());
                             Collections.sort(finalList, (left, right) -> Long.compare(exactTimes.get(right), exactTimes.get(left)));
                             
