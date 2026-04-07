@@ -1,12 +1,7 @@
 package com.myonlinetime.app.ui;
 
 import android.app.Dialog;
-import android.app.usage.UsageEvents;
-import android.app.usage.UsageStatsManager;
 import android.content.Context;
-import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
@@ -26,16 +21,14 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.adapters.AppsAdapter;
+import com.myonlinetime.app.utils.UsageMath;
 import com.myonlinetime.app.utils.Utils;
 
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class ChartFragment extends Fragment {
 
@@ -163,10 +156,6 @@ public class ChartFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (activity == null || !isAdded()) return;
 
-            PackageManager pm = activity.getPackageManager();
-            Set<String> userApps = getUserApps(pm);
-            String launcherPkg = getLauncherPackage(pm);
-
             String[] daysArray = getResources().getStringArray(R.array.days_short);
             String[] monthsArray = getResources().getStringArray(R.array.months_custom);
 
@@ -189,28 +178,28 @@ public class ChartFragment extends Fragment {
                 String topFormatted = getString(R.string.format_date_top, dayShort, dayNum, monthStr);
                 String middleFormatted = getString(R.string.format_date_middle, dayShort, dayNum, monthStr);
 
-                Calendar startCal = (Calendar) cal.clone();
-                startCal.set(Calendar.HOUR_OF_DAY, 0); startCal.set(Calendar.MINUTE, 0); startCal.set(Calendar.SECOND, 0);
-                Calendar endCal = (Calendar) cal.clone();
-                endCal.set(Calendar.HOUR_OF_DAY, 23); endCal.set(Calendar.MINUTE, 59); endCal.set(Calendar.SECOND, 59);
+                Map<String, Long> times;
 
-                Map<String, Long> times = calculateFromEventsDay(activity, startCal.getTimeInMillis(), endCal.getTimeInMillis());
-                
-                long dailyTotal = 0;
-                List<String> apps = new ArrayList<>();
-                for (Map.Entry<String, Long> entry : times.entrySet()) {
-                    String pkg = entry.getKey();
-                    long time = entry.getValue();
+                // Используем мгновенный кэш для Сегодня и Вчера, если он доступен
+                if (i == 6 && UsageMath.todayExactCache != null) {
+                    times = UsageMath.todayExactCache;
+                } else if (i == 5 && UsageMath.yesterdayExactCache != null) {
+                    times = UsageMath.yesterdayExactCache;
+                } else {
+                    // Считаем вручную через ядро UsageMath для старых дней
+                    Calendar startCal = (Calendar) cal.clone();
+                    startCal.set(Calendar.HOUR_OF_DAY, 0); startCal.set(Calendar.MINUTE, 0); startCal.set(Calendar.SECOND, 0); startCal.set(Calendar.MILLISECOND, 0);
                     
-                    boolean isSystemTrash = pkg.equals("android") || pkg.equals("com.android.systemui") || 
-                                            pkg.equals("com.google.android.gms") || pkg.equals("com.android.settings") || 
-                                            pkg.equals(launcherPkg);
-                                            
-                    if (time > 1000 && userApps.contains(pkg) && !isSystemTrash) { 
-                        apps.add(pkg);
-                        dailyTotal += time;
-                    }
+                    Calendar endCal = (Calendar) cal.clone();
+                    endCal.set(Calendar.HOUR_OF_DAY, 23); endCal.set(Calendar.MINUTE, 59); endCal.set(Calendar.SECOND, 59); endCal.set(Calendar.MILLISECOND, 999);
+                    
+                    times = UsageMath.getFilteredExactTimes(activity, startCal.getTimeInMillis(), endCal.getTimeInMillis());
                 }
+                
+                long dailyTotal = UsageMath.sumMap(times);
+                
+                // Фильтр внутри UsageMath уже отбросил мусор. Просто сортируем результат.
+                List<String> apps = new ArrayList<>(times.keySet());
                 Collections.sort(apps, (left, right) -> Long.compare(times.get(right), times.get(left)));
 
                 DayData dayData = new DayData();
@@ -249,49 +238,5 @@ public class ChartFragment extends Fragment {
         isAnimated = true; // Блокируем повторную анимацию при свайпе туда-сюда
         barChart.setData(cachedBarMillis, cachedDayLabels);
         selectDay(6); // Выбираем сегодняшний день, что заполняет тексты и список приложений
-    }
-
-    private Map<String, Long> calculateFromEventsDay(Context context, long start, long end) {
-        Map<String, Long> results = new HashMap<>();
-        UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
-        if (usm == null) return results;
-
-        UsageEvents events = usm.queryEvents(start, end);
-        Map<String, Long> openTimes = new HashMap<>();
-        UsageEvents.Event event = new UsageEvents.Event();
-
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event);
-            String pkg = event.getPackageName();
-            if (event.getEventType() == UsageEvents.Event.ACTIVITY_RESUMED) {
-                openTimes.put(pkg, event.getTimeStamp());
-            } else if (event.getEventType() == UsageEvents.Event.ACTIVITY_PAUSED) {
-                if (openTimes.containsKey(pkg)) {
-                    long duration = event.getTimeStamp() - openTimes.get(pkg);
-                    if (duration > 0) {
-                        Long current = results.get(pkg);
-                        results.put(pkg, (current == null ? 0L : current) + duration);
-                    }
-                    openTimes.remove(pkg);
-                }
-            }
-        }
-        return results;
-    }
-
-    private Set<String> getUserApps(PackageManager pm) {
-        Set<String> apps = new HashSet<>();
-        Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
-        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-        List<ResolveInfo> resolvedInfos = pm.queryIntentActivities(mainIntent, 0);
-        for (ResolveInfo info : resolvedInfos) { apps.add(info.activityInfo.packageName); }
-        return apps;
-    }
-    
-    private String getLauncherPackage(PackageManager pm) {
-        Intent homeIntent = new Intent(Intent.ACTION_MAIN);
-        homeIntent.addCategory(Intent.CATEGORY_HOME);
-        ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
-        return defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
     }
 }
