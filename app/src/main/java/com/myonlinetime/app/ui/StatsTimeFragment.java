@@ -8,10 +8,14 @@ import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Spinner;
 import android.widget.TextView;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -146,16 +150,14 @@ public class StatsTimeFragment extends Fragment {
 
                     if (statsCache.containsKey(position)) {
                         updateUI.run();
-                        return; // Загружено из статического кэша мгновенно
+                        return; 
                     }
 
                     new Handler(Looper.getMainLooper()).postDelayed(() -> {
                         if (!isAdded()) return;
                         totalTimeText.setText(activity.getString(R.string.loading));
                         
-                        // ИСПОЛЬЗУЕМ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ
                         Utils.backgroundExecutor.execute(() -> {
-                            // Подстраховка: если MainActivity еще не инициализировал границы
                             if (UsageMath.todayStartMillis == 0) {
                                 Calendar cal = Calendar.getInstance();
                                 cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
@@ -169,46 +171,38 @@ public class StatsTimeFragment extends Fragment {
                             Map<String, Long> exactTimes = null;
                             Calendar cal = Calendar.getInstance(); 
                             
-                            // Запрашиваем данные через единый мозг UsageMath
                             switch (position) {
-                                case 0: // Сегодня
+                                case 0: 
                                     exactTimes = UsageMath.todayExactCache != null ? 
                                                  UsageMath.todayExactCache : 
                                                  UsageMath.getFilteredExactTimes(activity, UsageMath.todayStartMillis, endTime);
                                     break;
-                                case 1: // Вчера
+                                case 1: 
                                     exactTimes = UsageMath.yesterdayExactCache != null ? 
                                                  UsageMath.yesterdayExactCache : 
                                                  UsageMath.getFilteredExactTimes(activity, UsageMath.yesterdayStartMillis, UsageMath.todayStartMillis);
                                     break;
-                                case 2: // Неделя
+                                case 2: 
                                     cal.add(Calendar.DAY_OF_YEAR, -7);
                                     exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, cal.getTimeInMillis(), endTime);
                                     break;
-                                case 3: // Месяц
+                                case 3: 
                                     cal.add(Calendar.MONTH, -1);
                                     exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_WEEKLY, cal.getTimeInMillis(), endTime);
                                     break;
-                                default: // Год
+                                default: 
                                     cal.add(Calendar.YEAR, -1);
                                     exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime);
                                     break;
                             }
 
-                            // 1. Создаем финальную копию
                             final Map<String, Long> finalExactTimes = exactTimes;
-                            
-                            // 2. Берем ключи именно из финальной копии
                             final List<String> finalList = new ArrayList<>(finalExactTimes.keySet());
                             
-                            // 3. ВАЖНО: Сортируем, используя finalExactTimes!
                             Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
-                            
-                            // 4. Считаем сумму тоже из финальной копии
                             final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
                             
                             new Handler(Looper.getMainLooper()).post(() -> {
-                                // 5. Кладем в кэш
                                 statsCache.put(position, new CachedStats(finalList, finalExactTimes, finalTotalMillis));
                                 updateUI.run();
                             });
@@ -223,7 +217,6 @@ public class StatsTimeFragment extends Fragment {
     }
 
     private void loadBottomCardsData(Context context, TextView txtWeek, TextView txtMonth, TextView txtYear) {
-        // КЭШ НИЖНИХ КАРТОЧЕК: Если данные уже есть, вставляем их мгновенно
         if (cachedWeek != -1) {
             txtWeek.setText(Utils.formatTime(context, cachedWeek));
             txtMonth.setText(Utils.formatTime(context, cachedMonth));
@@ -231,7 +224,6 @@ public class StatsTimeFragment extends Fragment {
             return;
         }
 
-        // ИСПОЛЬЗУЕМ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ И USAGE_MATH
         Utils.backgroundExecutor.execute(() -> {
             long now = System.currentTimeMillis();
             
@@ -258,23 +250,41 @@ public class StatsTimeFragment extends Fragment {
         });
     }
 
-    // === АППАРАТНОЕ УСКОРЕНИЕ ДЛЯ ПЛАВНОСТИ АНИМАЦИИ (Уровень 2) ===
+    // === НАСТОЯЩЕЕ АППАРАТНОЕ УСКОРЕНИЕ ДЛЯ ПЛАВНОСТИ АНИМАЦИИ ===
+    // Перехватываем саму транзакцию анимации, а не жизненный цикл
+    @Nullable
     @Override
-    public void onPause() {
-        super.onPause();
-        if (getView() != null) {
-            getView().setLayerType(View.LAYER_TYPE_HARDWARE, null);
+    public Animation onCreateAnimation(int transit, boolean enter, int nextAnim) {
+        if (nextAnim == 0) {
+            return super.onCreateAnimation(transit, enter, nextAnim);
         }
-    }
 
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (getView() != null) {
-            getView().setLayerType(View.LAYER_TYPE_NONE, null);
+        try {
+            Animation anim = AnimationUtils.loadAnimation(requireContext(), nextAnim);
+            anim.setAnimationListener(new Animation.AnimationListener() {
+                @Override
+                public void onAnimationStart(Animation animation) {
+                    // Замораживаем весь UI фрагмента в одну картинку (GPU счастлив)
+                    if (getView() != null) {
+                        getView().setLayerType(View.LAYER_TYPE_HARDWARE, null);
+                    }
+                }
+
+                @Override
+                public void onAnimationEnd(Animation animation) {
+                    // Размораживаем UI, чтобы можно было снова скроллить и кликать
+                    if (getView() != null) {
+                        getView().setLayerType(View.LAYER_TYPE_NONE, null);
+                    }
+                }
+
+                @Override
+                public void onAnimationRepeat(Animation animation) {}
+            });
+            return anim;
+        } catch (Exception e) {
+            return super.onCreateAnimation(transit, enter, nextAnim);
         }
     }
     // ===============================================================
-
-    // МЕТОДЫ calculateFromEvents, calculateFromStats, getUserApps, getLauncherPackage, filterAndSumUserApps УДАЛЕНЫ!
 }
