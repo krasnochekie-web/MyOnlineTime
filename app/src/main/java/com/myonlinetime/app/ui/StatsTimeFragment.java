@@ -61,11 +61,9 @@ public class StatsTimeFragment extends Fragment {
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         recyclerView.setItemViewCacheSize(25);
         
-        // --- 1. НАДУВАЕМ ШАПКУ И ПОДВАЛ ---
         final View headerView = inflater.inflate(R.layout.layout_time_header, recyclerView, false);
         final View footerView = inflater.inflate(R.layout.layout_time_footer, recyclerView, false);
         
-        // --- 2. ИЩЕМ ЭЛЕМЕНТЫ ВНУТРИ ШАПКИ И ПОДВАЛА ---
         final Spinner spinner = headerView.findViewById(R.id.spinner_period);
         final TextView totalTimeText = headerView.findViewById(R.id.text_total_time_sum);
         
@@ -77,7 +75,6 @@ public class StatsTimeFragment extends Fragment {
         final TextView textMonth = footerView.findViewById(R.id.text_time_month);
         final TextView textYear = footerView.findViewById(R.id.text_time_year);
 
-        // --- 3. ОБОРАЧИВАЕМ ИХ В МИНИ-АДАПТЕРЫ ---
         RecyclerView.Adapter<?> headerAdapter = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) { return new RecyclerView.ViewHolder(headerView) {}; }
             @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {}
@@ -90,12 +87,10 @@ public class StatsTimeFragment extends Fragment {
             @Override public int getItemCount() { return 1; }
         };
 
-        // --- 4. СКЛЕИВАЕМ В ОДИН СУПЕР-СПИСОК ---
         final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, true);
         ConcatAdapter concatAdapter = new ConcatAdapter(headerAdapter, adapter, footerAdapter);
         recyclerView.setAdapter(concatAdapter);
 
-        // --- ВАША ЛОГИКА ---
         btnShowMore.setOnClickListener(v -> {
             if (adapter.isFullyExpanded()) {
                 adapter.collapse();
@@ -105,20 +100,24 @@ public class StatsTimeFragment extends Fragment {
                 boolean reachedEnd = adapter.loadMoreChunk();
                 if (reachedEnd) {
                     btnShowMore.setText(R.string.show_less);
+                    listFooterCard.setVisibility(View.VISIBLE);
+                } else {
+                    // ИСПРАВЛЕНО: Скрываем всю карточку, а не только текст, чтобы она не давала пустые отступы
+                    listFooterCard.setVisibility(View.GONE);
                 }
             }
         });
 
-        // Слушатель скролла переехал с NestedScrollView на сам RecyclerView
         recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
                 super.onScrolled(rv, dx, dy);
                 if (adapter.hasStartedExpanding() && !adapter.isFullyExpanded()) {
-                    if (!rv.canScrollVertically(1)) { // Если доскроллили до низа
+                    if (!rv.canScrollVertically(1)) { 
                         boolean reachedEnd = adapter.loadMoreChunk();
                         if (reachedEnd) {
                             btnShowMore.setText(R.string.show_less);
+                            listFooterCard.setVisibility(View.VISIBLE);
                         }
                     }
                 }
@@ -150,9 +149,11 @@ public class StatsTimeFragment extends Fragment {
                         adapter.collapse();
                         btnShowMore.setText(R.string.show_more);
                         
-                        // Скрываем или показываем нижнюю часть карточки (Lego-низ)
-                        if (cached.list.size() > 5) {
+                        // ИСПРАВЛЕНО: Вернули лимит на 3 элемента для проверки видимости подвала
+                        if (cached.list.size() > 3) {
                             listFooterCard.setVisibility(View.VISIBLE);
+                            btnShowMore.setVisibility(View.VISIBLE);
+                            dividerShowMore.setVisibility(View.VISIBLE);
                         } else {
                             listFooterCard.setVisibility(View.GONE);
                         }
