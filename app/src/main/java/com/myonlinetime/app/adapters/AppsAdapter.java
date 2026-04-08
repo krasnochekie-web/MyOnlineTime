@@ -72,7 +72,6 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         return hasStartedExpanding;
     }
 
-    // ИЗМЕНЕНИЕ: Метод теперь возвращает boolean (достигли ли мы конца списка)
     public boolean loadMoreChunk() {
         if (isFullyExpanded()) return true;
         hasStartedExpanding = true;
@@ -106,6 +105,24 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
 
     @Override
     public void onBindViewHolder(@NonNull AppViewHolder holder, int position) {
+        // === МАГИЯ ФОНОВ (Lego-метод) ===
+        if (position == 0) {
+            // Первая ячейка получает скругленные ВЕРХНИЕ углы
+            holder.itemView.setBackgroundResource(R.drawable.bg_card_stack_top);
+        } else {
+            // Все остальные ячейки квадратные, чтобы слиться в монолит
+            holder.itemView.setBackgroundResource(R.drawable.bg_card_stack_mid);
+        }
+
+        // Убираем вертикальные отступы, чтобы ячейки плотно склеились
+        RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) holder.itemView.getLayoutParams();
+        if (params != null) {
+            params.bottomMargin = 0;
+            params.topMargin = 0;
+            holder.itemView.setLayoutParams(params);
+        }
+        // ================================
+
         String pkg = packageNames.get(position);
         Long exactTime = exactTimes.get(pkg);
         holder.timeView.setText(Utils.formatTime(context, exactTime != null ? exactTime : 0L));
