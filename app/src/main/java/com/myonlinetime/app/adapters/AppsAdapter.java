@@ -54,6 +54,7 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         this.packageNames = newPackages != null ? newPackages : new ArrayList<>();
         this.exactTimes = newTimes != null ? newTimes : new HashMap<>();
         
+        // Лимит в 3 элемента только если isLimitEnabled = true (главный экран)
         this.visibleLimit = isLimitEnabled ? Math.min(3, this.packageNames.size()) : this.packageNames.size();
         this.hasStartedExpanding = false;
         notifyDataSetChanged();
@@ -74,29 +75,21 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         int oldLimit = visibleLimit;
         visibleLimit = Math.min(packageNames.size(), visibleLimit + 20);
         
-        // --- МАГИЯ 1: Убираем "шов" при скролле вниз ---
-        // Заставляем старый нижний элемент перерисовать свой фон (стать плоским)
-        if (oldLimit > 0) {
-            notifyItemChanged(oldLimit - 1);
-        }
+        // Убираем шов у старой последней ячейки
+        if (oldLimit > 0) notifyItemChanged(oldLimit - 1);
         
         notifyItemRangeInserted(oldLimit, visibleLimit - oldLimit);
-        
         return isFullyExpanded(); 
     }
 
     public void collapse() {
         if (!isLimitEnabled || visibleLimit <= 3) return;
         int oldLimit = visibleLimit;
-        
         visibleLimit = Math.min(3, packageNames.size());
         hasStartedExpanding = false;
         
-        // --- МАГИЯ 2: Возвращаем закругление при сворачивании ---
-        // 3-й элемент снова становится последним, рисуем ему круглый низ
-        if (visibleLimit > 0) {
-            notifyItemChanged(visibleLimit - 1);
-        }
+        // Возвращаем закругление новой последней ячейке
+        if (visibleLimit > 0) notifyItemChanged(visibleLimit - 1);
         
         notifyItemRangeRemoved(visibleLimit, oldLimit - visibleLimit);
     }
@@ -111,28 +104,47 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     @Override
     public void onBindViewHolder(@NonNull AppViewHolder holder, int position) {
         int currentTotalVisible = getItemCount();
-        boolean hasFooter = (packageNames.size() > 3) && (!hasStartedExpanding || isFullyExpanded());
+        float density = context.getResources().getDisplayMetrics().density;
 
-        if (currentTotalVisible == 1 && !hasFooter) {
-            holder.itemView.setBackgroundResource(R.drawable.bg_app_card);
-        } else if (position == 0) {
-            holder.itemView.setBackgroundResource(R.drawable.bg_card_stack_top);
-        } else if (position == currentTotalVisible - 1 && !hasFooter) {
-            holder.itemView.setBackgroundResource(R.drawable.bg_card_stack_bot);
-        } else {
-            holder.itemView.setBackgroundResource(R.drawable.bg_card_stack_mid);
-        }
-
+        // === ГИБКАЯ МАГИЯ ФОНОВ И ОТСТУПОВ ===
         RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) holder.itemView.getLayoutParams();
-        if (params != null) {
-            params.topMargin = 0;
-            if (!hasFooter && position == currentTotalVisible - 1) {
-                params.bottomMargin = (int) (16 * context.getResources().getDisplayMetrics().density);
+        
+        if (isLimitEnabled) {
+            // РЕЖИМ LEGO (Главный экран)
+            boolean hasFooter = (packageNames.size() > 3) && (!hasStartedExpanding || isFullyExpanded());
+
+            if (currentTotalVisible == 1 && !hasFooter) {
+                holder.itemView.setBackgroundResource(R.drawable.bg_app_card);
+            } else if (position == 0) {
+                holder.itemView.setBackgroundResource(R.drawable.bg_card_stack_top);
+            } else if (position == currentTotalVisible - 1 && !hasFooter) {
+                holder.itemView.setBackgroundResource(R.drawable.bg_card_stack_bot);
             } else {
-                params.bottomMargin = 0;
+                holder.itemView.setBackgroundResource(R.drawable.bg_card_stack_mid);
             }
-            holder.itemView.setLayoutParams(params);
+
+            if (params != null) {
+                params.topMargin = 0;
+                params.leftMargin = (int) (16 * density);
+                params.rightMargin = (int) (16 * density);
+                if (!hasFooter && position == currentTotalVisible - 1) {
+                    params.bottomMargin = (int) (16 * density);
+                } else {
+                    params.bottomMargin = 0;
+                }
+            }
+        } else {
+            // РЕЖИМ КРАСИВОЙ КАРТОЧКИ (Графики / За всё время)
+            holder.itemView.setBackgroundResource(R.drawable.bg_app_card);
+            if (params != null) {
+                params.leftMargin = (int) (16 * density);
+                params.rightMargin = (int) (16 * density);
+                params.topMargin = 0;
+                params.bottomMargin = (int) (8 * density);
+            }
         }
+        if (params != null) holder.itemView.setLayoutParams(params);
+        // ============================================
 
         String pkg = packageNames.get(position);
         Long exactTime = exactTimes.get(pkg);
@@ -158,19 +170,16 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         }
 
         Drawable cachedIcon = iconCache.get(pkg);
-        
         if (cachedIcon != null) {
             holder.iconView.setImageDrawable(cachedIcon);
         } else {
             holder.iconView.setImageResource(android.R.drawable.sym_def_app_icon);
             final ApplicationInfo finalAppInfo = appInfo; 
-            
             executorService.execute(() -> {
                 try {
                     ApplicationInfo infoToUse = finalAppInfo != null ? finalAppInfo : pm.getApplicationInfo(pkg, 0);
                     Drawable appIcon = pm.getApplicationIcon(infoToUse);
                     iconCache.put(pkg, appIcon);
-
                     mainHandler.post(() -> {
                         if (pkg.equals(holder.currentPkg)) {
                             holder.iconView.setImageDrawable(appIcon);
@@ -198,4 +207,5 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
             timeView = itemView.findViewById(R.id.app_time);
         }
     }
-}
+                            }
+
