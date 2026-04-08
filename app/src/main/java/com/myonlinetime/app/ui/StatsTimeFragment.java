@@ -71,7 +71,6 @@ public class StatsTimeFragment extends Fragment {
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         
         // === ОПТИМИЗАЦИЯ RECYCLERVIEW (Уровень 1) ===
-        recyclerView.setHasFixedSize(true);
         recyclerView.setItemViewCacheSize(25); 
         recyclerView.setDrawingCacheEnabled(true);
         recyclerView.setDrawingCacheQuality(View.DRAWING_CACHE_QUALITY_HIGH);
