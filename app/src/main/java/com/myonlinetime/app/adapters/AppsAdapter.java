@@ -54,7 +54,6 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         this.packageNames = newPackages != null ? newPackages : new ArrayList<>();
         this.exactTimes = newTimes != null ? newTimes : new HashMap<>();
         
-        // ИСПРАВЛЕНО: Вернули ваши законные 3 элемента
         this.visibleLimit = isLimitEnabled ? Math.min(3, this.packageNames.size()) : this.packageNames.size();
         this.hasStartedExpanding = false;
         notifyDataSetChanged();
@@ -74,6 +73,13 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         
         int oldLimit = visibleLimit;
         visibleLimit = Math.min(packageNames.size(), visibleLimit + 20);
+        
+        // --- МАГИЯ 1: Убираем "шов" при скролле вниз ---
+        // Заставляем старый нижний элемент перерисовать свой фон (стать плоским)
+        if (oldLimit > 0) {
+            notifyItemChanged(oldLimit - 1);
+        }
+        
         notifyItemRangeInserted(oldLimit, visibleLimit - oldLimit);
         
         return isFullyExpanded(); 
@@ -82,9 +88,16 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     public void collapse() {
         if (!isLimitEnabled || visibleLimit <= 3) return;
         int oldLimit = visibleLimit;
-        // ИСПРАВЛЕНО: Сворачиваем до 3 элементов
+        
         visibleLimit = Math.min(3, packageNames.size());
         hasStartedExpanding = false;
+        
+        // --- МАГИЯ 2: Возвращаем закругление при сворачивании ---
+        // 3-й элемент снова становится последним, рисуем ему круглый низ
+        if (visibleLimit > 0) {
+            notifyItemChanged(visibleLimit - 1);
+        }
+        
         notifyItemRangeRemoved(visibleLimit, oldLimit - visibleLimit);
     }
 
@@ -98,17 +111,13 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     @Override
     public void onBindViewHolder(@NonNull AppViewHolder holder, int position) {
         int currentTotalVisible = getItemCount();
-        // Проверяем, будет ли под списком отображаться подвал "Показать еще"
         boolean hasFooter = (packageNames.size() > 3) && (!hasStartedExpanding || isFullyExpanded());
 
-        // === ИСПРАВЛЕННАЯ МАГИЯ ФОНОВ И ОТСТУПОВ ===
         if (currentTotalVisible == 1 && !hasFooter) {
-            // Багфикс: Если элемент всего 1, он должен быть закруглен со всех сторон
             holder.itemView.setBackgroundResource(R.drawable.bg_app_card);
         } else if (position == 0) {
             holder.itemView.setBackgroundResource(R.drawable.bg_card_stack_top);
         } else if (position == currentTotalVisible - 1 && !hasFooter) {
-            // Багфикс: Последний элемент без подвала должен закруглять низ
             holder.itemView.setBackgroundResource(R.drawable.bg_card_stack_bot);
         } else {
             holder.itemView.setBackgroundResource(R.drawable.bg_card_stack_mid);
@@ -118,14 +127,12 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         if (params != null) {
             params.topMargin = 0;
             if (!hasFooter && position == currentTotalVisible - 1) {
-                // Багфикс: Если подвала нет, возвращаем 16dp отступа, чтобы не наезжать на карточки
                 params.bottomMargin = (int) (16 * context.getResources().getDisplayMetrics().density);
             } else {
                 params.bottomMargin = 0;
             }
             holder.itemView.setLayoutParams(params);
         }
-        // ============================================
 
         String pkg = packageNames.get(position);
         Long exactTime = exactTimes.get(pkg);
