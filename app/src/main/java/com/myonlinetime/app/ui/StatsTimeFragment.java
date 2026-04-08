@@ -70,6 +70,13 @@ public class StatsTimeFragment extends Fragment {
 
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         
+        // === ОПТИМИЗАЦИЯ RECYCLERVIEW (Уровень 1) ===
+        recyclerView.setHasFixedSize(true);
+        recyclerView.setItemViewCacheSize(25); 
+        recyclerView.setDrawingCacheEnabled(true);
+        recyclerView.setDrawingCacheQuality(View.DRAWING_CACHE_QUALITY_HIGH);
+        // ==========================================
+        
         final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, true);
         recyclerView.setAdapter(adapter);
 
@@ -251,6 +258,24 @@ public class StatsTimeFragment extends Fragment {
             });
         });
     }
+
+    // === АППАРАТНОЕ УСКОРЕНИЕ ДЛЯ ПЛАВНОСТИ АНИМАЦИИ (Уровень 2) ===
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (getView() != null) {
+            getView().setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (getView() != null) {
+            getView().setLayerType(View.LAYER_TYPE_NONE, null);
+        }
+    }
+    // ===============================================================
 
     // МЕТОДЫ calculateFromEvents, calculateFromStats, getUserApps, getLauncherPackage, filterAndSumUserApps УДАЛЕНЫ!
 }
