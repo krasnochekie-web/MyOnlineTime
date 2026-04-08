@@ -102,7 +102,6 @@ public class StatsTimeFragment extends Fragment {
                     btnShowMore.setText(R.string.show_less);
                     listFooterCard.setVisibility(View.VISIBLE);
                 } else {
-                    // ИСПРАВЛЕНО: Скрываем всю карточку, а не только текст, чтобы она не давала пустые отступы
                     listFooterCard.setVisibility(View.GONE);
                 }
             }
@@ -133,80 +132,83 @@ public class StatsTimeFragment extends Fragment {
 
         loadBottomCardsData(activity, textWeek, textMonth, textYear);
 
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (!isAdded() || activity == null) return;
+        // === ИЗМЕНЕНИЯ: Убрали искусственные задержки, грузим мгновенно ===
+        spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
+                Runnable updateUI = () -> {
+                    CachedStats cached = statsCache.get(position);
+                    if (cached == null || !isAdded()) return;
+                    
+                    totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
+                    adapter.updateData(cached.list, cached.times);
+                    
+                    adapter.collapse();
+                    btnShowMore.setText(R.string.show_more);
+                    
+                    if (cached.list.size() > 3) {
+                        listFooterCard.setVisibility(View.VISIBLE);
+                        btnShowMore.setVisibility(View.VISIBLE);
+                        dividerShowMore.setVisibility(View.VISIBLE);
+                    } else {
+                        listFooterCard.setVisibility(View.GONE);
+                    }
+                };
 
-            spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-                @Override
-                public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
-                    Runnable updateUI = () -> {
-                        CachedStats cached = statsCache.get(position);
-                        if (cached == null || !isAdded()) return;
-                        
-                        totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
-                        adapter.updateData(cached.list, cached.times);
-                        
-                        adapter.collapse();
-                        btnShowMore.setText(R.string.show_more);
-                        
-                        // ИСПРАВЛЕНО: Вернули лимит на 3 элемента для проверки видимости подвала
-                        if (cached.list.size() > 3) {
-                            listFooterCard.setVisibility(View.VISIBLE);
-                            btnShowMore.setVisibility(View.VISIBLE);
-                            dividerShowMore.setVisibility(View.VISIBLE);
-                        } else {
-                            listFooterCard.setVisibility(View.GONE);
-                        }
-                    };
+                if (statsCache.containsKey(position)) {
+                    updateUI.run();
+                    return; 
+                }
 
-                    if (statsCache.containsKey(position)) {
-                        updateUI.run();
-                        return; 
+                if (!isAdded()) return;
+                totalTimeText.setText(activity.getString(R.string.loading));
+                
+                Utils.backgroundExecutor.execute(() -> {
+                    if (UsageMath.todayStartMillis == 0) {
+                        Calendar cal = Calendar.getInstance();
+                        cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
+                        UsageMath.todayStartMillis = cal.getTimeInMillis();
+                        Calendar yCal = (Calendar) cal.clone();
+                        yCal.add(Calendar.DAY_OF_YEAR, -1);
+                        UsageMath.yesterdayStartMillis = yCal.getTimeInMillis();
                     }
 
-                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                        if (!isAdded()) return;
-                        totalTimeText.setText(activity.getString(R.string.loading));
-                        
-                        Utils.backgroundExecutor.execute(() -> {
-                            if (UsageMath.todayStartMillis == 0) {
-                                Calendar cal = Calendar.getInstance();
-                                cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
-                                UsageMath.todayStartMillis = cal.getTimeInMillis();
-                                Calendar yCal = (Calendar) cal.clone();
-                                yCal.add(Calendar.DAY_OF_YEAR, -1);
-                                UsageMath.yesterdayStartMillis = yCal.getTimeInMillis();
-                            }
+                    long endTime = System.currentTimeMillis();
+                    Map<String, Long> exactTimes = null;
+                    Calendar cal = Calendar.getInstance(); 
+                    
+                    switch (position) {
+                        case 0: exactTimes = UsageMath.todayExactCache != null ? UsageMath.todayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.todayStartMillis, endTime); break;
+                        case 1: exactTimes = UsageMath.yesterdayExactCache != null ? UsageMath.yesterdayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.yesterdayStartMillis, UsageMath.todayStartMillis); break;
+                        case 2: cal.add(Calendar.DAY_OF_YEAR, -7); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, cal.getTimeInMillis(), endTime); break;
+                        case 3: cal.add(Calendar.MONTH, -1); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_WEEKLY, cal.getTimeInMillis(), endTime); break;
+                        default: cal.add(Calendar.YEAR, -1); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime); break;
+                    }
 
-                            long endTime = System.currentTimeMillis();
-                            Map<String, Long> exactTimes = null;
-                            Calendar cal = Calendar.getInstance(); 
-                            
-                            switch (position) {
-                                case 0: exactTimes = UsageMath.todayExactCache != null ? UsageMath.todayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.todayStartMillis, endTime); break;
-                                case 1: exactTimes = UsageMath.yesterdayExactCache != null ? UsageMath.yesterdayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.yesterdayStartMillis, UsageMath.todayStartMillis); break;
-                                case 2: cal.add(Calendar.DAY_OF_YEAR, -7); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, cal.getTimeInMillis(), endTime); break;
-                                case 3: cal.add(Calendar.MONTH, -1); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_WEEKLY, cal.getTimeInMillis(), endTime); break;
-                                default: cal.add(Calendar.YEAR, -1); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime); break;
-                            }
+                    final Map<String, Long> finalExactTimes = exactTimes;
+                    final List<String> finalList = new ArrayList<>(finalExactTimes.keySet());
+                    
+                    Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
+                    final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
+                    
+                    new Handler(Looper.getMainLooper()).post(() -> {
+                        if (isAdded()) {
+                            statsCache.put(position, new CachedStats(finalList, finalExactTimes, finalTotalMillis));
+                            updateUI.run();
+                        }
+                    });
+                }); 
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        }); 
 
-                            final Map<String, Long> finalExactTimes = exactTimes;
-                            final List<String> finalList = new ArrayList<>(finalExactTimes.keySet());
-                            
-                            Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
-                            final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
-                            
-                            new Handler(Looper.getMainLooper()).post(() -> {
-                                statsCache.put(position, new CachedStats(finalList, finalExactTimes, finalTotalMillis));
-                                updateUI.run();
-                            });
-                        }); 
-                    }, 300);                           
-                }
-                @Override public void onNothingSelected(AdapterView<?> parent) {}
-            }); 
-            if (spinner.getSelectedItemPosition() >= 0) spinner.getOnItemSelectedListener().onItemSelected(spinner, null, spinner.getSelectedItemPosition(), 0);
-        }, 300);
+        // Вызываем первую загрузку сразу же, как только UI готов
+        new Handler(Looper.getMainLooper()).post(() -> {
+            if (isAdded() && activity != null && spinner.getSelectedItemPosition() >= 0) {
+                spinner.getOnItemSelectedListener().onItemSelected(spinner, null, spinner.getSelectedItemPosition(), 0);
+            }
+        });
+
         return view;
     }
 
