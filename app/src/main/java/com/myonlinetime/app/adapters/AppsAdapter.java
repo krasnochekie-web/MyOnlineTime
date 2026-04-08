@@ -39,31 +39,27 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     private final Handler mainHandler;
     
     // Кэш иконок (ограничен по количеству, так как картинки жрут память)
-    private final LruCache<String, Drawable> iconCache;
-    
+    private static final LruCache<String, Drawable> iconCache = new LruCache<>(150);
     // Кэш названий (обычная мапа, так как строки почти не весят, храним их вечно)
-    private final HashMap<String, String> nameCache;
+    private static final HashMap<String, String> nameCache = new HashMap<>();
 
     public AppsAdapter(Context context, int itemLayoutId, boolean isLimitEnabled) {
         this.context = context;
         this.pm = context.getPackageManager();
         this.itemLayoutId = itemLayoutId; 
         this.isLimitEnabled = isLimitEnabled;
-        this.visibleLimit = isLimitEnabled ? 3 : -1;
-
+        
         // Потоки для тяжелых иконок
         this.executorService = Executors.newFixedThreadPool(4);
         this.mainHandler = new Handler(Looper.getMainLooper());
-        
-        // Увеличили кэш до 150 иконок, чтобы при развертывании списка они не выпадали из памяти
-        this.iconCache = new LruCache<>(150);
-        this.nameCache = new HashMap<>();
     }
 
     public void updateData(List<String> newPackages, Map<String, Long> newTimes) {
         this.packageNames = newPackages != null ? newPackages : new ArrayList<>();
         this.exactTimes = newTimes != null ? newTimes : new HashMap<>();
-        this.visibleLimit = isLimitEnabled ? 3 : this.packageNames.size();
+        
+        // Стартуем с 5 элементов для плавности анимации перехода
+        this.visibleLimit = isLimitEnabled ? Math.min(5, this.packageNames.size()) : this.packageNames.size();
         this.hasStartedExpanding = false;
         notifyDataSetChanged();
     }
@@ -76,23 +72,29 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         return hasStartedExpanding;
     }
 
+    // ИЗМЕНЕНИЕ: Метод теперь возвращает boolean (достигли ли мы конца списка)
     public boolean loadMoreChunk() {
         if (isFullyExpanded()) return true;
         hasStartedExpanding = true;
         
         int oldLimit = visibleLimit;
-        visibleLimit = Math.min(packageNames.size(), visibleLimit + 15);
+        // Грузим пачками по 20 штук
+        visibleLimit = Math.min(packageNames.size(), visibleLimit + 20);
+        
+        // Плавная вставка элементов в список
         notifyItemRangeInserted(oldLimit, visibleLimit - oldLimit);
         
         return isFullyExpanded(); 
     }
 
     public void collapse() {
-        if (!isLimitEnabled || visibleLimit <= 3) return;
+        if (!isLimitEnabled || visibleLimit <= 5) return;
         int oldLimit = visibleLimit;
-        visibleLimit = 3;
+        visibleLimit = Math.min(5, packageNames.size());
         hasStartedExpanding = false;
-        notifyItemRangeRemoved(3, oldLimit - 3);
+        
+        // Плавное удаление элементов из списка
+        notifyItemRangeRemoved(visibleLimit, oldLimit - visibleLimit);
     }
 
     @NonNull
@@ -138,6 +140,9 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         if (cachedIcon != null) {
             holder.iconView.setImageDrawable(cachedIcon);
         } else {
+            // Временная заглушка пока идет поиск файла
+            holder.iconView.setImageResource(android.R.drawable.sym_def_app_icon);
+            
             // Передаем appInfo, чтобы не искать его в системе второй раз
             final ApplicationInfo finalAppInfo = appInfo; 
             
@@ -154,11 +159,7 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
                         }
                     });
                 } catch (Exception ignored) {
-                    mainHandler.post(() -> {
-                        if (pkg.equals(holder.currentPkg)) {
-                            holder.iconView.setImageResource(android.R.drawable.sym_def_app_icon);
-                        }
-                    });
+                    // Если иконки нет, оставляем дефолтную (уже установлена)
                 }
             });
         }
@@ -167,7 +168,7 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     @Override
     public int getItemCount() {
         if (!isLimitEnabled) return packageNames.size();
-        return Math.min(visibleLimit, packageNames.size());
+        return visibleLimit;
     }
 
     static class AppViewHolder extends RecyclerView.ViewHolder {
