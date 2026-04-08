@@ -57,50 +57,45 @@ public class StatsTimeFragment extends Fragment {
             activity.headerManager.resetHeader();
         }
 
-        final RecyclerView recyclerView = view.findViewById(R.id.main_recycler_view);
+        final RecyclerView recyclerView = view.findViewById(R.id.apps_list);
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
-        recyclerView.setItemViewCacheSize(25); 
+        recyclerView.setItemViewCacheSize(25);
         
-        // --- 1. Надуваем Шапку и Подвал ---
+        // --- 1. НАДУВАЕМ ШАПКУ И ПОДВАЛ ---
         final View headerView = inflater.inflate(R.layout.layout_time_header, recyclerView, false);
         final View footerView = inflater.inflate(R.layout.layout_time_footer, recyclerView, false);
         
-        // --- 2. Ищем элементы как обычно ---
+        // --- 2. ИЩЕМ ЭЛЕМЕНТЫ ВНУТРИ ШАПКИ И ПОДВАЛА ---
         final Spinner spinner = headerView.findViewById(R.id.spinner_period);
         final TextView totalTimeText = headerView.findViewById(R.id.text_total_time_sum);
         
+        final View listFooterCard = footerView.findViewById(R.id.list_footer_card);
         final View dividerShowMore = footerView.findViewById(R.id.divider_show_more);
         final TextView btnShowMore = footerView.findViewById(R.id.btn_show_more);
+        
         final TextView textWeek = footerView.findViewById(R.id.text_time_week);
         final TextView textMonth = footerView.findViewById(R.id.text_time_month);
         final TextView textYear = footerView.findViewById(R.id.text_time_year);
 
-        // --- 3. Создаем мини-адаптеры для ConcatAdapter ---
+        // --- 3. ОБОРАЧИВАЕМ ИХ В МИНИ-АДАПТЕРЫ ---
         RecyclerView.Adapter<?> headerAdapter = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-            @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-                return new RecyclerView.ViewHolder(headerView) {};
-            }
+            @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) { return new RecyclerView.ViewHolder(headerView) {}; }
             @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {}
             @Override public int getItemCount() { return 1; }
-            @Override public int getItemViewType(int position) { return 1000; } // Уникальный ID
         };
 
         RecyclerView.Adapter<?> footerAdapter = new RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-            @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-                return new RecyclerView.ViewHolder(footerView) {};
-            }
+            @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) { return new RecyclerView.ViewHolder(footerView) {}; }
             @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {}
             @Override public int getItemCount() { return 1; }
-            @Override public int getItemViewType(int position) { return 1001; }
         };
 
+        // --- 4. СКЛЕИВАЕМ В ОДИН СУПЕР-СПИСОК ---
         final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, true);
-        
-        // СОБИРАЕМ ФРАНКЕНШТЕЙНА (Монолитный скролл!)
         ConcatAdapter concatAdapter = new ConcatAdapter(headerAdapter, adapter, footerAdapter);
         recyclerView.setAdapter(concatAdapter);
 
-        // --- 4. Логика (Осталась неизменной!) ---
+        // --- ВАША ЛОГИКА ---
         btnShowMore.setOnClickListener(v -> {
             if (adapter.isFullyExpanded()) {
                 adapter.collapse();
@@ -110,25 +105,20 @@ public class StatsTimeFragment extends Fragment {
                 boolean reachedEnd = adapter.loadMoreChunk();
                 if (reachedEnd) {
                     btnShowMore.setText(R.string.show_less);
-                } else {
-                    btnShowMore.setVisibility(View.GONE); 
-                    dividerShowMore.setVisibility(View.GONE);
                 }
             }
         });
 
-        // Слушатель скролла теперь висит на самом RecyclerView
+        // Слушатель скролла переехал с NestedScrollView на сам RecyclerView
         recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
                 super.onScrolled(rv, dx, dy);
                 if (adapter.hasStartedExpanding() && !adapter.isFullyExpanded()) {
-                    if (!rv.canScrollVertically(1)) { // Достигли низа
+                    if (!rv.canScrollVertically(1)) { // Если доскроллили до низа
                         boolean reachedEnd = adapter.loadMoreChunk();
                         if (reachedEnd) {
                             btnShowMore.setText(R.string.show_less);
-                            btnShowMore.setVisibility(View.VISIBLE);
-                            dividerShowMore.setVisibility(View.VISIBLE);
                         }
                     }
                 }
@@ -159,12 +149,12 @@ public class StatsTimeFragment extends Fragment {
                         
                         adapter.collapse();
                         btnShowMore.setText(R.string.show_more);
-                        if (cached.list.size() > 3) {
-                            btnShowMore.setVisibility(View.VISIBLE);
-                            dividerShowMore.setVisibility(View.VISIBLE);
+                        
+                        // Скрываем или показываем нижнюю часть карточки (Lego-низ)
+                        if (cached.list.size() > 5) {
+                            listFooterCard.setVisibility(View.VISIBLE);
                         } else {
-                            btnShowMore.setVisibility(View.GONE);
-                            dividerShowMore.setVisibility(View.GONE);
+                            listFooterCard.setVisibility(View.GONE);
                         }
                     };
 
@@ -192,16 +182,11 @@ public class StatsTimeFragment extends Fragment {
                             Calendar cal = Calendar.getInstance(); 
                             
                             switch (position) {
-                                case 0: 
-                                    exactTimes = UsageMath.todayExactCache != null ? UsageMath.todayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.todayStartMillis, endTime); break;
-                                case 1: 
-                                    exactTimes = UsageMath.yesterdayExactCache != null ? UsageMath.yesterdayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.yesterdayStartMillis, UsageMath.todayStartMillis); break;
-                                case 2: 
-                                    cal.add(Calendar.DAY_OF_YEAR, -7); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, cal.getTimeInMillis(), endTime); break;
-                                case 3: 
-                                    cal.add(Calendar.MONTH, -1); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_WEEKLY, cal.getTimeInMillis(), endTime); break;
-                                default: 
-                                    cal.add(Calendar.YEAR, -1); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime); break;
+                                case 0: exactTimes = UsageMath.todayExactCache != null ? UsageMath.todayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.todayStartMillis, endTime); break;
+                                case 1: exactTimes = UsageMath.yesterdayExactCache != null ? UsageMath.yesterdayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.yesterdayStartMillis, UsageMath.todayStartMillis); break;
+                                case 2: cal.add(Calendar.DAY_OF_YEAR, -7); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, cal.getTimeInMillis(), endTime); break;
+                                case 3: cal.add(Calendar.MONTH, -1); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_WEEKLY, cal.getTimeInMillis(), endTime); break;
+                                default: cal.add(Calendar.YEAR, -1); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime); break;
                             }
 
                             final Map<String, Long> finalExactTimes = exactTimes;
@@ -234,6 +219,7 @@ public class StatsTimeFragment extends Fragment {
 
         Utils.backgroundExecutor.execute(() -> {
             long now = System.currentTimeMillis();
+            
             Calendar calW = Calendar.getInstance(); calW.add(Calendar.DAY_OF_YEAR, -7);
             long weekTotal = UsageMath.sumMap(UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_DAILY, calW.getTimeInMillis(), now));
 
@@ -243,7 +229,9 @@ public class StatsTimeFragment extends Fragment {
             Calendar calY = Calendar.getInstance(); calY.add(Calendar.YEAR, -1);
             long yearTotal = UsageMath.sumMap(UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_YEARLY, calY.getTimeInMillis(), now));
 
-            cachedWeek = weekTotal; cachedMonth = monthTotal; cachedYear = yearTotal;
+            cachedWeek = weekTotal;
+            cachedMonth = monthTotal;
+            cachedYear = yearTotal;
 
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (isAdded()) {
