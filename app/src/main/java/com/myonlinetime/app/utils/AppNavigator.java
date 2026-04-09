@@ -5,6 +5,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
+import android.view.View;
 
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.ui.FeedFragment;
@@ -17,7 +18,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import android.view.View;
 
 public class AppNavigator {
 
@@ -139,7 +139,8 @@ public class AppNavigator {
         
         if (stack != null && !stack.isEmpty()) {
             Fragment target = stack.get(stack.size() - 1);
-            if (target.getView() != null) target.getView().setVisibility(View.VISIBLE); // Страховка INVISIBLE
+            // Страховка: если экран был в INVISIBLE, возвращаем видимость
+            if (target.getView() != null) target.getView().setVisibility(View.VISIBLE);
             ft.show(target);
         } else {
             showMainTab(tabIndex, ft, uid);
@@ -212,7 +213,7 @@ public class AppNavigator {
     }
 
     // =========================================================================
-    // ПРЕДЗАГРУЗКА ЧЕРЕЗ INVISIBLE (Академически чисто)
+    // ПРЕДЗАГРУЗКА ЧЕРЕЗ INVISIBLE (Академически чисто, задержка 3.5 сек)
     // =========================================================================
     public void preloadProfile(String uid) {
         if (profileFragment == null) {
@@ -222,28 +223,34 @@ public class AppNavigator {
               .add(containerId, profileFragment, "PROFILE")
               .commitAllowingStateLoss();
               
+            // Форсируем парсинг XML
             fm.executePendingTransactions(); 
             
             View view = profileFragment.getView();
             if (view != null) {
-                // Делаем экран невидимым, чтобы он загрузился тихо
+                // Прячем экран через INVISIBLE
                 view.setVisibility(View.INVISIBLE); 
                 
+                // Даем 3.5 секунды на выполнение сетевых запросов и расчеты списков
                 new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                     if (currentTabIndex != 4) { 
                         try {
                             fm.beginTransaction().hide(profileFragment).commitAllowingStateLoss();
-                            view.setVisibility(View.VISIBLE); // Возвращаем видимость, экран уже скрыт через hide()
+                            // Возвращаем VISIBILITY, так как фрагмент уже безопасно скрыт через hide()
+                            view.setVisibility(View.VISIBLE);
                         } catch (Exception ignored) {}
                     } else {
-                        // Если юзер кликнул в процессе загрузки - включаем свет!
+                        // Если юзер успел кликнуть на вкладку до истечения 3.5 сек - просто включаем свет
                         view.setVisibility(View.VISIBLE);
                     }
-                }, 2500);
+                }, 3500);
             }
         }
     }
 
+    // =========================================================================
+    // ПРЕДЗАГРУЗКА ВРЕМЕНИ ЧЕРЕЗ INVISIBLE 
+    // =========================================================================
     public void preloadStats() {
         if (statsFragment == null) {
             statsFragment = new StatsHostFragment();
@@ -267,7 +274,7 @@ public class AppNavigator {
                     } else {
                         view.setVisibility(View.VISIBLE);
                     }
-                }, 2500);
+                }, 3500);
             }
         }
     }
