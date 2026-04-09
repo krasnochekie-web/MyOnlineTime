@@ -45,6 +45,14 @@ public class StatsTimeFragment extends Fragment {
     private static long cachedMonth = -1;
     private static long cachedYear = -1;
     
+    private TextView totalTimeText;
+    private AppsAdapter adapter;
+    private View listFooterCard;
+    private View dividerShowMore;
+    private TextView btnShowMore;
+    
+    private boolean isFirstLoad = true; // Флаг, чтобы спиннер не перетирал нашу фоновую загрузку
+
     public StatsTimeFragment() {}
 
     @Override
@@ -65,11 +73,11 @@ public class StatsTimeFragment extends Fragment {
         final View footerView = inflater.inflate(R.layout.layout_time_footer, recyclerView, false);
         
         final Spinner spinner = headerView.findViewById(R.id.spinner_period);
-        final TextView totalTimeText = headerView.findViewById(R.id.text_total_time_sum);
+        totalTimeText = headerView.findViewById(R.id.text_total_time_sum);
         
-        final View listFooterCard = footerView.findViewById(R.id.list_footer_card);
-        final View dividerShowMore = footerView.findViewById(R.id.divider_show_more);
-        final TextView btnShowMore = footerView.findViewById(R.id.btn_show_more);
+        listFooterCard = footerView.findViewById(R.id.list_footer_card);
+        dividerShowMore = footerView.findViewById(R.id.divider_show_more);
+        btnShowMore = footerView.findViewById(R.id.btn_show_more);
         
         final TextView textWeek = footerView.findViewById(R.id.text_time_week);
         final TextView textMonth = footerView.findViewById(R.id.text_time_month);
@@ -87,7 +95,7 @@ public class StatsTimeFragment extends Fragment {
             @Override public int getItemCount() { return 1; }
         };
 
-        final AppsAdapter adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, true);
+        adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, true);
         ConcatAdapter concatAdapter = new ConcatAdapter(headerAdapter, adapter, footerAdapter);
         recyclerView.setAdapter(concatAdapter);
 
@@ -132,84 +140,96 @@ public class StatsTimeFragment extends Fragment {
 
         loadBottomCardsData(activity, textWeek, textMonth, textYear);
 
-        // === ИЗМЕНЕНИЯ: Убрали искусственные задержки, грузим мгновенно ===
+        // === ИЗМЕНЕНИЯ АРХИТЕКТУРЫ ===
+        // Теперь Спиннер реагирует ТОЛЬКО на физический выбор пользователя (после первой загрузки)
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
-                Runnable updateUI = () -> {
-                    CachedStats cached = statsCache.get(position);
-                    if (cached == null || !isAdded()) return;
-                    
-                    totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
-                    adapter.updateData(cached.list, cached.times);
-                    
-                    adapter.collapse();
-                    btnShowMore.setText(R.string.show_more);
-                    
-                    if (cached.list.size() > 3) {
-                        listFooterCard.setVisibility(View.VISIBLE);
-                        btnShowMore.setVisibility(View.VISIBLE);
-                        dividerShowMore.setVisibility(View.VISIBLE);
-                    } else {
-                        listFooterCard.setVisibility(View.GONE);
-                    }
-                };
-
-                if (statsCache.containsKey(position)) {
-                    updateUI.run();
-                    return; 
+                if (isFirstLoad) {
+                    isFirstLoad = false;
+                    return; // Игнорируем авто-срабатывание спиннера при старте
                 }
-
-                if (!isAdded()) return;
-                totalTimeText.setText(activity.getString(R.string.loading));
-                
-                Utils.backgroundExecutor.execute(() -> {
-                    if (UsageMath.todayStartMillis == 0) {
-                        Calendar cal = Calendar.getInstance();
-                        cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
-                        UsageMath.todayStartMillis = cal.getTimeInMillis();
-                        Calendar yCal = (Calendar) cal.clone();
-                        yCal.add(Calendar.DAY_OF_YEAR, -1);
-                        UsageMath.yesterdayStartMillis = yCal.getTimeInMillis();
-                    }
-
-                    long endTime = System.currentTimeMillis();
-                    Map<String, Long> exactTimes = null;
-                    Calendar cal = Calendar.getInstance(); 
-                    
-                    switch (position) {
-                        case 0: exactTimes = UsageMath.todayExactCache != null ? UsageMath.todayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.todayStartMillis, endTime); break;
-                        case 1: exactTimes = UsageMath.yesterdayExactCache != null ? UsageMath.yesterdayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.yesterdayStartMillis, UsageMath.todayStartMillis); break;
-                        case 2: cal.add(Calendar.DAY_OF_YEAR, -7); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, cal.getTimeInMillis(), endTime); break;
-                        case 3: cal.add(Calendar.MONTH, -1); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_WEEKLY, cal.getTimeInMillis(), endTime); break;
-                        default: cal.add(Calendar.YEAR, -1); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime); break;
-                    }
-
-                    final Map<String, Long> finalExactTimes = exactTimes;
-                    final List<String> finalList = new ArrayList<>(finalExactTimes.keySet());
-                    
-                    Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
-                    final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
-                    
-                    new Handler(Looper.getMainLooper()).post(() -> {
-                        if (isAdded()) {
-                            statsCache.put(position, new CachedStats(finalList, finalExactTimes, finalTotalMillis));
-                            updateUI.run();
-                        }
-                    });
-                }); 
+                fetchAndApplyData(position, activity);
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         }); 
 
-        // Вызываем первую загрузку сразу же, как только UI готов
-        new Handler(Looper.getMainLooper()).post(() -> {
-            if (isAdded() && activity != null && spinner.getSelectedItemPosition() >= 0) {
-                spinner.getOnItemSelectedListener().onItemSelected(spinner, null, spinner.getSelectedItemPosition(), 0);
-            }
-        });
+        // Запускаем независимую загрузку данных (сразу за "Сегодня" - индекс 0)
+        // Этот код сработает железобетонно, даже если фрагмент находится за пределами экрана!
+        fetchAndApplyData(0, activity);
 
         return view;
+    }
+
+    // =========================================================================
+    // НЕЗАВИСИМЫЙ ДВИЖОК ДАННЫХ
+    // =========================================================================
+    private void fetchAndApplyData(int position, MainActivity activity) {
+        Runnable updateUI = () -> {
+            CachedStats cached = statsCache.get(position);
+            if (cached == null || !isAdded()) return;
+            
+            totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
+            adapter.updateData(cached.list, cached.times);
+            
+            adapter.collapse();
+            btnShowMore.setText(R.string.show_more);
+            
+            if (cached.list.size() > 3) {
+                listFooterCard.setVisibility(View.VISIBLE);
+                btnShowMore.setVisibility(View.VISIBLE);
+                dividerShowMore.setVisibility(View.VISIBLE);
+            } else {
+                listFooterCard.setVisibility(View.GONE);
+            }
+        };
+
+        // Если уже есть в кэше - моментально рисуем
+        if (statsCache.containsKey(position)) {
+            updateUI.run();
+            return; 
+        }
+
+        if (!isAdded()) return;
+        totalTimeText.setText(activity.getString(R.string.loading));
+        
+        // Считаем математику в фоне
+        Utils.backgroundExecutor.execute(() -> {
+            if (UsageMath.todayStartMillis == 0) {
+                Calendar cal = Calendar.getInstance();
+                cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
+                UsageMath.todayStartMillis = cal.getTimeInMillis();
+                Calendar yCal = (Calendar) cal.clone();
+                yCal.add(Calendar.DAY_OF_YEAR, -1);
+                UsageMath.yesterdayStartMillis = yCal.getTimeInMillis();
+            }
+
+            long endTime = System.currentTimeMillis();
+            Map<String, Long> exactTimes = null;
+            Calendar cal = Calendar.getInstance(); 
+            
+            switch (position) {
+                case 0: exactTimes = UsageMath.todayExactCache != null ? UsageMath.todayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.todayStartMillis, endTime); break;
+                case 1: exactTimes = UsageMath.yesterdayExactCache != null ? UsageMath.yesterdayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.yesterdayStartMillis, UsageMath.todayStartMillis); break;
+                case 2: cal.add(Calendar.DAY_OF_YEAR, -7); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, cal.getTimeInMillis(), endTime); break;
+                case 3: cal.add(Calendar.MONTH, -1); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_WEEKLY, cal.getTimeInMillis(), endTime); break;
+                default: cal.add(Calendar.YEAR, -1); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime); break;
+            }
+
+            final Map<String, Long> finalExactTimes = exactTimes;
+            final List<String> finalList = new ArrayList<>(finalExactTimes.keySet());
+            
+            Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
+            final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
+            
+            // Возвращаемся в UI и рисуем
+            new Handler(Looper.getMainLooper()).post(() -> {
+                if (isAdded()) {
+                    statsCache.put(position, new CachedStats(finalList, finalExactTimes, finalTotalMillis));
+                    updateUI.run();
+                }
+            });
+        }); 
     }
 
     private void loadBottomCardsData(Context context, TextView txtWeek, TextView txtMonth, TextView txtYear) {
@@ -245,4 +265,5 @@ public class StatsTimeFragment extends Fragment {
             });
         });
     }
-}
+                                                          }
+                
