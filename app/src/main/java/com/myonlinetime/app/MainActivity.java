@@ -14,6 +14,8 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Looper;
+import android.os.MessageQueue;
 import android.util.LruCache;
 import android.view.View;
 import android.view.Window;
@@ -40,6 +42,7 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
+import com.myonlinetime.app.utils.Utils;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -93,9 +96,10 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         
         // =========================================================================
-        // ЗАПУСК ЕДИНОГО ДВИЖКА МАТЕМАТИКИ И КЭША (Фоновая предзагрузка)
+        // ИСПРАВЛЕНИЕ: Убрали синхронный запуск тяжелой математики из старта экрана
+        // com.myonlinetime.app.utils.UsageMath.preloadCoreStats(this); 
+        // Теперь это происходит мягко в IdleHandler (см. конец файла)
         // =========================================================================
-        com.myonlinetime.app.utils.UsageMath.preloadCoreStats(this);
         
         Window window = getWindow();
         window.getDecorView().setSystemUiVisibility(
@@ -232,13 +236,34 @@ public class MainActivity extends AppCompatActivity {
             StatsHelper.syncUserProfile(MainActivity.this);
             loadUserAvatarToBottomNav(); 
             
-            // =========================================================================
-            // МАГИЯ ПРЕДЗАГРУЗКИ ПРОФИЛЯ (Фоновая загрузка при старте)
-            // =========================================================================
             try {
-                GoogleSignInAccount account = task.getResult(ApiException.class);
+                final GoogleSignInAccount account = task.getResult(ApiException.class);
                 if (account != null && navigator != null) {
-                    navigator.preloadProfile(account.getId());
+                    
+                    // =========================================================================
+                    // МАГИЯ ОТЛОЖЕННОГО СТАРТА (IDLE HANDLER)
+                    // =========================================================================
+                    Looper.myQueue().addIdleHandler(new MessageQueue.IdleHandler() {
+                        @Override
+                        public boolean queueIdle() {
+                            // Этот код выполнится ТОЛЬКО тогда, когда UI полностью нарисован
+                            // и процессор телефона "отдыхает". 0% влияния на плавность старта!
+                            
+                            Utils.backgroundExecutor.execute(() -> {
+                                // 1. Тихо считаем статистику использования в фоне
+                                com.myonlinetime.app.utils.UsageMath.preloadCoreStats(MainActivity.this);
+                                
+                                // 2. Возвращаемся в главный поток, чтобы пнуть навигатор (UI операция)
+                                new android.os.Handler(Looper.getMainLooper()).post(() -> {
+                                    navigator.preloadProfile(account.getId());
+                                });
+                            });
+                            
+                            // Возвращаем false, чтобы слушатель удалился и код выполнился один раз
+                            return false; 
+                        }
+                    });
+                    
                 }
             } catch (Exception ignored) { }
         });
@@ -357,7 +382,7 @@ public class MainActivity extends AppCompatActivity {
                 Glide.with(this).load(file).centerCrop().into(globalImageView);
             }
         }
-    }    
+    }   
     
     @Override
     protected void onPause() {
