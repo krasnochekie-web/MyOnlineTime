@@ -8,6 +8,9 @@
     <string name="find">Поиск</string>
     <string name="time">Время</string>
 	<string name="notif_max_count">99+</string>
+	<string name="placeholder_days_hours">0д 0ч</string>
+<string name="placeholder_hours_mins">0ч 0м</string>
+<string name="placeholder_plus_hours_mins">+0ч 0м</string>
 	<string name="toast_bg_success">Фон успешно установлен!</string>
 <string name="toast_bg_error">Ошибка при установке фона</string>
 <string name="err_parse_token">Не удалось обработать токен сервера</string>
