@@ -8,6 +8,9 @@
     <string name="feed">Feed</string>
     <string name="find">Find</string>
     <string name="time">Time</string>
+	<string name="placeholder_days_hours">0d 0h</string>
+<string name="placeholder_hours_mins">0h 0m</string>
+<string name="placeholder_plus_hours_mins">+0h 0m</string>
     <string name="notif_max_count">99+</string>
     <string name="toast_bg_success">Background set successfully!</string>
 <string name="toast_bg_error">Error setting background</string>
