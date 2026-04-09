@@ -79,16 +79,16 @@
             android:textSize="12sp"
             android:layout_marginBottom="24dp" />
     </LinearLayout>
-
-    <FrameLayout
+<FrameLayout
         android:id="@+id/yesterday_banner_wrapper"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp">
+        android:layout_height="wrap_content">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginLeft="16dp"
+            android:layout_marginRight="16dp"
             android:layout_marginBottom="16dp"
             android:background="@drawable/bg_app_card"
             android:orientation="horizontal"
@@ -114,7 +114,6 @@
                 android:textStyle="bold" />
         </LinearLayout>
     </FrameLayout>
-
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/all_time_apps_list"
         android:layout_width="match_parent"
