@@ -122,13 +122,10 @@ public class ProfileFragment extends Fragment {
         followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(finalTargetUid, false)));
 
         if (!isMe) btnBack.setVisibility(View.VISIBLE);
-
-        loadLocalCacheAsync(() -> {
+loadLocalCacheAsync(() -> {
             if (isMe && isAdded()) {
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    if (!isAdded()) return;
-                    StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
-                }, 150); 
+                // Никаких искусственных пауз! Отрисовываем статистику профиля мгновенно
+                StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
             }
         });
 
