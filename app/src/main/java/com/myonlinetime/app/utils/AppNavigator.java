@@ -139,7 +139,7 @@ public class AppNavigator {
         
         if (stack != null && !stack.isEmpty()) {
             Fragment target = stack.get(stack.size() - 1);
-            if (target.getView() != null) target.getView().setTranslationX(0f); // Возвращаем из-за экрана
+            if (target.getView() != null) target.getView().setVisibility(View.VISIBLE); // Страховка INVISIBLE
             ft.show(target);
         } else {
             showMainTab(tabIndex, ft, uid);
@@ -169,35 +169,35 @@ public class AppNavigator {
             if (feedFragment == null) {
                 feedFragment = new FeedFragment(); 
                 ft.add(containerId, feedFragment, "FEED");
-            } else if (feedFragment.getView() != null) feedFragment.getView().setTranslationX(0f);
+            } else if (feedFragment.getView() != null) feedFragment.getView().setVisibility(View.VISIBLE);
             ft.show(feedFragment);
         } 
         else if (index == 1) {
             if (searchFragment == null) {
                 searchFragment = new SearchFragment();
                 ft.add(containerId, searchFragment, "SEARCH");
-            } else if (searchFragment.getView() != null) searchFragment.getView().setTranslationX(0f);
+            } else if (searchFragment.getView() != null) searchFragment.getView().setVisibility(View.VISIBLE);
             ft.show(searchFragment);
         } 
         else if (index == 3) {
             if (statsFragment == null) {
                 statsFragment = new StatsHostFragment(); 
                 ft.add(containerId, statsFragment, "STATS");
-            } else if (statsFragment.getView() != null) statsFragment.getView().setTranslationX(0f);
+            } else if (statsFragment.getView() != null) statsFragment.getView().setVisibility(View.VISIBLE);
             ft.show(statsFragment);
         } 
         else if (index == 4) {
             if (profileFragment == null) {
                 profileFragment = ProfileFragment.newInstance(uid);
                 ft.add(containerId, profileFragment, "PROFILE");
-            } else if (profileFragment.getView() != null) profileFragment.getView().setTranslationX(0f);
+            } else if (profileFragment.getView() != null) profileFragment.getView().setVisibility(View.VISIBLE);
             ft.show(profileFragment);
         }
         else if (index == 5) {
             if (settingsFragment == null) {
                 settingsFragment = new SettingsFragment();
                 ft.add(containerId, settingsFragment, "SETTINGS");
-            } else if (settingsFragment.getView() != null) settingsFragment.getView().setTranslationX(0f);
+            } else if (settingsFragment.getView() != null) settingsFragment.getView().setVisibility(View.VISIBLE);
             ft.show(settingsFragment);
         }
     }
@@ -212,7 +212,7 @@ public class AppNavigator {
     }
 
     // =========================================================================
-    // МАГИЯ ОФФСКРИН-РЕНДЕРА ПРОФИЛЯ
+    // ПРЕДЗАГРУЗКА ЧЕРЕЗ INVISIBLE (Академически чисто)
     // =========================================================================
     public void preloadProfile(String uid) {
         if (profileFragment == null) {
@@ -222,29 +222,28 @@ public class AppNavigator {
               .add(containerId, profileFragment, "PROFILE")
               .commitAllowingStateLoss();
               
-            fm.executePendingTransactions(); // Форсируем синхронное создание View
+            fm.executePendingTransactions(); 
             
             View view = profileFragment.getView();
             if (view != null) {
-                // Уносим экран на 10 000 пикселей вправо. Система думает, что он на экране!
-                view.setTranslationX(10000f); 
+                // Делаем экран невидимым, чтобы он загрузился тихо
+                view.setVisibility(View.INVISIBLE); 
                 
-                // Даем 2 секунды, чтобы БД отработала, списки надулись, а Glide скачал аватарки
                 new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                    if (currentTabIndex != 4) { // Если мы еще сами не открыли Профиль
+                    if (currentTabIndex != 4) { 
                         try {
                             fm.beginTransaction().hide(profileFragment).commitAllowingStateLoss();
-                            view.setTranslationX(0f); // Возвращаем на место (он уже спрятан через hide)
+                            view.setVisibility(View.VISIBLE); // Возвращаем видимость, экран уже скрыт через hide()
                         } catch (Exception ignored) {}
+                    } else {
+                        // Если юзер кликнул в процессе загрузки - включаем свет!
+                        view.setVisibility(View.VISIBLE);
                     }
-                }, 2000);
+                }, 2500);
             }
         }
     }
 
-    // =========================================================================
-    // МАГИЯ ОФФСКРИН-РЕНДЕРА ВРЕМЕНИ
-    // =========================================================================
     public void preloadStats() {
         if (statsFragment == null) {
             statsFragment = new StatsHostFragment();
@@ -257,16 +256,18 @@ public class AppNavigator {
             
             View view = statsFragment.getView();
             if (view != null) {
-                view.setTranslationX(10000f); // Оффскрин-рендер
+                view.setVisibility(View.INVISIBLE);
                 
                 new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                     if (currentTabIndex != 3) { 
                         try {
                             fm.beginTransaction().hide(statsFragment).commitAllowingStateLoss();
-                            view.setTranslationX(0f);
+                            view.setVisibility(View.VISIBLE);
                         } catch (Exception ignored) {}
+                    } else {
+                        view.setVisibility(View.VISIBLE);
                     }
-                }, 2000);
+                }, 2500);
             }
         }
     }
