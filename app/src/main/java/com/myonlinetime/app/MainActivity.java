@@ -254,9 +254,10 @@ public class MainActivity extends AppCompatActivity {
                                 com.myonlinetime.app.utils.UsageMath.preloadCoreStats(MainActivity.this);
                                 
                                 // 2. Возвращаемся в главный поток, чтобы пнуть навигатор (UI операция)
-                                new android.os.Handler(Looper.getMainLooper()).post(() -> {
-                                    navigator.preloadProfile(account.getId());
-                                });
+new android.os.Handler(Looper.getMainLooper()).post(() -> {
+    navigator.preloadProfile(account.getId());
+    navigator.preloadStats(); // Вызываем предзагрузку статистики!
+});
                             });
                             
                             // Возвращаем false, чтобы слушатель удалился и код выполнился один раз
