@@ -44,7 +44,8 @@
                     android:textSize="16sp"
                     android:textStyle="bold" />
             </LinearLayout>
-<LinearLayout
+
+            <LinearLayout
                 android:id="@+id/how_it_works_btn"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -72,6 +73,7 @@
                     android:src="@drawable/ic_hidden_exclamation"
                     app:tint="@color/textGrayDynamic" />
             </LinearLayout>
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -135,7 +137,6 @@
                 android:id="@+id/chart_apps_list"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingHorizontal="16dp"
                 android:nestedScrollingEnabled="false"
                 android:clipToPadding="false" />
 
