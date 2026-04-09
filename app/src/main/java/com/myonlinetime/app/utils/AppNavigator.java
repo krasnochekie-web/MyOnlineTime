@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import android.view.View;
 
 public class AppNavigator {
 
@@ -85,10 +86,7 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
         
-        // 1. ВОЗВРАЩАЕМ ПЛАВНУЮ АНИМАЦИЮ (Элементы больше не будут "отваливаться" резко)
         ft.setCustomAnimations(R.anim.slide_in_up, android.R.anim.fade_out, android.R.anim.fade_in, R.anim.slide_out_down);
-        
-        // 2. ВОЗВРАЩАЕМ ПРЯТКИ (Никакого наслоения экранов и UI каши!)
         hideAll(ft);
 
         ft.add(containerId, fragment, "SUB_" + currentTabIndex + "_" + stack.size());
@@ -106,7 +104,6 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
         
-        // ВОЗВРАЩАЕМ ПЛАВНОЕ ПОЯВЛЕНИЕ ПРЕДЫДУЩЕГО ЭКРАНА
         ft.setCustomAnimations(android.R.anim.fade_in, R.anim.slide_out_down);
         
         Fragment topFragment = stack.remove(stack.size() - 1);
@@ -115,7 +112,6 @@ public class AppNavigator {
         if (stack.isEmpty()) {
             showMainTab(currentTabIndex, ft);
         } else {
-            // ЭТОТ МЕТОД ft.show() ТЕПЕРЬ САМ АВТОМАТИЧЕСКИ ПОЧИНИТ ВАШУ ШАПКУ
             ft.show(stack.get(stack.size() - 1));
         }
         
@@ -142,7 +138,9 @@ public class AppNavigator {
         List<Fragment> stack = subStacks.get(tabIndex);
         
         if (stack != null && !stack.isEmpty()) {
-            ft.show(stack.get(stack.size() - 1));
+            Fragment target = stack.get(stack.size() - 1);
+            if (target.getView() != null) target.getView().setTranslationX(0f); // Возвращаем из-за экрана
+            ft.show(target);
         } else {
             showMainTab(tabIndex, ft, uid);
         }
@@ -171,35 +169,35 @@ public class AppNavigator {
             if (feedFragment == null) {
                 feedFragment = new FeedFragment(); 
                 ft.add(containerId, feedFragment, "FEED");
-            }
+            } else if (feedFragment.getView() != null) feedFragment.getView().setTranslationX(0f);
             ft.show(feedFragment);
         } 
         else if (index == 1) {
             if (searchFragment == null) {
                 searchFragment = new SearchFragment();
                 ft.add(containerId, searchFragment, "SEARCH");
-            }
+            } else if (searchFragment.getView() != null) searchFragment.getView().setTranslationX(0f);
             ft.show(searchFragment);
         } 
         else if (index == 3) {
             if (statsFragment == null) {
                 statsFragment = new StatsHostFragment(); 
                 ft.add(containerId, statsFragment, "STATS");
-            }
+            } else if (statsFragment.getView() != null) statsFragment.getView().setTranslationX(0f);
             ft.show(statsFragment);
         } 
         else if (index == 4) {
             if (profileFragment == null) {
                 profileFragment = ProfileFragment.newInstance(uid);
                 ft.add(containerId, profileFragment, "PROFILE");
-            }
+            } else if (profileFragment.getView() != null) profileFragment.getView().setTranslationX(0f);
             ft.show(profileFragment);
         }
         else if (index == 5) {
             if (settingsFragment == null) {
                 settingsFragment = new SettingsFragment();
                 ft.add(containerId, settingsFragment, "SETTINGS");
-            }
+            } else if (settingsFragment.getView() != null) settingsFragment.getView().setTranslationX(0f);
             ft.show(settingsFragment);
         }
     }
@@ -214,29 +212,38 @@ public class AppNavigator {
     }
 
     // =========================================================================
-    // ТИХАЯ ПРЕДЗАГРУЗКА ПРОФИЛЯ
+    // МАГИЯ ОФФСКРИН-РЕНДЕРА ПРОФИЛЯ
     // =========================================================================
     public void preloadProfile(String uid) {
         if (profileFragment == null) {
             profileFragment = ProfileFragment.newInstance(uid);
             
-            // 1. Добавляем фрагмент. Он начнет грузить XML.
             fm.beginTransaction()
               .add(containerId, profileFragment, "PROFILE")
               .commitAllowingStateLoss();
               
-            // 2. Ждем ровно 1 цикл отрисовки, чтобы Android гарантированно 
-            // прожевал layout_profile.xml, и прячем его обратно!
-            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
-                try {
-                    fm.beginTransaction().hide(profileFragment).commitAllowingStateLoss();
-                } catch (Exception ignored) {}
-            });
+            fm.executePendingTransactions(); // Форсируем синхронное создание View
+            
+            View view = profileFragment.getView();
+            if (view != null) {
+                // Уносим экран на 10 000 пикселей вправо. Система думает, что он на экране!
+                view.setTranslationX(10000f); 
+                
+                // Даем 2 секунды, чтобы БД отработала, списки надулись, а Glide скачал аватарки
+                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                    if (currentTabIndex != 4) { // Если мы еще сами не открыли Профиль
+                        try {
+                            fm.beginTransaction().hide(profileFragment).commitAllowingStateLoss();
+                            view.setTranslationX(0f); // Возвращаем на место (он уже спрятан через hide)
+                        } catch (Exception ignored) {}
+                    }
+                }, 2000);
+            }
         }
     }
 
     // =========================================================================
-    // ТИХАЯ ПРЕДЗАГРУЗКА ЭКРАНА ВРЕМЕНИ И ГРАФИКОВ
+    // МАГИЯ ОФФСКРИН-РЕНДЕРА ВРЕМЕНИ
     // =========================================================================
     public void preloadStats() {
         if (statsFragment == null) {
@@ -246,11 +253,21 @@ public class AppNavigator {
               .add(containerId, statsFragment, "STATS")
               .commitAllowingStateLoss();
               
-            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
-                try {
-                    fm.beginTransaction().hide(statsFragment).commitAllowingStateLoss();
-                } catch (Exception ignored) {}
-            });
+            fm.executePendingTransactions(); 
+            
+            View view = statsFragment.getView();
+            if (view != null) {
+                view.setTranslationX(10000f); // Оффскрин-рендер
+                
+                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                    if (currentTabIndex != 3) { 
+                        try {
+                            fm.beginTransaction().hide(statsFragment).commitAllowingStateLoss();
+                            view.setTranslationX(0f);
+                        } catch (Exception ignored) {}
+                    }
+                }, 2000);
+            }
         }
     }
 }
