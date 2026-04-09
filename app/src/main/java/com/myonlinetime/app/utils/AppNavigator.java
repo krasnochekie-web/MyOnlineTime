@@ -5,7 +5,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
-import android.view.View;
 
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.ui.FeedFragment;
@@ -86,7 +85,10 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
         
+        // 1. ВОЗВРАЩАЕМ ПЛАВНУЮ АНИМАЦИЮ (Элементы больше не будут "отваливаться" резко)
         ft.setCustomAnimations(R.anim.slide_in_up, android.R.anim.fade_out, android.R.anim.fade_in, R.anim.slide_out_down);
+        
+        // 2. ВОЗВРАЩАЕМ ПРЯТКИ (Никакого наслоения экранов и UI каши!)
         hideAll(ft);
 
         ft.add(containerId, fragment, "SUB_" + currentTabIndex + "_" + stack.size());
@@ -104,6 +106,7 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
         
+        // ВОЗВРАЩАЕМ ПЛАВНОЕ ПОЯВЛЕНИЕ ПРЕДЫДУЩЕГО ЭКРАНА
         ft.setCustomAnimations(android.R.anim.fade_in, R.anim.slide_out_down);
         
         Fragment topFragment = stack.remove(stack.size() - 1);
@@ -112,6 +115,7 @@ public class AppNavigator {
         if (stack.isEmpty()) {
             showMainTab(currentTabIndex, ft);
         } else {
+            // ЭТОТ МЕТОД ft.show() ТЕПЕРЬ САМ АВТОМАТИЧЕСКИ ПОЧИНИТ ВАШУ ШАПКУ
             ft.show(stack.get(stack.size() - 1));
         }
         
@@ -138,9 +142,7 @@ public class AppNavigator {
         List<Fragment> stack = subStacks.get(tabIndex);
         
         if (stack != null && !stack.isEmpty()) {
-            Fragment target = stack.get(stack.size() - 1);
-            if (target.getView() != null) target.getView().setTranslationX(0f); // Страховка от "улета"
-            ft.show(target);
+            ft.show(stack.get(stack.size() - 1));
         } else {
             showMainTab(tabIndex, ft, uid);
         }
@@ -169,35 +171,35 @@ public class AppNavigator {
             if (feedFragment == null) {
                 feedFragment = new FeedFragment(); 
                 ft.add(containerId, feedFragment, "FEED");
-            } else if (feedFragment.getView() != null) feedFragment.getView().setTranslationX(0f);
+            }
             ft.show(feedFragment);
         } 
         else if (index == 1) {
             if (searchFragment == null) {
                 searchFragment = new SearchFragment();
                 ft.add(containerId, searchFragment, "SEARCH");
-            } else if (searchFragment.getView() != null) searchFragment.getView().setTranslationX(0f);
+            }
             ft.show(searchFragment);
         } 
         else if (index == 3) {
             if (statsFragment == null) {
                 statsFragment = new StatsHostFragment(); 
                 ft.add(containerId, statsFragment, "STATS");
-            } else if (statsFragment.getView() != null) statsFragment.getView().setTranslationX(0f);
+            }
             ft.show(statsFragment);
         } 
         else if (index == 4) {
             if (profileFragment == null) {
                 profileFragment = ProfileFragment.newInstance(uid);
                 ft.add(containerId, profileFragment, "PROFILE");
-            } else if (profileFragment.getView() != null) profileFragment.getView().setTranslationX(0f);
+            }
             ft.show(profileFragment);
         }
         else if (index == 5) {
             if (settingsFragment == null) {
                 settingsFragment = new SettingsFragment();
                 ft.add(containerId, settingsFragment, "SETTINGS");
-            } else if (settingsFragment.getView() != null) settingsFragment.getView().setTranslationX(0f);
+            }
             ft.show(settingsFragment);
         }
     }
@@ -212,41 +214,30 @@ public class AppNavigator {
     }
 
     // =========================================================================
-    // МАГИЯ ОФФСКРИН-РЕНДЕРА С УСЫПЛЕНИЕМ (SAFE MODE)
-    // Гарантирует полные списки и НЕ ЛОМАЕТ анимации переходов!
+    // ТИХАЯ ПРЕДЗАГРУЗКА ПРОФИЛЯ
     // =========================================================================
     public void preloadProfile(String uid) {
         if (profileFragment == null) {
             profileFragment = ProfileFragment.newInstance(uid);
             
+            // 1. Добавляем фрагмент. Он начнет грузить XML.
             fm.beginTransaction()
               .add(containerId, profileFragment, "PROFILE")
               .commitAllowingStateLoss();
               
-            fm.executePendingTransactions(); 
-            
-            View view = profileFragment.getView();
-            if (view != null) {
-                // 1. Уносим далеко вправо. Для системы экран VISIBLE, он рисуется!
-                view.setTranslationX(50000f); 
-                
-                // 2. Даем ровно 3.5 секунды на загрузку сервера и Glide.
-                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                    if (currentTabIndex != 4) { 
-                        try {
-                            // 3. Тихо усыпляем (без анимаций) и спасаем память
-                            fm.beginTransaction().hide(profileFragment).commitAllowingStateLoss();
-                            // 4. Возвращаем на место. Он спит на координате 0, готовый к анимации!
-                            view.setTranslationX(0f); 
-                        } catch (Exception ignored) {}
-                    } else {
-                        view.setTranslationX(0f);
-                    }
-                }, 3500);
-            }
+            // 2. Ждем ровно 1 цикл отрисовки, чтобы Android гарантированно 
+            // прожевал layout_profile.xml, и прячем его обратно!
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                try {
+                    fm.beginTransaction().hide(profileFragment).commitAllowingStateLoss();
+                } catch (Exception ignored) {}
+            });
         }
     }
 
+    // =========================================================================
+    // ТИХАЯ ПРЕДЗАГРУЗКА ЭКРАНА ВРЕМЕНИ И ГРАФИКОВ
+    // =========================================================================
     public void preloadStats() {
         if (statsFragment == null) {
             statsFragment = new StatsHostFragment();
@@ -255,23 +246,11 @@ public class AppNavigator {
               .add(containerId, statsFragment, "STATS")
               .commitAllowingStateLoss();
               
-            fm.executePendingTransactions(); 
-            
-            View view = statsFragment.getView();
-            if (view != null) {
-                view.setTranslationX(50000f); 
-                
-                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                    if (currentTabIndex != 3) { 
-                        try {
-                            fm.beginTransaction().hide(statsFragment).commitAllowingStateLoss();
-                            view.setTranslationX(0f); 
-                        } catch (Exception ignored) {}
-                    } else {
-                        view.setTranslationX(0f);
-                    }
-                }, 3500);
-            }
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                try {
+                    fm.beginTransaction().hide(statsFragment).commitAllowingStateLoss();
+                } catch (Exception ignored) {}
+            });
         }
     }
-}
+                }
