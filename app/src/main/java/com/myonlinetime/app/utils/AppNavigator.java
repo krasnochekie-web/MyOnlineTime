@@ -213,13 +213,44 @@ public class AppNavigator {
         return stack != null && !stack.isEmpty();
     }
 
+    // =========================================================================
+    // ТИХАЯ ПРЕДЗАГРУЗКА ПРОФИЛЯ
+    // =========================================================================
     public void preloadProfile(String uid) {
         if (profileFragment == null) {
             profileFragment = ProfileFragment.newInstance(uid);
+            
+            // 1. Добавляем фрагмент. Он начнет грузить XML.
             fm.beginTransaction()
               .add(containerId, profileFragment, "PROFILE")
-              .hide(profileFragment)
               .commitAllowingStateLoss();
+              
+            // 2. Ждем ровно 1 цикл отрисовки, чтобы Android гарантированно 
+            // прожевал layout_profile.xml, и прячем его обратно!
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                try {
+                    fm.beginTransaction().hide(profileFragment).commitAllowingStateLoss();
+                } catch (Exception ignored) {}
+            });
+        }
+    }
+
+    // =========================================================================
+    // ТИХАЯ ПРЕДЗАГРУЗКА ЭКРАНА ВРЕМЕНИ И ГРАФИКОВ
+    // =========================================================================
+    public void preloadStats() {
+        if (statsFragment == null) {
+            statsFragment = new StatsHostFragment();
+            
+            fm.beginTransaction()
+              .add(containerId, statsFragment, "STATS")
+              .commitAllowingStateLoss();
+              
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                try {
+                    fm.beginTransaction().hide(statsFragment).commitAllowingStateLoss();
+                } catch (Exception ignored) {}
+            });
         }
     }
 }
