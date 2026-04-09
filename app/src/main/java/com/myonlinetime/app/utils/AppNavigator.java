@@ -139,8 +139,7 @@ public class AppNavigator {
         
         if (stack != null && !stack.isEmpty()) {
             Fragment target = stack.get(stack.size() - 1);
-            // Страховка: если экран был в INVISIBLE, возвращаем видимость
-            if (target.getView() != null) target.getView().setVisibility(View.VISIBLE);
+            if (target.getView() != null) target.getView().setTranslationX(0f); // Страховка от "улета"
             ft.show(target);
         } else {
             showMainTab(tabIndex, ft, uid);
@@ -170,35 +169,35 @@ public class AppNavigator {
             if (feedFragment == null) {
                 feedFragment = new FeedFragment(); 
                 ft.add(containerId, feedFragment, "FEED");
-            } else if (feedFragment.getView() != null) feedFragment.getView().setVisibility(View.VISIBLE);
+            } else if (feedFragment.getView() != null) feedFragment.getView().setTranslationX(0f);
             ft.show(feedFragment);
         } 
         else if (index == 1) {
             if (searchFragment == null) {
                 searchFragment = new SearchFragment();
                 ft.add(containerId, searchFragment, "SEARCH");
-            } else if (searchFragment.getView() != null) searchFragment.getView().setVisibility(View.VISIBLE);
+            } else if (searchFragment.getView() != null) searchFragment.getView().setTranslationX(0f);
             ft.show(searchFragment);
         } 
         else if (index == 3) {
             if (statsFragment == null) {
                 statsFragment = new StatsHostFragment(); 
                 ft.add(containerId, statsFragment, "STATS");
-            } else if (statsFragment.getView() != null) statsFragment.getView().setVisibility(View.VISIBLE);
+            } else if (statsFragment.getView() != null) statsFragment.getView().setTranslationX(0f);
             ft.show(statsFragment);
         } 
         else if (index == 4) {
             if (profileFragment == null) {
                 profileFragment = ProfileFragment.newInstance(uid);
                 ft.add(containerId, profileFragment, "PROFILE");
-            } else if (profileFragment.getView() != null) profileFragment.getView().setVisibility(View.VISIBLE);
+            } else if (profileFragment.getView() != null) profileFragment.getView().setTranslationX(0f);
             ft.show(profileFragment);
         }
         else if (index == 5) {
             if (settingsFragment == null) {
                 settingsFragment = new SettingsFragment();
                 ft.add(containerId, settingsFragment, "SETTINGS");
-            } else if (settingsFragment.getView() != null) settingsFragment.getView().setVisibility(View.VISIBLE);
+            } else if (settingsFragment.getView() != null) settingsFragment.getView().setTranslationX(0f);
             ft.show(settingsFragment);
         }
     }
@@ -213,7 +212,8 @@ public class AppNavigator {
     }
 
     // =========================================================================
-    // ПРЕДЗАГРУЗКА ЧЕРЕЗ INVISIBLE (Академически чисто, задержка 3.5 сек)
+    // МАГИЯ ОФФСКРИН-РЕНДЕРА С УСЫПЛЕНИЕМ (SAFE MODE)
+    // Гарантирует полные списки и НЕ ЛОМАЕТ анимации переходов!
     // =========================================================================
     public void preloadProfile(String uid) {
         if (profileFragment == null) {
@@ -223,34 +223,30 @@ public class AppNavigator {
               .add(containerId, profileFragment, "PROFILE")
               .commitAllowingStateLoss();
               
-            // Форсируем парсинг XML
             fm.executePendingTransactions(); 
             
             View view = profileFragment.getView();
             if (view != null) {
-                // Прячем экран через INVISIBLE
-                view.setVisibility(View.INVISIBLE); 
+                // 1. Уносим далеко вправо. Для системы экран VISIBLE, он рисуется!
+                view.setTranslationX(50000f); 
                 
-                // Даем 3.5 секунды на выполнение сетевых запросов и расчеты списков
+                // 2. Даем ровно 3.5 секунды на загрузку сервера и Glide.
                 new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                     if (currentTabIndex != 4) { 
                         try {
+                            // 3. Тихо усыпляем (без анимаций) и спасаем память
                             fm.beginTransaction().hide(profileFragment).commitAllowingStateLoss();
-                            // Возвращаем VISIBILITY, так как фрагмент уже безопасно скрыт через hide()
-                            view.setVisibility(View.VISIBLE);
+                            // 4. Возвращаем на место. Он спит на координате 0, готовый к анимации!
+                            view.setTranslationX(0f); 
                         } catch (Exception ignored) {}
                     } else {
-                        // Если юзер успел кликнуть на вкладку до истечения 3.5 сек - просто включаем свет
-                        view.setVisibility(View.VISIBLE);
+                        view.setTranslationX(0f);
                     }
                 }, 3500);
             }
         }
     }
 
-    // =========================================================================
-    // ПРЕДЗАГРУЗКА ВРЕМЕНИ ЧЕРЕЗ INVISIBLE 
-    // =========================================================================
     public void preloadStats() {
         if (statsFragment == null) {
             statsFragment = new StatsHostFragment();
@@ -263,16 +259,16 @@ public class AppNavigator {
             
             View view = statsFragment.getView();
             if (view != null) {
-                view.setVisibility(View.INVISIBLE);
+                view.setTranslationX(50000f); 
                 
                 new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
                     if (currentTabIndex != 3) { 
                         try {
                             fm.beginTransaction().hide(statsFragment).commitAllowingStateLoss();
-                            view.setVisibility(View.VISIBLE);
+                            view.setTranslationX(0f); 
                         } catch (Exception ignored) {}
                     } else {
-                        view.setVisibility(View.VISIBLE);
+                        view.setTranslationX(0f);
                     }
                 }, 3500);
             }
