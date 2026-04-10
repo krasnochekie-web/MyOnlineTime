@@ -29,20 +29,25 @@ import java.util.Map;
 
 public class StatsHelper {
 
+    // Класс-контейнер для предзагрузки тяжелых данных
+    private static class AppData {
+        String pkgName;
+        String appName;
+        android.graphics.drawable.Drawable icon;
+        long time;
+    }
+
     // 1. МЕТОД ДЛЯ ФОНОВОЙ СИНХРОНИЗАЦИИ С СЕРВЕРОМ
     public static void syncUserProfile(final MainActivity activity) {
         final GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         if (account == null) return;
         
-        // ИСПОЛЬЗУЕМ ГЛОБАЛЬНЫЙ ПУЛ (Вместо создания новых потоков)
         Utils.backgroundExecutor.execute(() -> {
             long now = System.currentTimeMillis();
             Calendar cal = Calendar.getInstance(); 
             cal.add(Calendar.DAY_OF_YEAR, -7); 
             long startTime = cal.getTimeInMillis();
             
-            // === МАГИЯ USAGE MATH ===
-            // Получаем уже отфильтрованные данные за 1 строчку
             final Map<String, Long> exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, startTime, now);
             final long finalTime = UsageMath.sumMap(exactTimes);
             
@@ -75,9 +80,13 @@ public class StatsHelper {
         });
     }
 
-    // 2. МЕТОД ДЛЯ ОТРИСОВКИ ТОП-10 В ПРОФИЛЕ
+    // 2. МЕТОД ДЛЯ ОТРИСОВКИ ТОП-10 В ПРОФИЛЕ (ОПТИМИЗИРОВАННЫЙ)
     public static void loadStatsToProfile(final MainActivity activity, final TextView weekTimeText, final LinearLayout appsContainer) {
-        appsContainer.removeAllViews();
+        // Отключаем системные анимации Layout'a для мгновенной вставки элементов
+        if (appsContainer != null) {
+            appsContainer.setLayoutTransition(null);
+            appsContainer.removeAllViews();
+        }
         
         Utils.backgroundExecutor.execute(() -> {
             long now = System.currentTimeMillis();
@@ -85,7 +94,6 @@ public class StatsHelper {
             cal.add(Calendar.DAY_OF_YEAR, -7); 
             long startTime = cal.getTimeInMillis();
             
-            // === МАГИЯ USAGE MATH ===
             final Map<String, Long> exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, startTime, now);
             final long finalTotalMillis = UsageMath.sumMap(exactTimes);
             
@@ -93,9 +101,32 @@ public class StatsHelper {
             Collections.sort(finalList, (left, right) -> Long.compare(exactTimes.get(right), exactTimes.get(left)));
 
             PackageManager pm = activity.getPackageManager();
+            final List<AppData> preloadedData = new ArrayList<>();
 
+            // 1. Собираем тяжелые иконки и названия в ФОНЕ!
+            int fetchLimit = 0;
+            for (String pkg : finalList) {
+                if (fetchLimit >= 10) break;
+                
+                AppData data = new AppData();
+                data.pkgName = pkg;
+                data.time = exactTimes.get(pkg);
+                
+                try {
+                    ApplicationInfo appInfo = pm.getApplicationInfo(pkg, 0);
+                    data.appName = pm.getApplicationLabel(appInfo).toString();
+                    data.icon = pm.getApplicationIcon(appInfo);
+                } catch (Exception e) {
+                    data.appName = pkg;
+                }
+                
+                preloadedData.add(data);
+                fetchLimit++;
+            }
+
+            // 2. Возвращаемся в UI-поток только для мгновенной сборки карточек
             new Handler(Looper.getMainLooper()).post(() -> {
-                if (activity.isDestroyed() || activity.isFinishing()) return;
+                if (activity.isDestroyed() || activity.isFinishing() || appsContainer == null) return;
 
                 long minutes = finalTotalMillis / 1000 / 60;
                 long hours = minutes / 60;
@@ -108,42 +139,39 @@ public class StatsHelper {
                     weekTimeText.setText(timeStr);
                 }
                 
-                int limit = 0;
-                for (String pkg : finalList) {
-                    if (limit >= 10) break;
-                    
+                int uiLimit = 0;
+                for (AppData data : preloadedData) {
                     View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, appsContainer, false);
                     
-                    if (limit >= 2) {
+                    if (uiLimit >= 2) {
                         view.setVisibility(View.GONE);
                     }
+                    
                     ImageView iconView = view.findViewById(R.id.app_icon);
                     TextView nameView = view.findViewById(R.id.app_name);
                     TextView timeView = view.findViewById(R.id.app_time);
                     
-                    try {
-                        ApplicationInfo appInfo = pm.getApplicationInfo(pkg, 0);
-                        nameView.setText(pm.getApplicationLabel(appInfo));
-                        iconView.setImageDrawable(pm.getApplicationIcon(appInfo));
-                    } catch (Exception e) { nameView.setText(pkg); }
+                    nameView.setText(data.appName);
+                    if (data.icon != null) iconView.setImageDrawable(data.icon);
+                    timeView.setText(Utils.formatTime(activity, data.time));
                     
-                    timeView.setText(Utils.formatTime(activity, exactTimes.get(pkg)));
                     appsContainer.addView(view);
 
+                    // Пробрасываем события для владельца (скрытие/описание)
                     if (activity.getSupportFragmentManager() != null) {
                         for (Fragment f : activity.getSupportFragmentManager().getFragments()) {
                             if (f instanceof ProfileFragment) {
-                                ((ProfileFragment) f).setupOwnerAppInteractions(activity, view, pkg);
+                                ((ProfileFragment) f).setupOwnerAppInteractions(activity, view, data.pkgName);
                                 break;
                             }
                         }
                     }
-                    limit++;
+                    uiLimit++;
                 }
                 
                 View btnExpand = ((View)appsContainer.getParent()).findViewById(R.id.btn_expand_apps);
                 if (btnExpand != null) {
-                    btnExpand.setVisibility(limit > 2 ? View.VISIBLE : View.GONE);
+                    btnExpand.setVisibility(uiLimit > 2 ? View.VISIBLE : View.GONE);
                 }
             });
         });
