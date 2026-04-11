@@ -40,8 +40,12 @@ public class StatsTimeFragment extends Fragment {
         }
     }
     
-    // 1. ИСПОЛЬЗУЕМ CONCURRENT HASH MAP ДЛЯ ПОТОКОБЕЗОПАСНОСТИ
+    // =========================================================================
+    // СИСТЕМА УМНОГО КЭША (Потокобезопасная)
+    // =========================================================================
     private static final Map<Integer, CachedStats> statsCache = new ConcurrentHashMap<>();
+    private static final Map<Integer, Boolean> isCalculating = new ConcurrentHashMap<>(); // Предохранитель от дубликатов
+    
     private static long cachedWeek = -1;
     private static long cachedMonth = -1;
     private static long cachedYear = -1;
@@ -158,6 +162,48 @@ public class StatsTimeFragment extends Fragment {
         return view;
     }
 
+    // =========================================================================
+    // СЕРДЦЕ РАСЧЕТОВ (Изолировано для UI и Фона)
+    // =========================================================================
+    private static void computeMathForPosition(int position, Context context) {
+        if (statsCache.containsKey(position)) return; // Уже посчитано
+        
+        isCalculating.put(position, true); // Блокируем дубликаты
+
+        long endTime = System.currentTimeMillis();
+        Map<String, Long> exactTimes = null;
+        Calendar cal = Calendar.getInstance(); 
+        
+        if (UsageMath.todayStartMillis == 0) {
+            Calendar tCal = Calendar.getInstance();
+            tCal.set(Calendar.HOUR_OF_DAY, 0); tCal.set(Calendar.MINUTE, 0); tCal.set(Calendar.SECOND, 0); tCal.set(Calendar.MILLISECOND, 0);
+            UsageMath.todayStartMillis = tCal.getTimeInMillis();
+            Calendar yCal = (Calendar) tCal.clone();
+            yCal.add(Calendar.DAY_OF_YEAR, -1);
+            UsageMath.yesterdayStartMillis = yCal.getTimeInMillis();
+        }
+
+        switch (position) {
+            case 0: exactTimes = UsageMath.todayExactCache != null ? UsageMath.todayExactCache : UsageMath.getFilteredExactTimes(context, UsageMath.todayStartMillis, endTime); break;
+            case 1: exactTimes = UsageMath.yesterdayExactCache != null ? UsageMath.yesterdayExactCache : UsageMath.getFilteredExactTimes(context, UsageMath.yesterdayStartMillis, UsageMath.todayStartMillis); break;
+            case 2: cal.add(Calendar.DAY_OF_YEAR, -7); exactTimes = UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_DAILY, cal.getTimeInMillis(), endTime); break;
+            case 3: cal.add(Calendar.MONTH, -1); exactTimes = UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_WEEKLY, cal.getTimeInMillis(), endTime); break;
+            default: cal.add(Calendar.YEAR, -1); exactTimes = UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime); break;
+        }
+
+        final Map<String, Long> finalExactTimes = exactTimes;
+        final List<String> finalList = new ArrayList<>(finalExactTimes.keySet());
+        
+        Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
+        final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
+        
+        statsCache.put(position, new CachedStats(finalList, finalExactTimes, finalTotalMillis));
+        isCalculating.put(position, false); // Снимаем блокировку
+    }
+
+    // =========================================================================
+    // УМНЫЙ UI ДИСПЕТЧЕР
+    // =========================================================================
     private void fetchAndApplyData(int position, MainActivity activity) {
         Runnable updateUI = () -> {
             CachedStats cached = statsCache.get(position);
@@ -178,6 +224,7 @@ public class StatsTimeFragment extends Fragment {
             }
         };
 
+        // 1. Если данные уже в кэше - рисуем моментально
         if (statsCache.containsKey(position)) {
             updateUI.run();
             return; 
@@ -185,42 +232,32 @@ public class StatsTimeFragment extends Fragment {
 
         if (!isAdded()) return;
         totalTimeText.setText(activity.getString(R.string.loading));
-        
-        Utils.backgroundExecutor.execute(() -> {
-            if (UsageMath.todayStartMillis == 0) {
-                Calendar cal = Calendar.getInstance();
-                cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
-                UsageMath.todayStartMillis = cal.getTimeInMillis();
-                Calendar yCal = (Calendar) cal.clone();
-                yCal.add(Calendar.DAY_OF_YEAR, -1);
-                UsageMath.yesterdayStartMillis = yCal.getTimeInMillis();
-            }
 
-            long endTime = System.currentTimeMillis();
-            Map<String, Long> exactTimes = null;
-            Calendar cal = Calendar.getInstance(); 
-            
-            switch (position) {
-                case 0: exactTimes = UsageMath.todayExactCache != null ? UsageMath.todayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.todayStartMillis, endTime); break;
-                case 1: exactTimes = UsageMath.yesterdayExactCache != null ? UsageMath.yesterdayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.yesterdayStartMillis, UsageMath.todayStartMillis); break;
-                case 2: cal.add(Calendar.DAY_OF_YEAR, -7); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, cal.getTimeInMillis(), endTime); break;
-                case 3: cal.add(Calendar.MONTH, -1); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_WEEKLY, cal.getTimeInMillis(), endTime); break;
-                default: cal.add(Calendar.YEAR, -1); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime); break;
-            }
+        // 2. Данные сейчас считаются в фоне прогревальщиком?
+        if (Boolean.TRUE.equals(isCalculating.get(position))) {
+            // Режим Ждуна: ничего не запускаем, просто тихо пингуем кэш каждые 150мс
+            pollCache(position, updateUI);
+        } else {
+            // 3. Расчет вообще не начинался? Запускаем сами (Страховка)
+            Utils.backgroundExecutor.execute(() -> {
+                computeMathForPosition(position, activity);
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    if (isAdded()) updateUI.run();
+                });
+            }); 
+        }
+    }
 
-            final Map<String, Long> finalExactTimes = exactTimes;
-            final List<String> finalList = new ArrayList<>(finalExactTimes.keySet());
-            
-            Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
-            final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
-            
-            new Handler(Looper.getMainLooper()).post(() -> {
-                if (isAdded()) {
-                    statsCache.put(position, new CachedStats(finalList, finalExactTimes, finalTotalMillis));
-                    updateUI.run();
-                }
-            });
-        }); 
+    // Пинговальщик для "Режима Ждуна"
+    private void pollCache(int position, Runnable updateUI) {
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!isAdded()) return;
+            if (statsCache.containsKey(position)) {
+                updateUI.run(); // Кэш готов! Рисуем.
+            } else {
+                pollCache(position, updateUI); // Все еще нет? Ждем дальше.
+            }
+        }, 150);
     }
 
     private void loadBottomCardsData(Context context, TextView txtWeek, TextView txtMonth, TextView txtYear) {
@@ -258,43 +295,16 @@ public class StatsTimeFragment extends Fragment {
     }
 
     // =========================================================================
-    // 2. ТИХИЙ ПРОГРЕВ КЭША ДЛЯ ВСЕХ ПЕРИОДОВ
+    // ТИХИЙ ПРОГРЕВ КЭША (Параллельный режим)
     // =========================================================================
     public static void preloadAllCachesQuietly(Context context) {
-        Utils.backgroundExecutor.execute(() -> {
-            for (int position = 0; position <= 4; position++) {
-                if (statsCache.containsKey(position)) continue; 
-
-                long endTime = System.currentTimeMillis();
-                Map<String, Long> exactTimes = null;
-                Calendar cal = Calendar.getInstance(); 
-                
-                if (UsageMath.todayStartMillis == 0) {
-                    Calendar tCal = Calendar.getInstance();
-                    tCal.set(Calendar.HOUR_OF_DAY, 0); tCal.set(Calendar.MINUTE, 0); tCal.set(Calendar.SECOND, 0); tCal.set(Calendar.MILLISECOND, 0);
-                    UsageMath.todayStartMillis = tCal.getTimeInMillis();
-                    Calendar yCal = (Calendar) tCal.clone();
-                    yCal.add(Calendar.DAY_OF_YEAR, -1);
-                    UsageMath.yesterdayStartMillis = yCal.getTimeInMillis();
-                }
-
-                switch (position) {
-                    case 0: exactTimes = UsageMath.todayExactCache != null ? UsageMath.todayExactCache : UsageMath.getFilteredExactTimes(context, UsageMath.todayStartMillis, endTime); break;
-                    case 1: exactTimes = UsageMath.yesterdayExactCache != null ? UsageMath.yesterdayExactCache : UsageMath.getFilteredExactTimes(context, UsageMath.yesterdayStartMillis, UsageMath.todayStartMillis); break;
-                    case 2: cal.add(Calendar.DAY_OF_YEAR, -7); exactTimes = UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_DAILY, cal.getTimeInMillis(), endTime); break;
-                    case 3: cal.add(Calendar.MONTH, -1); exactTimes = UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_WEEKLY, cal.getTimeInMillis(), endTime); break;
-                    default: cal.add(Calendar.YEAR, -1); exactTimes = UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime); break;
-                }
-
-                final Map<String, Long> finalExactTimes = exactTimes;
-                final List<String> finalList = new ArrayList<>(finalExactTimes.keySet());
-                
-                Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
-                final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
-                
-                statsCache.put(position, new CachedStats(finalList, finalExactTimes, finalTotalMillis));
-            }
-        });
+        // Мы НЕ используем один цикл на 10 секунд. Мы кидаем 5 быстрых параллельных задач!
+        for (int i = 0; i <= 4; i++) {
+            final int pos = i;
+            Utils.backgroundExecutor.execute(() -> {
+                computeMathForPosition(pos, context);
+            });
+        }
     }
             }
-            
+                
