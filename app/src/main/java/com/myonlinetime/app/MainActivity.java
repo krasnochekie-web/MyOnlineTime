@@ -86,7 +86,6 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(this::updateNotificationBadge);
         }
     };
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         SharedPreferences appPrefs = getSharedPreferences("AppPrefs", MODE_PRIVATE);
@@ -243,21 +242,24 @@ public class MainActivity extends AppCompatActivity {
                     // =========================================================================
                     // МАГИЯ ОТЛОЖЕННОГО СТАРТА (IDLE HANDLER)
                     // =========================================================================
-                    Looper.myQueue().addIdleHandler(new MessageQueue.IdleHandler() {
+                    Looper.myQueue().addIdleHandler(new android.os.MessageQueue.IdleHandler() {
                         @Override
                         public boolean queueIdle() {
                             // Этот код выполнится ТОЛЬКО тогда, когда UI полностью нарисован
                             // и процессор телефона "отдыхает". 0% влияния на плавность старта!
                             
                             Utils.backgroundExecutor.execute(() -> {
-                                // 1. Тихо считаем статистику использования в фоне
+                                // 1. Тихо считаем статистику использования за Сегодня и Вчера в фоне
                                 com.myonlinetime.app.utils.UsageMath.preloadCoreStats(MainActivity.this);
                                 
-                                // 2. Возвращаемся в главный поток, чтобы пнуть навигатор (UI операция)
-new android.os.Handler(Looper.getMainLooper()).post(() -> {
-    navigator.preloadProfile(account.getId());
-    navigator.preloadStats(); // Вызываем предзагрузку статистики!
-});
+                                // 2. НОВОЕ: Запускаем тяжелый прогрев всех кэшей для экрана Времени (Неделя, Месяц, Год)
+                                com.myonlinetime.app.ui.StatsTimeFragment.preloadAllCachesQuietly(MainActivity.this);
+                                
+                                // 3. Возвращаемся в главный поток, чтобы пнуть навигатор (UI операция)
+                                new android.os.Handler(Looper.getMainLooper()).post(() -> {
+                                    navigator.preloadProfile(account.getId());
+                                    navigator.preloadStats(); // Вызываем предзагрузку статистики!
+                                });
                             });
                             
                             // Возвращаем false, чтобы слушатель удалился и код выполнился один раз
@@ -268,7 +270,7 @@ new android.os.Handler(Looper.getMainLooper()).post(() -> {
                 }
             } catch (Exception ignored) { }
         });
-    } 
+    }
 
     // =========================================================================
     // ГЛАВНЫЙ СИНХРОНИЗАТОР ШАПКИ
