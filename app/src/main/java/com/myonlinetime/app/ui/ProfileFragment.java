@@ -140,9 +140,6 @@ public class ProfileFragment extends Fragment {
 
         loadLocalCacheAsync(() -> {
             if (isMe && isAdded()) {
-                // =========================================================================
-                // БЕРЕМ СВОИ ДАННЫЕ МГНОВЕННО ИЗ ГЛОБАЛЬНОГО КЭША (ВМЕСТО STATS HELPER)
-                // =========================================================================
                 renderMyStatsFromCache(activity, weekTimeText, appsContainerLocal);
             }
         });
@@ -229,7 +226,6 @@ public class ProfileFragment extends Fragment {
                                     cacheChanged = true;
                                 }
                                 if (cacheChanged) {
-                                    // Обновляем из кэша, если скрыли новые приложения с другого устройства
                                     renderMyStatsFromCache(activity, weekTimeText, appsContainerLocal);
                                 }
                             }
@@ -243,7 +239,6 @@ public class ProfileFragment extends Fragment {
                                     localDescriptions.clear();
                                     localDescriptions.putAll(user.appDescriptions);
                                 }
-                                // Рисуем чужой профиль из сети (isOwner = false)
                                 renderProfileStats(user.topApps, appsContainerLocal, activity, weekTimeText, false);
                             }
 
@@ -360,16 +355,11 @@ public class ProfileFragment extends Fragment {
         });
     }
 
-    // =========================================================================
-    // СВЯЗЬ С ГЛОБАЛЬНЫМ КЭШЕМ (Только для Своего профиля)
-    // =========================================================================
     private void renderMyStatsFromCache(MainActivity activity, TextView weekTimeText, LinearLayout container) {
-        // Индекс 2 - это статистика за Неделю
         if (UsageMath.globalTimeCache.containsKey(2)) {
             UsageMath.AppStatsResult weeklyData = UsageMath.globalTimeCache.get(2);
             renderProfileStats(weeklyData.times, container, activity, weekTimeText, true);
         } else {
-            // Режим Ждуна
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (!isAdded()) return;
                 if (UsageMath.globalTimeCache.containsKey(2)) {
@@ -385,7 +375,7 @@ public class ProfileFragment extends Fragment {
     }
 
     // =========================================================================
-    // УНИВЕРСАЛЬНЫЙ РЕНДЕР (Для Своего и Чужого профиля)
+    // ИСПРАВЛЕННЫЙ РЕНДЕР (Время не теряется!)
     // =========================================================================
     private void renderProfileStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText, boolean isOwner) {
         container.removeAllViews();
@@ -398,7 +388,6 @@ public class ProfileFragment extends Fragment {
             PackageManager pm = activity.getPackageManager();
             int limit = 0;
 
-            // Гарантируем сортировку по убыванию (актуально для чужих данных с сервера)
             List<Map.Entry<String, Long>> sortedEntries = new ArrayList<>(topApps.entrySet());
             Collections.sort(sortedEntries, (a, b) -> Long.compare(b.getValue(), a.getValue()));
 
@@ -406,7 +395,12 @@ public class ProfileFragment extends Fragment {
                 String pkgName = entry.getKey();
 
                 if (localHiddenApps.contains(pkgName)) continue;
-                if (limit >= 10) break;
+
+                // Сначала плюсуем ВСЁ время
+                totalVisibleTime[0] += entry.getValue();
+
+                // А уже потом обрезаем список иконок до 10 штук
+                if (limit >= 10) continue;
 
                 AppUiData data = new AppUiData();
                 data.pkgName = pkgName;
@@ -422,7 +416,6 @@ public class ProfileFragment extends Fragment {
                 }
 
                 preloadedData.add(data);
-                totalVisibleTime[0] += entry.getValue();
                 limit++;
             }
 
@@ -445,7 +438,6 @@ public class ProfileFragment extends Fragment {
                     if (data.icon != null) iconView.setImageDrawable(data.icon);
                     timeView.setText(Utils.formatTime(activity, data.time));
 
-                    // Развилка: Владелец может скрывать, Гость просто смотрит
                     if (isOwner) {
                         setupOwnerAppInteractions(activity, view, data.pkgName);
                     } else {
