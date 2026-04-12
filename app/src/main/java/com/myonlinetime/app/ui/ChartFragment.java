@@ -1,7 +1,6 @@
 package com.myonlinetime.app.ui;
 
 import android.app.Dialog;
-import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
@@ -24,11 +23,7 @@ import com.myonlinetime.app.adapters.AppsAdapter;
 import com.myonlinetime.app.utils.UsageMath;
 import com.myonlinetime.app.utils.Utils;
 
-import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
 
 public class ChartFragment extends Fragment {
 
@@ -38,25 +33,15 @@ public class ChartFragment extends Fragment {
     private RecyclerView recyclerView;
     private AppsAdapter adapter;
 
-    private final List<DayData> weeklyData = new ArrayList<>();
     private int currentIndex = 6; 
 
-    // =========================================================================
-    // ПЕРЕМЕННЫЕ ДЛЯ УМНОЙ АНИМАЦИИ
-    // =========================================================================
+    // Переменные для графиков
     private boolean isDataReady = false;
     private boolean isAnimated = false;
     private long[] cachedBarMillis;
     private String[] cachedDayLabels;
-
-    static class DayData {
-        long totalMillis;
-        String dayOfWeekShort;
-        String dateTopStr;
-        String dateMiddleStr;
-        List<String> appList;
-        Map<String, Long> appTimes;
-    }
+    private String[] cachedTopDates;
+    private String[] cachedMiddleDates;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -91,17 +76,14 @@ public class ChartFragment extends Fragment {
             if (currentIndex < 6) selectDay(currentIndex + 1);
         });
 
-        loadWeeklyData();
+        // Пытаемся загрузить данные из Глобального Кэша
+        tryLoadChartData();
         return view;
     }
 
-    // =========================================================================
-    // СПУСКОВОЙ КРЮЧОК АНИМАЦИИ
-    // =========================================================================
     @Override
     public void onResume() {
         super.onResume();
-        // Запускаем отрисовку графиков ТОЛЬКО если пользователь смотрит на экран
         if (isDataReady && !isAnimated) {
             runChartAnimation();
         }
@@ -132,111 +114,95 @@ public class ChartFragment extends Fragment {
     }
 
     private void selectDay(int index) {
-        if (weeklyData.isEmpty() || index < 0 || index > 6) return;
+        if (!isDataReady || index < 0 || index > 6) return;
         currentIndex = index;
         
         barChart.setSelectedIndex(index);
-        DayData data = weeklyData.get(index);
+        
+        // Берем данные за конкретный день прямо из Глобального Кэша!
+        UsageMath.AppStatsResult data = UsageMath.globalChartCache[index];
 
-        topDateTxt.setText(data.dateTopStr);
-        middleDateTxt.setText(data.dateMiddleStr);
+        topDateTxt.setText(cachedTopDates[index]);
+        middleDateTxt.setText(cachedMiddleDates[index]);
         topTimeTxt.setText(Utils.formatTime(getContext(), data.totalMillis));
         
-        adapter.updateData(data.appList, data.appTimes);
+        adapter.updateData(data.list, data.times);
 
         btnPrev.setAlpha(currentIndex == 0 ? 0.3f : 1.0f);
         btnNext.setAlpha(currentIndex == 6 ? 0.3f : 1.0f);
     }
 
-    private void loadWeeklyData() {
+    // =========================================================================
+    // ПОДКЛЮЧЕНИЕ К ГЛОБАЛЬНОМУ КЭШУ (Режим Ждуна)
+    // =========================================================================
+    private void tryLoadChartData() {
         topDateTxt.setText(getString(R.string.loading));
-        
-        // ИСПОЛЬЗУЕМ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ (с низким приоритетом для плавной отрисовки UI)
-        Utils.backgroundExecutor.execute(() -> {
-            MainActivity activity = (MainActivity) getActivity();
-            if (activity == null || !isAdded()) return;
 
-            String[] daysArray = getResources().getStringArray(R.array.days_short);
-            String[] monthsArray = getResources().getStringArray(R.array.months_custom);
-
-            long[] barMillis = new long[7];
-            String[] dayLabels = new String[7];
-
-            weeklyData.clear();
-
-            for (int i = 0; i < 7; i++) {
-                Calendar cal = Calendar.getInstance();
-                cal.add(Calendar.DAY_OF_YEAR, -(6 - i)); 
-                
-                int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK) - 1; // 0=Sunday
-                String dayShort = daysArray[dayOfWeek];
-                
-                int dayNum = cal.get(Calendar.DAY_OF_MONTH);
-                int monthNum = cal.get(Calendar.MONTH);
-                String monthStr = monthsArray[monthNum];
-
-                String topFormatted = getString(R.string.format_date_top, dayShort, dayNum, monthStr);
-                String middleFormatted = getString(R.string.format_date_middle, dayShort, dayNum, monthStr);
-
-                Map<String, Long> times;
-
-                // Используем мгновенный кэш для Сегодня и Вчера, если он доступен
-                if (i == 6 && UsageMath.todayExactCache != null) {
-                    times = UsageMath.todayExactCache;
-                } else if (i == 5 && UsageMath.yesterdayExactCache != null) {
-                    times = UsageMath.yesterdayExactCache;
-                } else {
-                    // Считаем вручную через ядро UsageMath для старых дней
-                    Calendar startCal = (Calendar) cal.clone();
-                    startCal.set(Calendar.HOUR_OF_DAY, 0); startCal.set(Calendar.MINUTE, 0); startCal.set(Calendar.SECOND, 0); startCal.set(Calendar.MILLISECOND, 0);
-                    
-                    Calendar endCal = (Calendar) cal.clone();
-                    endCal.set(Calendar.HOUR_OF_DAY, 23); endCal.set(Calendar.MINUTE, 59); endCal.set(Calendar.SECOND, 59); endCal.set(Calendar.MILLISECOND, 999);
-                    
-                    times = UsageMath.getFilteredExactTimes(activity, startCal.getTimeInMillis(), endCal.getTimeInMillis());
-                }
-                
-                long dailyTotal = UsageMath.sumMap(times);
-                
-                // Фильтр внутри UsageMath уже отбросил мусор. Просто сортируем результат.
-                List<String> apps = new ArrayList<>(times.keySet());
-                Collections.sort(apps, (left, right) -> Long.compare(times.get(right), times.get(left)));
-
-                DayData dayData = new DayData();
-                dayData.totalMillis = dailyTotal;
-                dayData.dayOfWeekShort = dayShort;
-                dayData.dateTopStr = topFormatted;
-                dayData.dateMiddleStr = middleFormatted;
-                dayData.appList = apps;
-                dayData.appTimes = times;
-                
-                weeklyData.add(dayData); 
-                barMillis[i] = dailyTotal;
-                dayLabels[i] = dayShort;
+        if (UsageMath.isChartReady) {
+            prepareUiData(); // Данные готовы! Форматируем даты и рисуем.
+        } else if (UsageMath.isChartCalculating) {
+            pollCache(); // Данные в процессе расчета. Ждем.
+        } else {
+            // Если фоновый расчет не был запущен - запускаем его принудительно (Страховка)
+            if (getActivity() != null) {
+                UsageMath.preloadAbsoluteEverything(getActivity());
+                pollCache();
             }
+        }
+    }
 
-            new Handler(Looper.getMainLooper()).post(() -> {
-                if (!isAdded()) return;
-                
-                // Сохраняем данные в память, но график пока не строим
-                cachedBarMillis = barMillis;
-                cachedDayLabels = dayLabels;
-                isDataReady = true;
-
-                // Если вкладка активна прямо сейчас - стартуем!
-                if (isResumed() && !isAnimated) {
-                    runChartAnimation();
-                }
-            });
-        });
+    private void pollCache() {
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!isAdded()) return;
+            if (UsageMath.isChartReady) {
+                prepareUiData();
+            } else {
+                pollCache();
+            }
+        }, 150); // Пингуем каждые 150мс
     }
 
     // =========================================================================
-    // ЛОГИКА ОТРИСОВКИ ГРАФИКОВ
+    // ПОДГОТОВКА СТРОК И АНИМАЦИЯ
     // =========================================================================
+    private void prepareUiData() {
+        String[] daysArray = getResources().getStringArray(R.array.days_short);
+        String[] monthsArray = getResources().getStringArray(R.array.months_custom);
+
+        cachedBarMillis = new long[7];
+        cachedDayLabels = new String[7];
+        cachedTopDates = new String[7];
+        cachedMiddleDates = new String[7];
+
+        for (int i = 0; i < 7; i++) {
+            Calendar cal = Calendar.getInstance();
+            cal.add(Calendar.DAY_OF_YEAR, -(6 - i)); 
+            
+            int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK) - 1;
+            String dayShort = daysArray[dayOfWeek];
+            
+            int dayNum = cal.get(Calendar.DAY_OF_MONTH);
+            int monthNum = cal.get(Calendar.MONTH);
+            String monthStr = monthsArray[monthNum];
+
+            cachedTopDates[i] = getString(R.string.format_date_top, dayShort, dayNum, monthStr);
+            cachedMiddleDates[i] = getString(R.string.format_date_middle, dayShort, dayNum, monthStr);
+            
+            cachedBarMillis[i] = UsageMath.globalChartCache[i].totalMillis;
+            cachedDayLabels[i] = dayShort;
+        }
+
+        isDataReady = true;
+
+        if (isResumed() && !isAnimated) {
+            runChartAnimation();
+        }
+    }
+
     private void runChartAnimation() {
-        isAnimated = true; // Блокируем повторную анимацию при свайпе туда-сюда
+        isAnimated = true; 
         barChart.setData(cachedBarMillis, cachedDayLabels);
-        selectDay(6); // Выбираем сегодняшний день, что заполняет тексты и список приложений
+        selectDay(6); // По умолчанию показываем Сегодня
     }
-}
+                                             }
+
