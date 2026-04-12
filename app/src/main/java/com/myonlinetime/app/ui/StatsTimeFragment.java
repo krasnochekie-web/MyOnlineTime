@@ -1,6 +1,5 @@
 package com.myonlinetime.app.ui;
 
-import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.os.Bundle;
 import android.os.Handler;
@@ -24,32 +23,8 @@ import com.myonlinetime.app.adapters.AppsAdapter;
 import com.myonlinetime.app.utils.UsageMath;
 import com.myonlinetime.app.utils.Utils;
 
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
 public class StatsTimeFragment extends Fragment {
 
-    private static class CachedStats {
-        List<String> list; Map<String, Long> times; long totalMillis;
-        CachedStats(List<String> l, Map<String, Long> t, long tm) {
-            this.list = l; this.times = t; this.totalMillis = tm;
-        }
-    }
-    
-    // =========================================================================
-    // СИСТЕМА УМНОГО КЭША (Потокобезопасная)
-    // =========================================================================
-    private static final Map<Integer, CachedStats> statsCache = new ConcurrentHashMap<>();
-    private static final Map<Integer, Boolean> isCalculating = new ConcurrentHashMap<>(); // Предохранитель от дубликатов
-    
-    private static long cachedWeek = -1;
-    private static long cachedMonth = -1;
-    private static long cachedYear = -1;
-    
     private TextView totalTimeText;
     private AppsAdapter adapter;
     private View listFooterCard;
@@ -143,6 +118,7 @@ public class StatsTimeFragment extends Fragment {
         spinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
         spinner.setAdapter(spinnerAdapter);
 
+        // Запускаем сборщик данных для нижних карточек
         loadBottomCardsData(activity, textWeek, textMonth, textYear);
 
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -157,56 +133,18 @@ public class StatsTimeFragment extends Fragment {
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         }); 
 
+        // Грузим первый экран
         fetchAndApplyData(0, activity);
 
         return view;
     }
 
     // =========================================================================
-    // СЕРДЦЕ РАСЧЕТОВ (Изолировано для UI и Фона)
-    // =========================================================================
-    private static void computeMathForPosition(int position, Context context) {
-        if (statsCache.containsKey(position)) return; // Уже посчитано
-        
-        isCalculating.put(position, true); // Блокируем дубликаты
-
-        long endTime = System.currentTimeMillis();
-        Map<String, Long> exactTimes = null;
-        Calendar cal = Calendar.getInstance(); 
-        
-        if (UsageMath.todayStartMillis == 0) {
-            Calendar tCal = Calendar.getInstance();
-            tCal.set(Calendar.HOUR_OF_DAY, 0); tCal.set(Calendar.MINUTE, 0); tCal.set(Calendar.SECOND, 0); tCal.set(Calendar.MILLISECOND, 0);
-            UsageMath.todayStartMillis = tCal.getTimeInMillis();
-            Calendar yCal = (Calendar) tCal.clone();
-            yCal.add(Calendar.DAY_OF_YEAR, -1);
-            UsageMath.yesterdayStartMillis = yCal.getTimeInMillis();
-        }
-
-        switch (position) {
-            case 0: exactTimes = UsageMath.todayExactCache != null ? UsageMath.todayExactCache : UsageMath.getFilteredExactTimes(context, UsageMath.todayStartMillis, endTime); break;
-            case 1: exactTimes = UsageMath.yesterdayExactCache != null ? UsageMath.yesterdayExactCache : UsageMath.getFilteredExactTimes(context, UsageMath.yesterdayStartMillis, UsageMath.todayStartMillis); break;
-            case 2: cal.add(Calendar.DAY_OF_YEAR, -7); exactTimes = UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_DAILY, cal.getTimeInMillis(), endTime); break;
-            case 3: cal.add(Calendar.MONTH, -1); exactTimes = UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_WEEKLY, cal.getTimeInMillis(), endTime); break;
-            default: cal.add(Calendar.YEAR, -1); exactTimes = UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime); break;
-        }
-
-        final Map<String, Long> finalExactTimes = exactTimes;
-        final List<String> finalList = new ArrayList<>(finalExactTimes.keySet());
-        
-        Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
-        final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
-        
-        statsCache.put(position, new CachedStats(finalList, finalExactTimes, finalTotalMillis));
-        isCalculating.put(position, false); // Снимаем блокировку
-    }
-
-    // =========================================================================
-    // УМНЫЙ UI ДИСПЕТЧЕР
+    // УМНЫЙ UI ДИСПЕТЧЕР (Связь с Глобальным Кэшем UsageMath)
     // =========================================================================
     private void fetchAndApplyData(int position, MainActivity activity) {
         Runnable updateUI = () -> {
-            CachedStats cached = statsCache.get(position);
+            UsageMath.AppStatsResult cached = UsageMath.globalTimeCache.get(position);
             if (cached == null || !isAdded()) return;
             
             totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
@@ -224,8 +162,8 @@ public class StatsTimeFragment extends Fragment {
             }
         };
 
-        // 1. Если данные уже в кэше - рисуем моментально
-        if (statsCache.containsKey(position)) {
+        // 1. Идеальный сценарий: данные уже в глобальном кэше
+        if (UsageMath.globalTimeCache.containsKey(position)) {
             updateUI.run();
             return; 
         }
@@ -233,18 +171,13 @@ public class StatsTimeFragment extends Fragment {
         if (!isAdded()) return;
         totalTimeText.setText(activity.getString(R.string.loading));
 
-        // 2. Данные сейчас считаются в фоне прогревальщиком?
-        if (Boolean.TRUE.equals(isCalculating.get(position))) {
-            // Режим Ждуна: ничего не запускаем, просто тихо пингуем кэш каждые 150мс
+        // 2. Данные сейчас считаются в глобальном пуле?
+        if (Boolean.TRUE.equals(UsageMath.isCalculating.get(position))) {
             pollCache(position, updateUI);
         } else {
-            // 3. Расчет вообще не начинался? Запускаем сами (Страховка)
-            Utils.backgroundExecutor.execute(() -> {
-                computeMathForPosition(position, activity);
-                new Handler(Looper.getMainLooper()).post(() -> {
-                    if (isAdded()) updateUI.run();
-                });
-            }); 
+            // 3. Страховка: если по какой-то причине MainActivity не запустила прогрев - пинаем вручную
+            UsageMath.preloadAbsoluteEverything(activity);
+            pollCache(position, updateUI);
         }
     }
 
@@ -252,59 +185,42 @@ public class StatsTimeFragment extends Fragment {
     private void pollCache(int position, Runnable updateUI) {
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (!isAdded()) return;
-            if (statsCache.containsKey(position)) {
-                updateUI.run(); // Кэш готов! Рисуем.
+            if (UsageMath.globalTimeCache.containsKey(position)) {
+                updateUI.run(); 
             } else {
-                pollCache(position, updateUI); // Все еще нет? Ждем дальше.
+                pollCache(position, updateUI); 
             }
         }, 150);
     }
 
+    // =========================================================================
+    // ОТРИСОВКА НИЖНИХ КАРТОЧЕК (Тоже берут из Глобального Кэша)
+    // =========================================================================
     private void loadBottomCardsData(Context context, TextView txtWeek, TextView txtMonth, TextView txtYear) {
-        if (cachedWeek != -1) {
-            txtWeek.setText(Utils.formatTime(context, cachedWeek));
-            txtMonth.setText(Utils.formatTime(context, cachedMonth));
-            txtYear.setText(Utils.formatTime(context, cachedYear));
-            return;
-        }
+        Runnable updateCards = new Runnable() {
+            @Override
+            public void run() {
+                if (!isAdded()) return;
+                
+                // Проверяем индексы: 2-Неделя, 3-Месяц, 4-Год
+                UsageMath.AppStatsResult weekData = UsageMath.globalTimeCache.get(2);
+                UsageMath.AppStatsResult monthData = UsageMath.globalTimeCache.get(3);
+                UsageMath.AppStatsResult yearData = UsageMath.globalTimeCache.get(4);
 
-        Utils.backgroundExecutor.execute(() -> {
-            long now = System.currentTimeMillis();
-            
-            Calendar calW = Calendar.getInstance(); calW.add(Calendar.DAY_OF_YEAR, -7);
-            long weekTotal = UsageMath.sumMap(UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_DAILY, calW.getTimeInMillis(), now));
-
-            Calendar calM = Calendar.getInstance(); calM.add(Calendar.MONTH, -1);
-            long monthTotal = UsageMath.sumMap(UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_WEEKLY, calM.getTimeInMillis(), now));
-
-            Calendar calY = Calendar.getInstance(); calY.add(Calendar.YEAR, -1);
-            long yearTotal = UsageMath.sumMap(UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_YEARLY, calY.getTimeInMillis(), now));
-
-            cachedWeek = weekTotal;
-            cachedMonth = monthTotal;
-            cachedYear = yearTotal;
-
-            new Handler(Looper.getMainLooper()).post(() -> {
-                if (isAdded()) {
-                    txtWeek.setText(Utils.formatTime(context, weekTotal));
-                    txtMonth.setText(Utils.formatTime(context, monthTotal));
-                    txtYear.setText(Utils.formatTime(context, yearTotal));
+                if (weekData != null && monthData != null && yearData != null) {
+                    // Все три периода досчитались в фоне! Выводим на экран.
+                    txtWeek.setText(Utils.formatTime(context, weekData.totalMillis));
+                    txtMonth.setText(Utils.formatTime(context, monthData.totalMillis));
+                    txtYear.setText(Utils.formatTime(context, yearData.totalMillis));
+                } else {
+                    // Какая-то часть еще в процессе расчета (скорее всего Год). Ждем еще 300мс.
+                    new Handler(Looper.getMainLooper()).postDelayed(this, 300);
                 }
-            });
-        });
-    }
-
-    // =========================================================================
-    // ТИХИЙ ПРОГРЕВ КЭША (Параллельный режим)
-    // =========================================================================
-    public static void preloadAllCachesQuietly(Context context) {
-        // Мы НЕ используем один цикл на 10 секунд. Мы кидаем 5 быстрых параллельных задач!
-        for (int i = 0; i <= 4; i++) {
-            final int pos = i;
-            Utils.backgroundExecutor.execute(() -> {
-                computeMathForPosition(pos, context);
-            });
-        }
+            }
+        };
+        
+        // Запускаем первую проверку
+        updateCards.run();
     }
             }
                 
