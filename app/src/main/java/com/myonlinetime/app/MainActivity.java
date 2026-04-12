@@ -15,6 +15,7 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Looper;
+import android.os.MessageQueue;
 import android.util.LruCache;
 import android.view.View;
 import android.view.Window;
@@ -94,6 +95,12 @@ public class MainActivity extends AppCompatActivity {
 
         super.onCreate(savedInstanceState);
         
+        // =========================================================================
+        // ИСПРАВЛЕНИЕ: Убрали синхронный запуск тяжелой математики из старта экрана
+        // com.myonlinetime.app.utils.UsageMath.preloadCoreStats(this); 
+        // Теперь это происходит мягко в IdleHandler (см. конец файла)
+        // =========================================================================
+        
         Window window = getWindow();
         window.getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE 
@@ -103,12 +110,6 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         
         navigator = new com.myonlinetime.app.utils.AppNavigator(this, R.id.fragment_container);
-        
-        // =========================================================================
-        // ВКЛЮЧАЕМ РЕЖИМ БОГА: Прогреваем всё приложение в фоне мгновенно при старте!
-        // =========================================================================
-com.myonlinetime.app.utils.UsageMath.preloadCoreStats(this);
-        
         mainRoot = findViewById(R.id.main_root);
         
         prefs = getSharedPreferences("UserProfile", MODE_PRIVATE);
@@ -240,17 +241,34 @@ com.myonlinetime.app.utils.UsageMath.preloadCoreStats(this);
                 if (account != null && navigator != null) {
                     
                     // =========================================================================
-                    // УБРАЛИ IDLE HANDLER: Математика уже стартовала, просто пинаем интерфейс
+                    // МАГИЯ ОТЛОЖЕННОГО СТАРТА (IDLE HANDLER)
                     // =========================================================================
-                    new android.os.Handler(Looper.getMainLooper()).post(() -> {
-                        navigator.preloadProfile(account.getId());
-                        navigator.preloadStats(); 
+                    Looper.myQueue().addIdleHandler(new MessageQueue.IdleHandler() {
+                        @Override
+                        public boolean queueIdle() {
+                            // Этот код выполнится ТОЛЬКО тогда, когда UI полностью нарисован
+                            // и процессор телефона "отдыхает". 0% влияния на плавность старта!
+                            
+                            Utils.backgroundExecutor.execute(() -> {
+                                // 1. Тихо считаем статистику использования в фоне
+                                com.myonlinetime.app.utils.UsageMath.preloadCoreStats(MainActivity.this);
+                                
+                                // 2. Возвращаемся в главный поток, чтобы пнуть навигатор (UI операция)
+new android.os.Handler(Looper.getMainLooper()).post(() -> {
+    navigator.preloadProfile(account.getId());
+    navigator.preloadStats(); // Вызываем предзагрузку статистики!
+});
+                            });
+                            
+                            // Возвращаем false, чтобы слушатель удалился и код выполнился один раз
+                            return false; 
+                        }
                     });
                     
                 }
             } catch (Exception ignored) { }
         });
-    }
+    } 
 
     // =========================================================================
     // ГЛАВНЫЙ СИНХРОНИЗАТОР ШАПКИ
