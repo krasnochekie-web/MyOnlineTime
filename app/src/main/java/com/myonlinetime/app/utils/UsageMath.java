@@ -35,11 +35,14 @@ public class UsageMath {
         }
     }
 
-    // Кэш для списков "Время" (0-Сегодня, 1-Вчера, 2-Неделя, 3-Месяц, 4-Год, 5-За всё время)
+    // 1. Кэш для списков "Время" (0-Сегодня, 1-Вчера, 2-Неделя, 3-Месяц, 4-Год, 5-За всё время)
     public static final ConcurrentHashMap<Integer, AppStatsResult> globalTimeCache = new ConcurrentHashMap<>();
-    
-    // Блокировки от двойных расчетов
     public static final ConcurrentHashMap<Integer, Boolean> isCalculating = new ConcurrentHashMap<>();
+
+    // 2. НОВОЕ: Кэш для вкладки "Графики" (Массив из 7 дней, индекс 6 - Сегодня)
+    public static AppStatsResult[] globalChartCache = new AppStatsResult[7];
+    public static boolean isChartCalculating = false; 
+    public static boolean isChartReady = false;
 
     // Свой собственный пул для ядерного прогрева
     private static final ExecutorService preloaderPool = Executors.newFixedThreadPool(5);
@@ -72,11 +75,14 @@ public class UsageMath {
             yesterdayStartMillis = yCal.getTimeInMillis();
         }
 
-        // Кидаем 6 параллельных задач (от "Сегодня" до "За всё время")
+        // 1. Кидаем 6 параллельных задач для вкладки "Время" (от "Сегодня" до "За всё время")
         for (int i = 0; i <= 5; i++) {
             final int pos = i;
             preloaderPool.execute(() -> computeTimeTabGlobal(context, pos));
         }
+
+        // 2. Кидаем задачу для вкладки "Графики"
+        preloaderPool.execute(() -> computeChartGlobal(context));
     }
 
     // =========================================================================
@@ -125,6 +131,46 @@ public class UsageMath {
         
         globalTimeCache.put(position, new AppStatsResult(finalList, finalExactTimes, finalTotalMillis));
         isCalculating.put(position, false); 
+    }
+
+    // =========================================================================
+    // ВЫЧИСЛИТЕЛЬ ДЛЯ ГРАФИКОВ (Разбивка по 7 дням)
+    // =========================================================================
+    private static void computeChartGlobal(Context context) {
+        if (isChartReady || isChartCalculating) return;
+        isChartCalculating = true;
+
+        for (int i = 0; i < 7; i++) {
+            Calendar cal = Calendar.getInstance();
+            cal.add(Calendar.DAY_OF_YEAR, -(6 - i)); 
+            
+            Map<String, Long> times;
+
+            // Используем мгновенный кэш для Сегодня и Вчера, если они уже готовы
+            if (i == 6 && todayExactCache != null) {
+                times = todayExactCache;
+            } else if (i == 5 && yesterdayExactCache != null) {
+                times = yesterdayExactCache;
+            } else {
+                Calendar startCal = (Calendar) cal.clone();
+                startCal.set(Calendar.HOUR_OF_DAY, 0); startCal.set(Calendar.MINUTE, 0); startCal.set(Calendar.SECOND, 0); startCal.set(Calendar.MILLISECOND, 0);
+                
+                Calendar endCal = (Calendar) cal.clone();
+                endCal.set(Calendar.HOUR_OF_DAY, 23); endCal.set(Calendar.MINUTE, 59); endCal.set(Calendar.SECOND, 59); endCal.set(Calendar.MILLISECOND, 999);
+                
+                times = getFilteredExactTimes(context, startCal.getTimeInMillis(), endCal.getTimeInMillis());
+            }
+
+            final Map<String, Long> finalExactTimes = times;
+            final List<String> finalList = new ArrayList<>(finalExactTimes.keySet());
+            Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
+            final long finalTotalMillis = sumMap(finalExactTimes);
+
+            globalChartCache[i] = new AppStatsResult(finalList, finalExactTimes, finalTotalMillis);
+        }
+
+        isChartReady = true;
+        isChartCalculating = false;
     }
 
     // =========================================================================
@@ -231,5 +277,4 @@ public class UsageMath {
         
         return cachedUserApps.contains(pkg) && !isSystemTrash;
     }
-                       }
-                    
+                }
