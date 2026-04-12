@@ -35,11 +35,12 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 import com.myonlinetime.app.models.User;
-import com.myonlinetime.app.utils.StatsHelper;
+import com.myonlinetime.app.utils.UsageMath;
 import com.myonlinetime.app.utils.Utils;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -55,7 +56,6 @@ public class ProfileFragment extends Fragment {
     
     private boolean isMe = false;
 
-    // Вспомогательный класс для тяжелых данных иконок
     private static class AppUiData {
         String pkgName;
         String appName;
@@ -113,9 +113,6 @@ public class ProfileFragment extends Fragment {
         final ImageView btnCollapse = view.findViewById(R.id.btn_collapse_apps);
         final LinearLayout appsContainerLocal = view.findViewById(R.id.profile_apps_container);
 
-        // =========================================================================
-        // УБИЙЦА ОТЛОЖЕННЫХ АНИМАЦИЙ: Запрещаем эффект "сборки на глазах"
-        // =========================================================================
         if (appsContainerLocal != null) {
             appsContainerLocal.setLayoutTransition(null); 
         }
@@ -143,7 +140,10 @@ public class ProfileFragment extends Fragment {
 
         loadLocalCacheAsync(() -> {
             if (isMe && isAdded()) {
-                StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
+                // =========================================================================
+                // БЕРЕМ СВОИ ДАННЫЕ МГНОВЕННО ИЗ ГЛОБАЛЬНОГО КЭША (ВМЕСТО STATS HELPER)
+                // =========================================================================
+                renderMyStatsFromCache(activity, weekTimeText, appsContainerLocal);
             }
         });
 
@@ -229,7 +229,8 @@ public class ProfileFragment extends Fragment {
                                     cacheChanged = true;
                                 }
                                 if (cacheChanged) {
-                                    StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
+                                    // Обновляем из кэша, если скрыли новые приложения с другого устройства
+                                    renderMyStatsFromCache(activity, weekTimeText, appsContainerLocal);
                                 }
                             }
 
@@ -242,7 +243,8 @@ public class ProfileFragment extends Fragment {
                                     localDescriptions.clear();
                                     localDescriptions.putAll(user.appDescriptions);
                                 }
-                                renderOtherUserStats(user.topApps, appsContainerLocal, activity, weekTimeText);
+                                // Рисуем чужой профиль из сети (isOwner = false)
+                                renderProfileStats(user.topApps, appsContainerLocal, activity, weekTimeText, false);
                             }
 
                         } else if (!isMe) nameView.setText(activity.getString(R.string.new_user));
@@ -359,21 +361,48 @@ public class ProfileFragment extends Fragment {
     }
 
     // =========================================================================
-    // ОПТИМИЗИРОВАННЫЙ РЕНДЕР (Без фризов UI)
+    // СВЯЗЬ С ГЛОБАЛЬНЫМ КЭШЕМ (Только для Своего профиля)
     // =========================================================================
-    private void renderOtherUserStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText) {
+    private void renderMyStatsFromCache(MainActivity activity, TextView weekTimeText, LinearLayout container) {
+        // Индекс 2 - это статистика за Неделю
+        if (UsageMath.globalTimeCache.containsKey(2)) {
+            UsageMath.AppStatsResult weeklyData = UsageMath.globalTimeCache.get(2);
+            renderProfileStats(weeklyData.times, container, activity, weekTimeText, true);
+        } else {
+            // Режим Ждуна
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (!isAdded()) return;
+                if (UsageMath.globalTimeCache.containsKey(2)) {
+                    renderMyStatsFromCache(activity, weekTimeText, container);
+                } else {
+                    if (!Boolean.TRUE.equals(UsageMath.isCalculating.get(2))) {
+                        UsageMath.preloadAbsoluteEverything(activity);
+                    }
+                    renderMyStatsFromCache(activity, weekTimeText, container);
+                }
+            }, 150);
+        }
+    }
+
+    // =========================================================================
+    // УНИВЕРСАЛЬНЫЙ РЕНДЕР (Для Своего и Чужого профиля)
+    // =========================================================================
+    private void renderProfileStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText, boolean isOwner) {
         container.removeAllViews();
         if (topApps == null || topApps.isEmpty() || activity == null) return;
 
         final long[] totalVisibleTime = {0};
         final List<AppUiData> preloadedData = new ArrayList<>();
 
-        // Собираем все тяжелые иконки и названия в ФОНЕ!
         Utils.backgroundExecutor.execute(() -> {
             PackageManager pm = activity.getPackageManager();
             int limit = 0;
 
-            for (Map.Entry<String, Long> entry : topApps.entrySet()) {
+            // Гарантируем сортировку по убыванию (актуально для чужих данных с сервера)
+            List<Map.Entry<String, Long>> sortedEntries = new ArrayList<>(topApps.entrySet());
+            Collections.sort(sortedEntries, (a, b) -> Long.compare(b.getValue(), a.getValue()));
+
+            for (Map.Entry<String, Long> entry : sortedEntries) {
                 String pkgName = entry.getKey();
 
                 if (localHiddenApps.contains(pkgName)) continue;
@@ -397,7 +426,6 @@ public class ProfileFragment extends Fragment {
                 limit++;
             }
 
-            // Возвращаемся в главный поток только для мгновенной вставки готовых картинок
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
 
@@ -413,23 +441,27 @@ public class ProfileFragment extends Fragment {
                     ImageView lockView = view.findViewById(R.id.app_lock_icon);
                     ImageView optionsBtn = view.findViewById(R.id.btn_app_options);
 
-                    if (optionsBtn != null) optionsBtn.setVisibility(View.GONE);
-                    if (lockView != null) lockView.setVisibility(View.GONE);
-
-                    if (data.description != null && !data.description.isEmpty() && descView != null) {
-                        descView.setText(data.description);
-                        descView.setVisibility(View.VISIBLE);
-                    }
-
                     nameView.setText(data.appName);
                     if (data.icon != null) iconView.setImageDrawable(data.icon);
                     timeView.setText(Utils.formatTime(activity, data.time));
+
+                    // Развилка: Владелец может скрывать, Гость просто смотрит
+                    if (isOwner) {
+                        setupOwnerAppInteractions(activity, view, data.pkgName);
+                    } else {
+                        if (optionsBtn != null) optionsBtn.setVisibility(View.GONE);
+                        if (lockView != null) lockView.setVisibility(View.GONE);
+                        
+                        if (data.description != null && !data.description.isEmpty() && descView != null) {
+                            descView.setText(data.description);
+                            descView.setVisibility(View.VISIBLE);
+                        }
+                    }
                     
                     container.addView(view);
                     currentLimit++;
                 }
 
-                // Логика футера
                 if (currentLimit == 0 && !topApps.isEmpty()) {
                     String hiddenText = activity.getString(R.string.hidden_time_placeholder) + "  "; 
                     SpannableString ss = new SpannableString(hiddenText);
