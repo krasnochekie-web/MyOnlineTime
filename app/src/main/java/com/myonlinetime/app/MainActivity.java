@@ -107,7 +107,7 @@ public class MainActivity extends AppCompatActivity {
         // =========================================================================
         // ВКЛЮЧАЕМ РЕЖИМ БОГА: Прогреваем всё приложение в фоне мгновенно при старте!
         // =========================================================================
-        com.myonlinetime.app.utils.UsageMath.preloadAbsoluteEverything(this);
+com.myonlinetime.app.utils.UsageMath.preloadCoreStats(this);
         
         mainRoot = findViewById(R.id.main_root);
         
