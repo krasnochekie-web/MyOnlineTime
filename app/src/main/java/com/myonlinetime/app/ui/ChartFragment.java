@@ -142,10 +142,10 @@ public class ChartFragment extends Fragment {
             prepareUiData(); // Данные готовы! Форматируем даты и рисуем.
         } else if (UsageMath.isChartCalculating) {
             pollCache(); // Данные в процессе расчета. Ждем.
-        } else {
+} else {
             // Если фоновый расчет не был запущен - запускаем его принудительно (Страховка)
             if (getActivity() != null) {
-                UsageMath.preloadAbsoluteEverything(getActivity());
+                UsageMath.requestChartCalculation(getActivity()); // <--- ИСПРАВЛЕНО
                 pollCache();
             }
         }
