@@ -35,12 +35,11 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 import com.myonlinetime.app.models.User;
-import com.myonlinetime.app.utils.UsageMath;
+import com.myonlinetime.app.utils.StatsHelper;
 import com.myonlinetime.app.utils.Utils;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -56,6 +55,7 @@ public class ProfileFragment extends Fragment {
     
     private boolean isMe = false;
 
+    // Вспомогательный класс для тяжелых данных иконок
     private static class AppUiData {
         String pkgName;
         String appName;
@@ -113,6 +113,9 @@ public class ProfileFragment extends Fragment {
         final ImageView btnCollapse = view.findViewById(R.id.btn_collapse_apps);
         final LinearLayout appsContainerLocal = view.findViewById(R.id.profile_apps_container);
 
+        // =========================================================================
+        // УБИЙЦА ОТЛОЖЕННЫХ АНИМАЦИЙ: Запрещаем эффект "сборки на глазах"
+        // =========================================================================
         if (appsContainerLocal != null) {
             appsContainerLocal.setLayoutTransition(null); 
         }
@@ -140,7 +143,7 @@ public class ProfileFragment extends Fragment {
 
         loadLocalCacheAsync(() -> {
             if (isMe && isAdded()) {
-                renderMyStatsFromCache(activity, weekTimeText, appsContainerLocal);
+                StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
             }
         });
 
@@ -226,7 +229,7 @@ public class ProfileFragment extends Fragment {
                                     cacheChanged = true;
                                 }
                                 if (cacheChanged) {
-                                    renderMyStatsFromCache(activity, weekTimeText, appsContainerLocal);
+                                    StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
                                 }
                             }
 
@@ -239,8 +242,7 @@ public class ProfileFragment extends Fragment {
                                     localDescriptions.clear();
                                     localDescriptions.putAll(user.appDescriptions);
                                 }
-                                // === ИЗМЕНЕНИЕ: Рисуем чужой профиль, передавая null вместо закэшированного списка ===
-                                renderProfileStats(null, user.topApps, appsContainerLocal, activity, weekTimeText, false);
+                                renderOtherUserStats(user.topApps, appsContainerLocal, activity, weekTimeText);
                             }
 
                         } else if (!isMe) nameView.setText(activity.getString(R.string.new_user));
@@ -357,72 +359,29 @@ public class ProfileFragment extends Fragment {
     }
 
     // =========================================================================
-    // СИНХРОНИЗИРОВАННЫЙ РЕНДЕР (Берем данные строго из UsageMath)
+    // ОПТИМИЗИРОВАННЫЙ РЕНДЕР (Без фризов UI)
     // =========================================================================
-    private void renderMyStatsFromCache(MainActivity activity, TextView weekTimeText, LinearLayout container) {
-        if (UsageMath.globalTimeCache.containsKey(2)) {
-            UsageMath.AppStatsResult weeklyData = UsageMath.globalTimeCache.get(2);
-            renderProfileStats(weeklyData, null, container, activity, weekTimeText, true);
-        } else {
-            UsageMath.requestCalculation(activity, 2);
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                if (!isAdded()) return;
-                renderMyStatsFromCache(activity, weekTimeText, container);
-            }, 150);
-        }
-    }
-
-    private void renderProfileStats(UsageMath.AppStatsResult cachedData, Map<String, Long> fallbackTopApps, LinearLayout container, MainActivity activity, TextView weekTimeText, boolean isOwner) {
+    private void renderOtherUserStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText) {
         container.removeAllViews();
-        if (activity == null) return;
+        if (topApps == null || topApps.isEmpty() || activity == null) return;
 
         final long[] totalVisibleTime = {0};
         final List<AppUiData> preloadedData = new ArrayList<>();
 
+        // Собираем все тяжелые иконки и названия в ФОНЕ!
         Utils.backgroundExecutor.execute(() -> {
             PackageManager pm = activity.getPackageManager();
             int limit = 0;
 
-            List<String> sortedPackages = new ArrayList<>();
-            Map<String, Long> timesMap;
+            for (Map.Entry<String, Long> entry : topApps.entrySet()) {
+                String pkgName = entry.getKey();
 
-            // === ИДЕАЛЬНАЯ СИНХРОНИЗАЦИЯ СПИСКОВ С ЭКРАНОМ "ВРЕМЯ" ===
-            if (cachedData != null) {
-                // Это мой профиль: берем жесткий, готовый список из UsageMath
-                sortedPackages = cachedData.list;
-                timesMap = cachedData.times;
-                
-                long finalTotalTime = cachedData.totalMillis;
-                for (String hiddenApp : localHiddenApps) {
-                    Long time = timesMap.get(hiddenApp);
-                    if (time != null) finalTotalTime -= time;
-                }
-                totalVisibleTime[0] = finalTotalTime;
-            } else {
-                // Это чужой профиль: сортируем данные с сервера
-                timesMap = fallbackTopApps;
-                if (timesMap != null) {
-                    List<Map.Entry<String, Long>> sortedEntries = new ArrayList<>(timesMap.entrySet());
-                    Collections.sort(sortedEntries, (a, b) -> Long.compare(b.getValue(), a.getValue()));
-                    for (Map.Entry<String, Long> entry : sortedEntries) {
-                        sortedPackages.add(entry.getKey());
-                        if (!localHiddenApps.contains(entry.getKey())) {
-                            totalVisibleTime[0] += entry.getValue();
-                        }
-                    }
-                }
-            }
-
-            for (String pkgName : sortedPackages) {
                 if (localHiddenApps.contains(pkgName)) continue;
-                if (limit >= 10) break; // Обрезаем список иконок до 10. Время уже посчитано!
-
-                Long appTime = timesMap.get(pkgName);
-                if (appTime == null) continue;
+                if (limit >= 10) break;
 
                 AppUiData data = new AppUiData();
                 data.pkgName = pkgName;
-                data.time = appTime;
+                data.time = entry.getValue();
                 data.description = localDescriptions.get(pkgName);
 
                 try {
@@ -434,9 +393,11 @@ public class ProfileFragment extends Fragment {
                 }
 
                 preloadedData.add(data);
+                totalVisibleTime[0] += entry.getValue();
                 limit++;
             }
 
+            // Возвращаемся в главный поток только для мгновенной вставки готовых картинок
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
 
@@ -452,27 +413,24 @@ public class ProfileFragment extends Fragment {
                     ImageView lockView = view.findViewById(R.id.app_lock_icon);
                     ImageView optionsBtn = view.findViewById(R.id.btn_app_options);
 
+                    if (optionsBtn != null) optionsBtn.setVisibility(View.GONE);
+                    if (lockView != null) lockView.setVisibility(View.GONE);
+
+                    if (data.description != null && !data.description.isEmpty() && descView != null) {
+                        descView.setText(data.description);
+                        descView.setVisibility(View.VISIBLE);
+                    }
+
                     nameView.setText(data.appName);
                     if (data.icon != null) iconView.setImageDrawable(data.icon);
                     timeView.setText(Utils.formatTime(activity, data.time));
-
-                    if (isOwner) {
-                        setupOwnerAppInteractions(activity, view, data.pkgName);
-                    } else {
-                        if (optionsBtn != null) optionsBtn.setVisibility(View.GONE);
-                        if (lockView != null) lockView.setVisibility(View.GONE);
-                        
-                        if (data.description != null && !data.description.isEmpty() && descView != null) {
-                            descView.setText(data.description);
-                            descView.setVisibility(View.VISIBLE);
-                        }
-                    }
                     
                     container.addView(view);
                     currentLimit++;
                 }
 
-                if (currentLimit == 0 && (timesMap != null && !timesMap.isEmpty())) {
+                // Логика футера
+                if (currentLimit == 0 && !topApps.isEmpty()) {
                     String hiddenText = activity.getString(R.string.hidden_time_placeholder) + "  "; 
                     SpannableString ss = new SpannableString(hiddenText);
                     
