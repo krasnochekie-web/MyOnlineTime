@@ -33,6 +33,11 @@ public class StatsTimeFragment extends Fragment {
     
     private boolean isFirstLoad = true; 
 
+    // Кэш для нижних карточек
+    private static long cachedWeek = -1;
+    private static long cachedMonth = -1;
+    private static long cachedYear = -1;
+
     public StatsTimeFragment() {}
 
     @Override
@@ -118,7 +123,7 @@ public class StatsTimeFragment extends Fragment {
         spinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
         spinner.setAdapter(spinnerAdapter);
 
-        // Запускаем сборщик данных для нижних карточек
+        // Запускаем сборщик данных для нижних карточек (теперь безопасно!)
         loadBottomCardsData(activity, textWeek, textMonth, textYear);
 
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -171,12 +176,12 @@ public class StatsTimeFragment extends Fragment {
         if (!isAdded()) return;
         totalTimeText.setText(activity.getString(R.string.loading));
 
-        // 2. Данные сейчас считаются в глобальном пуле?
+        // 2. Данные сейчас считаются в глобальном пуле? Ждем.
         if (Boolean.TRUE.equals(UsageMath.isCalculating.get(position))) {
             pollCache(position, updateUI);
         } else {
-            // 3. Страховка: если по какой-то причине MainActivity не запустила прогрев - пинаем вручную
-            UsageMath.preloadAbsoluteEverything(activity);
+            // 3. БАГФИКС: Даем точечную команду посчитать именно этот период!
+            UsageMath.requestCalculation(activity, position);
             pollCache(position, updateUI);
         }
     }
@@ -194,33 +199,44 @@ public class StatsTimeFragment extends Fragment {
     }
 
     // =========================================================================
-    // ОТРИСОВКА НИЖНИХ КАРТОЧЕК (Тоже берут из Глобального Кэша)
+    // ОТРИСОВКА НИЖНИХ КАРТОЧЕК (Без зависаний)
     // =========================================================================
     private void loadBottomCardsData(Context context, TextView txtWeek, TextView txtMonth, TextView txtYear) {
+        if (cachedWeek != -1) {
+            txtWeek.setText(Utils.formatTime(context, cachedWeek));
+            txtMonth.setText(Utils.formatTime(context, cachedMonth));
+            txtYear.setText(Utils.formatTime(context, cachedYear));
+            return;
+        }
+
+        // БАГФИКС: Строго даем команду начать расчеты в фоне!
+        UsageMath.requestCalculation(context, 2);
+        UsageMath.requestCalculation(context, 3);
+        UsageMath.requestCalculation(context, 4);
+
         Runnable updateCards = new Runnable() {
             @Override
             public void run() {
                 if (!isAdded()) return;
                 
-                // Проверяем индексы: 2-Неделя, 3-Месяц, 4-Год
                 UsageMath.AppStatsResult weekData = UsageMath.globalTimeCache.get(2);
                 UsageMath.AppStatsResult monthData = UsageMath.globalTimeCache.get(3);
                 UsageMath.AppStatsResult yearData = UsageMath.globalTimeCache.get(4);
 
                 if (weekData != null && monthData != null && yearData != null) {
-                    // Все три периода досчитались в фоне! Выводим на экран.
-                    txtWeek.setText(Utils.formatTime(context, weekData.totalMillis));
-                    txtMonth.setText(Utils.formatTime(context, monthData.totalMillis));
-                    txtYear.setText(Utils.formatTime(context, yearData.totalMillis));
+                    cachedWeek = weekData.totalMillis;
+                    cachedMonth = monthData.totalMillis;
+                    cachedYear = yearData.totalMillis;
+
+                    txtWeek.setText(Utils.formatTime(context, cachedWeek));
+                    txtMonth.setText(Utils.formatTime(context, cachedMonth));
+                    txtYear.setText(Utils.formatTime(context, cachedYear));
                 } else {
-                    // Какая-то часть еще в процессе расчета (скорее всего Год). Ждем еще 300мс.
                     new Handler(Looper.getMainLooper()).postDelayed(this, 300);
                 }
             }
         };
         
-        // Запускаем первую проверку
         updateCards.run();
     }
-            }
-                
+}
