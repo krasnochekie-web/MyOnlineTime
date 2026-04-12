@@ -119,11 +119,13 @@ public class UsageMath {
                 break;
         }
 
-        final List<String> finalList = new ArrayList<>(exactTimes.keySet());
-        Collections.sort(finalList, (left, right) -> Long.compare(exactTimes.get(right), exactTimes.get(left)));
-        final long finalTotalMillis = sumMap(exactTimes);
+        // БАГФИКС: Создаем final-копию для лямбды сортировщика, чтобы Java не ругалась
+        final Map<String, Long> finalExactTimes = exactTimes;
+        final List<String> finalList = new ArrayList<>(finalExactTimes.keySet());
+        Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
+        final long finalTotalMillis = sumMap(finalExactTimes);
         
-        globalTimeCache.put(position, new AppStatsResult(finalList, exactTimes, finalTotalMillis));
+        globalTimeCache.put(position, new AppStatsResult(finalList, finalExactTimes, finalTotalMillis));
         isCalculating.put(position, false); 
     }
 
