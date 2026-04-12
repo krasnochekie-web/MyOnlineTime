@@ -239,7 +239,8 @@ public class ProfileFragment extends Fragment {
                                     localDescriptions.clear();
                                     localDescriptions.putAll(user.appDescriptions);
                                 }
-                                renderProfileStats(user.topApps, appsContainerLocal, activity, weekTimeText, false);
+                                // === ИЗМЕНЕНИЕ: Рисуем чужой профиль, передавая null вместо закэшированного списка ===
+                                renderProfileStats(null, user.topApps, appsContainerLocal, activity, weekTimeText, false);
                             }
 
                         } else if (!isMe) nameView.setText(activity.getString(R.string.new_user));
@@ -355,31 +356,25 @@ public class ProfileFragment extends Fragment {
         });
     }
 
+    // =========================================================================
+    // СИНХРОНИЗИРОВАННЫЙ РЕНДЕР (Берем данные строго из UsageMath)
+    // =========================================================================
     private void renderMyStatsFromCache(MainActivity activity, TextView weekTimeText, LinearLayout container) {
         if (UsageMath.globalTimeCache.containsKey(2)) {
             UsageMath.AppStatsResult weeklyData = UsageMath.globalTimeCache.get(2);
-            renderProfileStats(weeklyData.times, container, activity, weekTimeText, true);
+            renderProfileStats(weeklyData, null, container, activity, weekTimeText, true);
         } else {
+            UsageMath.requestCalculation(activity, 2);
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (!isAdded()) return;
-                if (UsageMath.globalTimeCache.containsKey(2)) {
-                    renderMyStatsFromCache(activity, weekTimeText, container);
-                } else {
-                    if (!Boolean.TRUE.equals(UsageMath.isCalculating.get(2))) {
-                        UsageMath.preloadAbsoluteEverything(activity);
-                    }
-                    renderMyStatsFromCache(activity, weekTimeText, container);
-                }
+                renderMyStatsFromCache(activity, weekTimeText, container);
             }, 150);
         }
     }
 
-    // =========================================================================
-    // ИСПРАВЛЕННЫЙ РЕНДЕР (Время не теряется!)
-    // =========================================================================
-    private void renderProfileStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText, boolean isOwner) {
+    private void renderProfileStats(UsageMath.AppStatsResult cachedData, Map<String, Long> fallbackTopApps, LinearLayout container, MainActivity activity, TextView weekTimeText, boolean isOwner) {
         container.removeAllViews();
-        if (topApps == null || topApps.isEmpty() || activity == null) return;
+        if (activity == null) return;
 
         final long[] totalVisibleTime = {0};
         final List<AppUiData> preloadedData = new ArrayList<>();
@@ -388,23 +383,46 @@ public class ProfileFragment extends Fragment {
             PackageManager pm = activity.getPackageManager();
             int limit = 0;
 
-            List<Map.Entry<String, Long>> sortedEntries = new ArrayList<>(topApps.entrySet());
-            Collections.sort(sortedEntries, (a, b) -> Long.compare(b.getValue(), a.getValue()));
+            List<String> sortedPackages = new ArrayList<>();
+            Map<String, Long> timesMap;
 
-            for (Map.Entry<String, Long> entry : sortedEntries) {
-                String pkgName = entry.getKey();
+            // === ИДЕАЛЬНАЯ СИНХРОНИЗАЦИЯ СПИСКОВ С ЭКРАНОМ "ВРЕМЯ" ===
+            if (cachedData != null) {
+                // Это мой профиль: берем жесткий, готовый список из UsageMath
+                sortedPackages = cachedData.list;
+                timesMap = cachedData.times;
+                
+                long finalTotalTime = cachedData.totalMillis;
+                for (String hiddenApp : localHiddenApps) {
+                    Long time = timesMap.get(hiddenApp);
+                    if (time != null) finalTotalTime -= time;
+                }
+                totalVisibleTime[0] = finalTotalTime;
+            } else {
+                // Это чужой профиль: сортируем данные с сервера
+                timesMap = fallbackTopApps;
+                if (timesMap != null) {
+                    List<Map.Entry<String, Long>> sortedEntries = new ArrayList<>(timesMap.entrySet());
+                    Collections.sort(sortedEntries, (a, b) -> Long.compare(b.getValue(), a.getValue()));
+                    for (Map.Entry<String, Long> entry : sortedEntries) {
+                        sortedPackages.add(entry.getKey());
+                        if (!localHiddenApps.contains(entry.getKey())) {
+                            totalVisibleTime[0] += entry.getValue();
+                        }
+                    }
+                }
+            }
 
+            for (String pkgName : sortedPackages) {
                 if (localHiddenApps.contains(pkgName)) continue;
+                if (limit >= 10) break; // Обрезаем список иконок до 10. Время уже посчитано!
 
-                // Сначала плюсуем ВСЁ время
-                totalVisibleTime[0] += entry.getValue();
-
-                // А уже потом обрезаем список иконок до 10 штук
-                if (limit >= 10) continue;
+                Long appTime = timesMap.get(pkgName);
+                if (appTime == null) continue;
 
                 AppUiData data = new AppUiData();
                 data.pkgName = pkgName;
-                data.time = entry.getValue();
+                data.time = appTime;
                 data.description = localDescriptions.get(pkgName);
 
                 try {
@@ -454,7 +472,7 @@ public class ProfileFragment extends Fragment {
                     currentLimit++;
                 }
 
-                if (currentLimit == 0 && !topApps.isEmpty()) {
+                if (currentLimit == 0 && (timesMap != null && !timesMap.isEmpty())) {
                     String hiddenText = activity.getString(R.string.hidden_time_placeholder) + "  "; 
                     SpannableString ss = new SpannableString(hiddenText);
                     
