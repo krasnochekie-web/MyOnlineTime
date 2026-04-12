@@ -22,9 +22,6 @@ import java.util.concurrent.Executors;
 
 public class UsageMath {
 
-    // =========================================================================
-    // ГЛОБАЛЬНЫЙ КЭШ ПРИЛОЖЕНИЯ (Единый источник истины)
-    // =========================================================================
     public static class AppStatsResult {
         public List<String> list;
         public Map<String, Long> times;
@@ -35,19 +32,18 @@ public class UsageMath {
         }
     }
 
-    // 1. Кэш для списков "Время" (0-Сегодня, 1-Вчера, 2-Неделя, 3-Месяц, 4-Год, 5-За всё время)
+    // Кэш для списков "Время" (0-Сегодня, 1-Вчера, 2-Неделя, 3-Месяц, 4-Год)
     public static final ConcurrentHashMap<Integer, AppStatsResult> globalTimeCache = new ConcurrentHashMap<>();
     public static final ConcurrentHashMap<Integer, Boolean> isCalculating = new ConcurrentHashMap<>();
 
-    // 2. НОВОЕ: Кэш для вкладки "Графики" (Массив из 7 дней, индекс 6 - Сегодня)
+    // Кэш для вкладки "Графики"
     public static AppStatsResult[] globalChartCache = new AppStatsResult[7];
     public static boolean isChartCalculating = false; 
     public static boolean isChartReady = false;
 
-    // Свой собственный пул для ядерного прогрева
-    private static final ExecutorService preloaderPool = Executors.newFixedThreadPool(5);
+    // ИСПРАВЛЕНИЕ 1: Снизили пул до 2 потоков, чтобы ядро Android не зависало от перегрузки Binder
+    private static final ExecutorService preloaderPool = Executors.newFixedThreadPool(2);
 
-    // Старые кэши (Оставляем для обратной совместимости других экранов, если они есть)
     public static Map<String, Long> todayExactCache = null;
     public static Map<String, Long> yesterdayExactCache = null;
     
@@ -57,17 +53,10 @@ public class UsageMath {
     private static Set<String> cachedUserApps = null;
     private static String cachedLauncherPkg = null;
 
-    // =========================================================================
-    // АГРЕССИВНЫЙ ПРОГРЕВ ВСЕГО ПРИЛОЖЕНИЯ (ВЫЗЫВАЕМ ИЗ MAIN ACTIVITY)
-    // =========================================================================
     public static void preloadAbsoluteEverything(Context context) {
-        // Устанавливаем границы времени (если еще не стоят)
         if (todayStartMillis == 0) {
             Calendar cal = Calendar.getInstance();
-            cal.set(Calendar.HOUR_OF_DAY, 0);
-            cal.set(Calendar.MINUTE, 0);
-            cal.set(Calendar.SECOND, 0);
-            cal.set(Calendar.MILLISECOND, 0);
+            cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
             todayStartMillis = cal.getTimeInMillis();
 
             Calendar yCal = (Calendar) cal.clone();
@@ -75,19 +64,15 @@ public class UsageMath {
             yesterdayStartMillis = yCal.getTimeInMillis();
         }
 
-        // 1. Кидаем 6 параллельных задач для вкладки "Время" (от "Сегодня" до "За всё время")
-        for (int i = 0; i <= 5; i++) {
+        // ИСПРАВЛЕНИЕ 2: Убрали тяжелый индекс 5 (За всё время). Этим снова занимается AllTimeFragment!
+        for (int i = 0; i <= 4; i++) {
             final int pos = i;
             preloaderPool.execute(() -> computeTimeTabGlobal(context, pos));
         }
 
-        // 2. Кидаем задачу для вкладки "Графики"
         preloaderPool.execute(() -> computeChartGlobal(context));
     }
 
-    // =========================================================================
-    // ВНУТРЕННИЙ ДВИЖОК РАСЧЕТОВ (Изолирован от UI)
-    // =========================================================================
     private static void computeTimeTabGlobal(Context context, int position) {
         if (globalTimeCache.containsKey(position)) return; 
         isCalculating.put(position, true); 
@@ -99,11 +84,11 @@ public class UsageMath {
         switch (position) {
             case 0: 
                 exactTimes = getFilteredExactTimes(context, todayStartMillis, endTime); 
-                todayExactCache = exactTimes; // Обновляем старый кэш заодно
+                todayExactCache = exactTimes; 
                 break;
             case 1: 
                 exactTimes = getFilteredExactTimes(context, yesterdayStartMillis, todayStartMillis); 
-                yesterdayExactCache = exactTimes; // Обновляем старый кэш заодно
+                yesterdayExactCache = exactTimes; 
                 break;
             case 2: 
                 cal.add(Calendar.DAY_OF_YEAR, -7); 
@@ -117,10 +102,6 @@ public class UsageMath {
                 cal.add(Calendar.YEAR, -1); 
                 exactTimes = getFilteredStats(context, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime); 
                 break;
-            case 5: 
-                // ЗА ВСЁ ВРЕМЯ (от 2010 года до текущего момента)
-                exactTimes = getFilteredStats(context, UsageStatsManager.INTERVAL_YEARLY, 1262304000000L, endTime); 
-                break; 
         }
 
         final Map<String, Long> finalExactTimes = exactTimes;
@@ -133,9 +114,6 @@ public class UsageMath {
         isCalculating.put(position, false); 
     }
 
-    // =========================================================================
-    // ВЫЧИСЛИТЕЛЬ ДЛЯ ГРАФИКОВ (Разбивка по 7 дням)
-    // =========================================================================
     private static void computeChartGlobal(Context context) {
         if (isChartReady || isChartCalculating) return;
         isChartCalculating = true;
@@ -146,7 +124,6 @@ public class UsageMath {
             
             Map<String, Long> times;
 
-            // Используем мгновенный кэш для Сегодня и Вчера, если они уже готовы
             if (i == 6 && todayExactCache != null) {
                 times = todayExactCache;
             } else if (i == 5 && yesterdayExactCache != null) {
@@ -173,9 +150,6 @@ public class UsageMath {
         isChartCalculating = false;
     }
 
-    // =========================================================================
-    // БАЗОВАЯ МАТЕМАТИКА (События и Агрегация)
-    // =========================================================================
     public static Map<String, Long> getFilteredExactTimes(Context context, long start, long end) {
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
@@ -245,11 +219,9 @@ public class UsageMath {
         return total;
     }
 
-    // =========================================================================
-    // ФИЛЬТРЫ МУСОРА
-    // =========================================================================
-    private static void initAppFilters(Context context) {
-        if (cachedUserApps != null && cachedLauncherPkg != null) return;
+    // ИСПРАВЛЕНИЕ 3: Добавили synchronized, чтобы потоки не сбрасывали списки друг другу!
+    private static synchronized void initAppFilters(Context context) {
+        if (cachedUserApps != null && cachedLauncherPkg != null && !cachedUserApps.isEmpty()) return;
         
         PackageManager pm = context.getPackageManager();
         cachedUserApps = new HashSet<>();
@@ -275,6 +247,7 @@ public class UsageMath {
                                 pkg.equals("com.android.settings") || 
                                 pkg.equals(cachedLauncherPkg);
         
-        return cachedUserApps.contains(pkg) && !isSystemTrash;
+        return cachedUserApps != null && cachedUserApps.contains(pkg) && !isSystemTrash;
     }
-                }
+            }
+                
