@@ -3,7 +3,6 @@ package com.myonlinetime.app.utils;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -24,6 +23,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.Calendar;
+import java.util.Map;
 
 public class WeeklyStatsWorker extends Worker {
 
@@ -47,40 +47,43 @@ public class WeeklyStatsWorker extends Worker {
             return Result.success();
         }
 
-        // === ЖЕЛЕЗОБЕТОННЫЙ ФИКС "8-ГО ВЕДРА" ===
-        // Обрезаем время до 00:00:00, чтобы получить ровно 7 суток, а не 8!
+        // === ПОЛНАЯ СИНХРОНИЗАЦИЯ С ЭКРАНОМ "ВРЕМЯ" И ПРОФИЛЕМ ===
+        // Никаких обрезок до 00:00! Берем точное время прямо сейчас, как это делает интерфейс.
+        long now = System.currentTimeMillis();
+        
         Calendar cal = Calendar.getInstance();
-        cal.set(Calendar.HOUR_OF_DAY, 0);
-        cal.set(Calendar.MINUTE, 0);
-        cal.set(Calendar.SECOND, 0);
-        cal.set(Calendar.MILLISECOND, 0);
-        
-        long endCurrent = cal.getTimeInMillis(); // Сегодня 00:00
+        cal.setTimeInMillis(now);
+        cal.add(Calendar.DAY_OF_YEAR, -7);
+        long startCurrentWeek = cal.getTimeInMillis(); // Ровно 7 суток назад
         
         cal.add(Calendar.DAY_OF_YEAR, -7);
-        long startCurrent = cal.getTimeInMillis(); // 7 дней назад 00:00
-        
-        cal.add(Calendar.DAY_OF_YEAR, -7);
-        long startPrev = cal.getTimeInMillis(); // 14 дней назад 00:00
+        long startPrevWeek = cal.getTimeInMillis(); // Ровно 14 суток назад
 
-        // ИСПОЛЬЗУЕМ НАШ УМНЫЙ USAGE MATH
-        long currentWeekTime = UsageMath.sumMap(UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_DAILY, startCurrent, endCurrent));
-        long previousWeekTime = UsageMath.sumMap(UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_DAILY, startPrev, startCurrent));
+        // Считаем через сырые логи (getFilteredExactTimes), чтобы цифры совпали 1 в 1 с Профилем!
+        Map<String, Long> currentWeekMap = UsageMath.getFilteredExactTimes(context, startCurrentWeek, now);
+        Map<String, Long> prevWeekMap = UsageMath.getFilteredExactTimes(context, startPrevWeek, startCurrentWeek);
+
+        // Получаем точные суммы
+        long currentWeekTime = UsageMath.sumMap(currentWeekMap);
+        long previousWeekTime = UsageMath.sumMap(prevWeekMap);
 
         if (currentWeekTime == 0 && previousWeekTime == 0) {
             return Result.success();
         }
 
-        long diff = Math.abs(currentWeekTime - previousWeekTime);
-        long diffHours = diff / (1000 * 60 * 60);
-        long diffMins = (diff / (1000 * 60)) % 60;
+        // Железобетонная логика разницы
+        long diff = currentWeekTime - previousWeekTime;
+        long absDiff = Math.abs(diff);
+        
+        long diffHours = absDiff / (1000 * 60 * 60);
+        long diffMins = (absDiff / (1000 * 60)) % 60;
         
         String timeStr = context.getString(R.string.notif_time_format, diffHours, diffMins);
         String mainText;
 
-        if (currentWeekTime < previousWeekTime) {
+        if (diff < 0) {
             mainText = context.getString(R.string.notif_time_less, timeStr);
-        } else if (currentWeekTime > previousWeekTime) {
+        } else if (diff > 0) {
             mainText = context.getString(R.string.notif_time_more, timeStr);
         } else {
             mainText = context.getString(R.string.notif_time_equal);
@@ -88,8 +91,7 @@ public class WeeklyStatsWorker extends Worker {
 
         String actionText = context.getString(R.string.notif_action_click);
         
-        saveToHistory(prefs, mainText, actionText, System.currentTimeMillis());
-
+        saveToHistory(prefs, mainText, actionText, now);
         sendNotification(context, mainText, actionText);
 
         return Result.success();
@@ -154,3 +156,4 @@ public class WeeklyStatsWorker extends Worker {
         notificationManager.notify(NOTIF_ID, builder.build());
     }
 }
+
