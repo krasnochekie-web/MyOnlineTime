@@ -100,7 +100,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         
         // =========================================================================
-        // МАГИЯ Z-ИНДЕКСА: Уведомления всегда рисуются ПОВЕРХ плашки регистрации
+        // Z-ИНДЕКС: Уведомления и под-экраны всегда поверх любых плашек
         // =========================================================================
         getSupportFragmentManager().registerFragmentLifecycleCallbacks(new FragmentManager.FragmentLifecycleCallbacks() {
             @Override
@@ -114,7 +114,6 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
                 
-                // При создании любого фрагмента проверяем, нужно ли вшить в него плашку
                 container.post(() -> enforceLoginOverlays());
             }
         }, false);
@@ -164,7 +163,6 @@ public class MainActivity extends AppCompatActivity {
         
         View.OnClickListener bellListener = v -> {
             if (navigator != null) {
-                // Больше никаких костылей со скрытием плашки. Уведомления просто выедут поверх!
                 navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
             }
         };
@@ -188,6 +186,9 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        // =========================================================================
+        // НАВИГАЦИЯ: Просто переключаем фрагменты. Плашки разберутся сами.
+        // =========================================================================
         findViewById(R.id.nav_feed).setOnClickListener(v -> {
             updateNavState(0);
             navigator.switchScreen(0, null);
@@ -513,7 +514,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =========================================================================
-    // БАГФИКС: Вшиваем плашку прямо в тело фрагментов
+    // БЕЗ КОСТЫЛЕЙ: Внедрение плашки строго по номеру вкладки (Поиск=1, Профиль=4)
     // =========================================================================
     private void checkAuthAndLoad(int tabIndex) {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
@@ -525,11 +526,10 @@ public class MainActivity extends AppCompatActivity {
             navigator.switchScreen(4, account != null ? account.getId() : ""); 
         }
         
+        getSupportFragmentManager().executePendingTransactions();
         syncHeaderState(); 
         
-        // Вшиваем плашки
         enforceLoginOverlays();
-        // Дублируем через post, чтобы поймать фрагмент, если он еще не до конца отрендерился
         container.post(this::enforceLoginOverlays);
     } 
 
@@ -537,55 +537,49 @@ public class MainActivity extends AppCompatActivity {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         boolean noAuth = (account == null);
 
-        // Чистим старый глобальный костыль из контейнера, если он там застрял
         View oldGlobalOverlay = container.findViewWithTag("login_screen_overlay");
         if (oldGlobalOverlay != null && oldGlobalOverlay.getParent() == container) {
             container.removeView(oldGlobalOverlay);
         }
 
-        // Проходимся по ВСЕМ загруженным в память фрагментам
-        for (Fragment f : getSupportFragmentManager().getFragments()) {
-            if (f != null && f.getView() instanceof ViewGroup) {
-                String fragName = f.getClass().getSimpleName().toLowerCase();
-                
-                // Пропускаем под-экраны
-                if (fragName.contains("notification") || fragName.contains("edit") || fragName.contains("follow")) continue;
+        // Мы больше не ищем по именам. Берем АКТИВНЫЙ фрагмент прямо из контейнера.
+        Fragment currentFrag = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
+        if (currentFrag != null && currentFrag.getView() instanceof ViewGroup) {
+            ViewGroup root = (ViewGroup) currentFrag.getView();
+            View overlay = root.findViewWithTag("login_screen_overlay");
 
-                // Нас интересуют только Поиск и Профиль
-                boolean isProtected = fragName.contains("profile") || fragName.contains("search");
-
-                if (isProtected) {
-                    ViewGroup root = (ViewGroup) f.getView();
-                    View overlay = root.findViewWithTag("login_screen_overlay");
-
-                    if (noAuth) {
-                        // Если нет авторизации, вшиваем плашку прямо в корень этого конкретного фрагмента
-                        if (overlay == null) {
-                            overlay = getLayoutInflater().inflate(R.layout.layout_login_required, root, false);
-                            overlay.setClickable(true); // Защита от кликов сквозь плашку
-                            overlay.setTag("login_screen_overlay");
-                            
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                                overlay.setTranslationZ(50f); // Выше контента фрагмента, но ниже уведомлений
-                            }
-                            
-                            Button btn = overlay.findViewById(R.id.btn_login_center);
-                            if (btn != null) btn.setOnClickListener(v -> startActivityForResult(mGoogleSignInClient.getSignInIntent(), RC_SIGN_IN));
-                            
-                            root.addView(overlay);
-                        } else {
-                            overlay.setVisibility(View.VISIBLE);
+            // Проверяем: если сейчас открыт Поиск(1) ИЛИ Профиль(4)
+            if (currentTab == 1 || currentTab == 4) {
+                if (noAuth) {
+                    if (overlay == null) {
+                        overlay = getLayoutInflater().inflate(R.layout.layout_login_required, root, false);
+                        overlay.setClickable(true);
+                        overlay.setTag("login_screen_overlay");
+                        
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                            overlay.setTranslationZ(50f); 
                         }
+                        
+                        Button btn = overlay.findViewById(R.id.btn_login_center);
+                        if (btn != null) btn.setOnClickListener(v -> startActivityForResult(mGoogleSignInClient.getSignInIntent(), RC_SIGN_IN));
+                        
+                        root.addView(overlay);
                     } else {
-                        // Если авторизация есть, стираем плашку
-                        if (overlay != null) {
-                            overlay.setVisibility(View.GONE);
-                        }
+                        overlay.setVisibility(View.VISIBLE);
                     }
+                } else {
+                    if (overlay != null) overlay.setVisibility(View.GONE);
                 }
+            } else {
+                // Если открыли другую вкладку, плашка нам здесь не нужна
+                if (overlay != null) overlay.setVisibility(View.GONE);
             }
         }
     }
+
+    // Для обратной совместимости, если другие фрагменты дергают эти методы
+    public void showLoginScreen() { enforceLoginOverlays(); }
+    public void hideLoginScreen() { enforceLoginOverlays(); }
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -603,8 +597,6 @@ public class MainActivity extends AppCompatActivity {
                         updateNavState(4);
                         StatsHelper.syncUserProfile(MainActivity.this);
                         navigator.switchScreen(4, acct.getId()); 
-                        
-                        // Удаляем все вшитые плашки
                         enforceLoginOverlays();
                     }
                     @Override
@@ -732,7 +724,6 @@ public class MainActivity extends AppCompatActivity {
         iconUsage.setSelected(index == 3);
         iconSettings.setSelected(index == 5); 
         
-        // Гарантируем, что плашки обновятся при переключении
         container.post(this::enforceLoginOverlays);
     }
 
