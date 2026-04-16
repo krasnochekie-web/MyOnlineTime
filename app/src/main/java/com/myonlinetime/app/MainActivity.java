@@ -100,7 +100,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         
         // =========================================================================
-        // МАГИЯ Z-ИНДЕКСА: Любые под-экраны всегда рисуются поверх заглушек
+        // МАГИЯ Z-ИНДЕКСА: Уведомления и под-экраны всегда рисуются ПОВЕРХ плашки
         // =========================================================================
         getSupportFragmentManager().registerFragmentLifecycleCallbacks(new FragmentManager.FragmentLifecycleCallbacks() {
             @Override
@@ -109,12 +109,12 @@ public class MainActivity extends AppCompatActivity {
                 String fragName = f.getClass().getSimpleName();
                 if (fragName.contains("NotificationsHistory") || fragName.contains("EditProfile") || fragName.contains("Follows")) {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                        v.setTranslationZ(100f);
+                        v.setTranslationZ(100f); // Гарантированно выше плашки регистрации
                     }
                 }
             }
         }, false);
-        
+
         Window window = getWindow();
         window.getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE 
@@ -160,7 +160,8 @@ public class MainActivity extends AppCompatActivity {
         
         View.OnClickListener bellListener = v -> {
             if (navigator != null) {
-                // Ничего больше не прячем! Фрагмент уведомлений выедет поверх.
+                // МЫ БОЛЬШЕ НЕ ПРЯЧЕМ ПЛАШКУ! Она остается на месте.
+                // Экран уведомлений просто элегантно выедет поверх нее благодаря Z-индексу.
                 navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
             }
         };
@@ -185,31 +186,29 @@ public class MainActivity extends AppCompatActivity {
         }
 
         findViewById(R.id.nav_feed).setOnClickListener(v -> {
-            hideLoginScreen(); 
+            hideLoginScreen(0); 
             updateNavState(0);
             navigator.switchScreen(0, null);
             syncHeaderState(); 
         });
 
         findViewById(R.id.nav_search).setOnClickListener(v -> { 
-            updateNavState(1); 
             checkAuthAndLoad(1); 
         });
         
         findViewById(R.id.nav_profile).setOnClickListener(v -> { 
-            updateNavState(4); 
             checkAuthAndLoad(4); 
         });
 
         findViewById(R.id.nav_usage).setOnClickListener(v -> {
-            hideLoginScreen(); 
+            hideLoginScreen(3); 
             updateNavState(3);
             navigator.switchScreen(3, null);
             syncHeaderState(); 
         });
 
         findViewById(R.id.nav_settings).setOnClickListener(v -> {
-            hideLoginScreen(); 
+            hideLoginScreen(5); 
             updateNavState(5);
             navigator.switchScreen(5, null);
             syncHeaderState(); 
@@ -250,21 +249,6 @@ public class MainActivity extends AppCompatActivity {
         mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
             StatsHelper.syncUserProfile(MainActivity.this);
             loadUserAvatarToBottomNav(); 
-            
-            try {
-                final GoogleSignInAccount account = task.getResult(ApiException.class);
-                if (account != null && navigator != null) {
-                    Looper.myQueue().addIdleHandler(new MessageQueue.IdleHandler() {
-                        @Override
-                        public boolean queueIdle() {
-                            Utils.backgroundExecutor.execute(() -> {
-                                com.myonlinetime.app.utils.UsageMath.preloadCoreStats(MainActivity.this);
-                            });
-                            return false; 
-                        }
-                    });
-                }
-            } catch (Exception ignored) { }
         });
     } 
 
@@ -275,9 +259,18 @@ public class MainActivity extends AppCompatActivity {
         } else if (headerManager != null) {
             headerManager.resetHeader();
             
+            // Проверяем, нужна ли плашка при возврате назад
             GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
             if (account == null && (currentTab == 1 || currentTab == 4)) {
-                showLoginScreen();
+                View loginView = container.findViewWithTag("login_screen_overlay");
+                if (loginView != null) {
+                    loginView.setVisibility(View.VISIBLE);
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                        loginView.setTranslationZ(50f);
+                    }
+                } else {
+                    showLoginScreen(currentTab);
+                }
             }
         }
     }
@@ -445,7 +438,7 @@ public class MainActivity extends AppCompatActivity {
                 if (navigator != null && navigator.hasSubScreen()) {
                     navigator.closeSubScreen();
                 }
-                hideLoginScreen(); 
+                hideLoginScreen(3); 
                 updateNavState(3); 
                 navigator.switchScreen(3, null);
                 syncHeaderState(); 
@@ -507,6 +500,7 @@ public class MainActivity extends AppCompatActivity {
             return; 
         }
         if (currentTab != 0) {
+            hideLoginScreen(0);
             updateNavState(0);
             navigator.switchScreen(0, null);
             syncHeaderState(); 
@@ -516,65 +510,81 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =========================================================================
-    // АРХИТЕКТУРНЫЙ ФИКС: Внедрение плашки прямо внутрь фрагментов
+    // УМНАЯ ЛОГИКА ОТОБРАЖЕНИЯ ПЛАШКИ (Учитываем направление свайпа и Поиск)
     // =========================================================================
-    private void checkAuthAndLoad(int tabIndex) {
+    private void checkAuthAndLoad(int targetTab) {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         
-        // 1. Гарантированно переключаем базовый фрагмент (Поиск или Профиль)
-        if (tabIndex == 1) {
+        // 1. Гарантированно переключаем настоящий фрагмент (чтобы под плашкой не оставалась чужая Лента)
+        if (targetTab == 1) {
             navigator.switchScreen(1, null); 
-        } else if (tabIndex == 4) {
+        } else if (targetTab == 4) {
             if (account != null) StatsHelper.syncUserProfile(MainActivity.this);
             navigator.switchScreen(4, account != null ? account.getId() : ""); 
         }
         
-        // Принудительно заставляем Android отрисовать фрагмент прямо сейчас
-        getSupportFragmentManager().executePendingTransactions();
-        syncHeaderState(); 
-
-        // 2. Внедряем или удаляем плашку
+        // 2. Если нет авторизации, показываем плашку. Если есть - прячем.
         if (account == null) {
-            showLoginScreen(); 
+            showLoginScreen(targetTab); 
         } else {
-            hideLoginScreen(); 
+            hideLoginScreen(targetTab); 
         }
+        
+        updateNavState(targetTab);
+        syncHeaderState(); 
     } 
 
-    public void showLoginScreen() {
+    public void showLoginScreen(int targetTab) {
         mainHeader.setVisibility(View.VISIBLE);
         headerManager.resetHeader();
         
-        // Берем активный фрагмент (вкладка 1 или 4)
-        Fragment currentFrag = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
-        if (currentFrag != null && currentFrag.getView() instanceof ViewGroup) {
-            ViewGroup fragRoot = (ViewGroup) currentFrag.getView();
-            
-            // Если плашки внутри еще нет - вставляем её напрямую!
-            if (fragRoot.findViewWithTag("login_screen_overlay") == null) {
-                View view = getLayoutInflater().inflate(R.layout.layout_login_required, fragRoot, false);
-                view.setClickable(true); 
-                view.setTag("login_screen_overlay"); 
-                
-                Button btn = view.findViewById(R.id.btn_login_center);
-                if (btn != null) btn.setOnClickListener(v -> startActivityForResult(mGoogleSignInClient.getSignInIntent(), RC_SIGN_IN));
-                
-                fragRoot.addView(view);
+        View existingView = container.findViewWithTag("login_screen_overlay");
+        if (existingView != null) {
+            // Плашка уже висит (например, перешли с Поиска(1) на Профиль(4) без авторизации).
+            // Не трогаем ее! Фрагменты плавно поменяются под ней, а плашка останется как монолитная стена.
+            existingView.setVisibility(View.VISIBLE);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                existingView.setTranslationZ(50f);
             }
+            return; 
         }
+        
+        View view = getLayoutInflater().inflate(R.layout.layout_login_required, container, false);
+        view.setClickable(true);
+        view.setTag("login_screen_overlay"); 
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            view.setTranslationZ(50f); // Даем ей слой 50, чтобы она была над фрагментами, но ПОД уведомлениями (100)
+        }
+        
+        Button btn = view.findViewById(R.id.btn_login_center);
+        btn.setOnClickListener(v -> startActivityForResult(mGoogleSignInClient.getSignInIntent(), RC_SIGN_IN));
+        
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        // Математика: если идем с 0(Лента) на 4(Профиль) -> выезжаем справа (+screenWidth)
+        // Если идем с 5(Настройки) на 4(Профиль) -> выезжаем слева (-screenWidth)
+        float startX = (targetTab > currentTab) ? screenWidth : -screenWidth;
+        
+        view.setTranslationX(startX);
+        container.addView(view);
+        
+        view.animate().translationX(0).setDuration(300).start();
     }
 
-    public void hideLoginScreen() {
-        // Проходимся по всем кэшированным фрагментам и стираем плашку регистрации
-        for (Fragment fragment : getSupportFragmentManager().getFragments()) {
-            if (fragment != null && fragment.getView() instanceof ViewGroup) {
-                ViewGroup root = (ViewGroup) fragment.getView();
-                View overlay = root.findViewWithTag("login_screen_overlay");
-                if (overlay != null) {
-                    root.removeView(overlay);
-                }
-            }
-        }
+    public void hideLoginScreen(int targetTab) {
+        final View loginView = container.findViewWithTag("login_screen_overlay");
+        if (loginView != null) {
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            // Математика: если уходим с 4(Профиль) на 0(Лента) -> смахиваем вправо (+screenWidth)
+            // Если уходим с 4(Профиль) на 5(Настройки) -> смахиваем влево (-screenWidth)
+            // Это ИДЕАЛЬНО совпадет с анимацией самого фрагмента, и голый профиль не проскочит!
+            float endX = (targetTab > currentTab) ? -screenWidth : screenWidth;
+            
+            loginView.animate()
+                    .translationX(endX)
+                    .setDuration(300)
+                    .withEndAction(() -> container.removeView(loginView))
+                    .start();
+        } 
     }
 
     @Override
