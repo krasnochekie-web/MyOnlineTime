@@ -10,6 +10,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.FrameLayout;
+import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
@@ -50,14 +52,16 @@ public class StatsTimeFragment extends Fragment {
     private View listFooterCard;
     private View dividerShowMore;
     private TextView btnShowMore;
+    private ProgressBar loadingSpinner; // Наш новый крутящийся лоадер
     
-    private boolean isFirstLoad = true; // Флаг, чтобы спиннер не перетирал нашу фоновую загрузку
+    private boolean isFirstLoad = true; 
 
     public StatsTimeFragment() {}
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        final View view = inflater.inflate(R.layout.layout_time_tab, container, false); 
+        // Загружаем оригинальный макет
+        final View originalView = inflater.inflate(R.layout.layout_time_tab, container, false); 
         
         final MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
@@ -65,7 +69,28 @@ public class StatsTimeFragment extends Fragment {
             activity.headerManager.resetHeader();
         }
 
-        final RecyclerView recyclerView = view.findViewById(R.id.apps_list);
+        // =========================================================================
+        // СОЗДАЕМ КРУТЯЩИЙСЯ ЛОАДЕР (Программно, без изменения XML)
+        // =========================================================================
+        FrameLayout rootWrapper = new FrameLayout(activity);
+        rootWrapper.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        rootWrapper.addView(originalView);
+
+        loadingSpinner = new ProgressBar(activity);
+        int spinnerSize = (int) (60 * getResources().getDisplayMetrics().density);
+        FrameLayout.LayoutParams spinnerParams = new FrameLayout.LayoutParams(spinnerSize, spinnerSize);
+        spinnerParams.gravity = android.view.Gravity.CENTER; // Ставим ровно по центру экрана
+        loadingSpinner.setLayoutParams(spinnerParams);
+        loadingSpinner.setVisibility(View.GONE);
+        
+        // Красим в красивый ютубовский синий цвет
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            loadingSpinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#3EA6FF")));
+        }
+        
+        rootWrapper.addView(loadingSpinner);
+
+        final RecyclerView recyclerView = originalView.findViewById(R.id.apps_list);
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         recyclerView.setItemViewCacheSize(25);
         
@@ -140,32 +165,29 @@ public class StatsTimeFragment extends Fragment {
 
         loadBottomCardsData(activity, textWeek, textMonth, textYear);
 
-        // === ИЗМЕНЕНИЯ АРХИТЕКТУРЫ ===
-        // Теперь Спиннер реагирует ТОЛЬКО на физический выбор пользователя (после первой загрузки)
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
                 if (isFirstLoad) {
                     isFirstLoad = false;
-                    return; // Игнорируем авто-срабатывание спиннера при старте
+                    return; 
                 }
                 fetchAndApplyData(position, activity);
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         }); 
 
-        // Запускаем независимую загрузку данных (сразу за "Сегодня" - индекс 0)
-        // Этот код сработает железобетонно, даже если фрагмент находится за пределами экрана!
+        // Инициируем первую загрузку
         fetchAndApplyData(0, activity);
 
-        return view;
+        // Возвращаем нашу обертку со спиннером вместо обычного макета
+        return rootWrapper;
     }
 
-    // =========================================================================
-    // НЕЗАВИСИМЫЙ ДВИЖОК ДАННЫХ
-    // =========================================================================
     private void fetchAndApplyData(int position, MainActivity activity) {
         Runnable updateUI = () -> {
+            loadingSpinner.setVisibility(View.GONE); // Прячем лоадер, когда всё готово
+            
             CachedStats cached = statsCache.get(position);
             if (cached == null || !isAdded()) return;
             
@@ -184,7 +206,6 @@ public class StatsTimeFragment extends Fragment {
             }
         };
 
-        // Если уже есть в кэше - моментально рисуем
         if (statsCache.containsKey(position)) {
             updateUI.run();
             return; 
@@ -193,7 +214,9 @@ public class StatsTimeFragment extends Fragment {
         if (!isAdded()) return;
         totalTimeText.setText(activity.getString(R.string.loading));
         
-        // Считаем математику в фоне
+        // Показываем синий лоадер перед началом тяжелых расчетов
+        loadingSpinner.setVisibility(View.VISIBLE); 
+        
         Utils.backgroundExecutor.execute(() -> {
             if (UsageMath.todayStartMillis == 0) {
                 Calendar cal = Calendar.getInstance();
@@ -222,7 +245,6 @@ public class StatsTimeFragment extends Fragment {
             Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
             final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
             
-            // Возвращаемся в UI и рисуем
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (isAdded()) {
                     statsCache.put(position, new CachedStats(finalList, finalExactTimes, finalTotalMillis));
@@ -265,5 +287,4 @@ public class StatsTimeFragment extends Fragment {
             });
         });
     }
-                                                          }
-                
+}
