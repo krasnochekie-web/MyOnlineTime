@@ -55,7 +55,6 @@ public class ProfileFragment extends Fragment {
     
     private boolean isMe = false;
 
-    // Вспомогательный класс для тяжелых данных иконок
     private static class AppUiData {
         String pkgName;
         String appName;
@@ -113,13 +112,9 @@ public class ProfileFragment extends Fragment {
         final ImageView btnCollapse = view.findViewById(R.id.btn_collapse_apps);
         final LinearLayout appsContainerLocal = view.findViewById(R.id.profile_apps_container);
 
-        // =========================================================================
-        // УБИЙЦА ОТЛОЖЕННЫХ АНИМАЦИЙ: Запрещаем эффект "сборки на глазах"
-        // =========================================================================
         if (appsContainerLocal != null) {
             appsContainerLocal.setLayoutTransition(null); 
             
-            // Автоматический перерасчет при добавлении новых элементов (например, из StatsHelper)
             appsContainerLocal.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
                 @Override
                 public void onChildViewAdded(View parent, View child) {
@@ -327,11 +322,17 @@ public class ProfileFragment extends Fragment {
     private void applyCollapseLogic(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
         if (container == null || aboutView == null || btnExpand == null || btnCollapse == null) return;
         
-        // 1. Убираем пустую подложку, если описания нет
         boolean isEmptyDesc = aboutView.getText().toString().trim().isEmpty();
         aboutView.setVisibility(isEmptyDesc ? View.GONE : View.VISIBLE);
         
-        // 2. Определяем динамический лимит топа
+        // ЖЕЛЕЗОБЕТОННОЕ СКРЫТИЕ ПОДЛОЖКИ: прячем родительскую карточку
+        if (aboutView.getParent() instanceof ViewGroup) {
+            ViewGroup parent = (ViewGroup) aboutView.getParent();
+            if (parent.getBackground() != null || parent.getChildCount() == 1) {
+                parent.setVisibility(isEmptyDesc ? View.GONE : View.VISIBLE);
+            }
+        }
+        
         int limit = isEmptyDesc ? 3 : 2;
         int count = container.getChildCount();
         
@@ -343,13 +344,11 @@ public class ProfileFragment extends Fragment {
             }
         } else {
             if (btnCollapse.getVisibility() == View.VISIBLE) {
-                // Режим полного развертывания
                 btnExpand.setVisibility(View.GONE);
                 for (int i = 0; i < count; i++) {
                     container.getChildAt(i).setVisibility(View.VISIBLE);
                 }
             } else {
-                // Режим свернутого списка (применяем новый лимит)
                 btnExpand.setVisibility(View.VISIBLE);
                 for (int i = 0; i < count; i++) {
                     container.getChildAt(i).setVisibility(i < limit ? View.VISIBLE : View.GONE);
@@ -405,9 +404,6 @@ public class ProfileFragment extends Fragment {
         });
     }
 
-    // =========================================================================
-    // ОПТИМИЗИРОВАННЫЙ РЕНДЕР (Без фризов UI)
-    // =========================================================================
     private void renderOtherUserStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
         container.removeAllViews();
         if (topApps == null || topApps.isEmpty() || activity == null) return;
@@ -415,7 +411,6 @@ public class ProfileFragment extends Fragment {
         final long[] totalVisibleTime = {0};
         final List<AppUiData> preloadedData = new ArrayList<>();
 
-        // Собираем все тяжелые иконки и названия в ФОНЕ!
         Utils.backgroundExecutor.execute(() -> {
             PackageManager pm = activity.getPackageManager();
             int limit = 0;
@@ -444,7 +439,6 @@ public class ProfileFragment extends Fragment {
                 limit++;
             }
 
-            // Возвращаемся в главный поток только для мгновенной вставки готовых картинок
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
 
@@ -454,7 +448,6 @@ public class ProfileFragment extends Fragment {
                 for (AppUiData data : preloadedData) {
                     View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, container, false);
                     
-                    // Мгновенно прячем элементы сверх лимита, чтобы не было моргания
                     if (btnCollapse.getVisibility() != View.VISIBLE && currentLimit >= collapsedLimit) {
                         view.setVisibility(View.GONE);
                     }
@@ -482,7 +475,6 @@ public class ProfileFragment extends Fragment {
                     currentLimit++;
                 }
 
-                // Логика футера
                 if (currentLimit == 0 && !topApps.isEmpty()) {
                     String hiddenText = activity.getString(R.string.hidden_time_placeholder) + "  "; 
                     SpannableString ss = new SpannableString(hiddenText);
