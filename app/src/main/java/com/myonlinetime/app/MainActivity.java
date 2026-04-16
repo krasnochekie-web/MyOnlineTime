@@ -18,6 +18,7 @@ import android.os.Looper;
 import android.os.MessageQueue;
 import android.util.LruCache;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.*;
 
@@ -94,12 +95,6 @@ public class MainActivity extends AppCompatActivity {
         AppCompatDelegate.setDefaultNightMode(savedTheme);
 
         super.onCreate(savedInstanceState);
-        
-        // =========================================================================
-        // ИСПРАВЛЕНИЕ: Убрали синхронный запуск тяжелой математики из старта экрана
-        // com.myonlinetime.app.utils.UsageMath.preloadCoreStats(this); 
-        // Теперь это происходит мягко в IdleHandler (см. конец файла)
-        // =========================================================================
         
         Window window = getWindow();
         window.getDecorView().setSystemUiVisibility(
@@ -240,27 +235,18 @@ public class MainActivity extends AppCompatActivity {
                 final GoogleSignInAccount account = task.getResult(ApiException.class);
                 if (account != null && navigator != null) {
                     
-                    // =========================================================================
-                    // МАГИЯ ОТЛОЖЕННОГО СТАРТА (IDLE HANDLER)
-                    // =========================================================================
                     Looper.myQueue().addIdleHandler(new MessageQueue.IdleHandler() {
                         @Override
                         public boolean queueIdle() {
-                            // Этот код выполнится ТОЛЬКО тогда, когда UI полностью нарисован
-                            // и процессор телефона "отдыхает". 0% влияния на плавность старта!
-                            
                             Utils.backgroundExecutor.execute(() -> {
-                                // 1. Тихо считаем статистику использования в фоне
                                 com.myonlinetime.app.utils.UsageMath.preloadCoreStats(MainActivity.this);
                                 
-                                // 2. Возвращаемся в главный поток, чтобы пнуть навигатор (UI операция)
-new android.os.Handler(Looper.getMainLooper()).post(() -> {
-    navigator.preloadProfile(account.getId());
-    navigator.preloadStats(); // Вызываем предзагрузку статистики!
-});
+                                new android.os.Handler(Looper.getMainLooper()).post(() -> {
+                                    navigator.preloadProfile(account.getId());
+                                    navigator.preloadStats(); 
+                                });
                             });
                             
-                            // Возвращаем false, чтобы слушатель удалился и код выполнился один раз
                             return false; 
                         }
                     });
@@ -270,9 +256,6 @@ new android.os.Handler(Looper.getMainLooper()).post(() -> {
         });
     } 
 
-    // =========================================================================
-    // ГЛАВНЫЙ СИНХРОНИЗАТОР ШАПКИ
-    // =========================================================================
     public void syncHeaderState() {
         getSupportFragmentManager().executePendingTransactions();
         
@@ -321,16 +304,12 @@ new android.os.Handler(Looper.getMainLooper()).post(() -> {
         exoPlayer.setVolume(0f);
     }
 
-    // =========================================================================
-    // УМНЫЙ ОБНОВИТЕЛЬ ФОНА С ЗАДЕРЖКОЙ (DEBOUNCE 200ms)
-    // =========================================================================
     public void updateGlobalBackground(boolean show) {
         String path = prefs.getString("custom_bg_path", null);
         boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
 
         if (hideBgRunnable == null) {
             hideBgRunnable = () -> {
-                // ИСПОЛЬЗУЕМ INVISIBLE ВМЕСТО GONE
                 if (playerView != null) playerView.setVisibility(View.INVISIBLE);
                 if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
                 if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
@@ -338,13 +317,11 @@ new android.os.Handler(Looper.getMainLooper()).post(() -> {
         }
 
         if (!show || path == null) {
-            // Отменяем старые задачи и ждем 200мс перед отключением фона
             bgHandler.removeCallbacks(hideBgRunnable);
             bgHandler.postDelayed(hideBgRunnable, 200);
             return;
         }
 
-        // Пользователь вернулся на вкладку с фоном! Отменяем выключение.
         bgHandler.removeCallbacks(hideBgRunnable);
 
         if (path.equals(currentBgPath)) {
@@ -424,6 +401,11 @@ new android.os.Handler(Looper.getMainLooper()).post(() -> {
                 mainHeader.bringToFront();
             }
         }
+        
+        // Вызов адаптации шапки при каждом возврате в приложение
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+            adjustHeaderForWindowMode(isInMultiWindowMode());
+        }
     }
 
     @Override
@@ -447,7 +429,6 @@ new android.os.Handler(Looper.getMainLooper()).post(() -> {
             String tab = intent.getStringExtra("open_tab");
             if ("time".equals(tab)) {
                 
-                // Просто закрываем саб-скрин родным методом (уедет вниз)
                 if (navigator != null && navigator.hasSubScreen()) {
                     navigator.closeSubScreen();
                 }
@@ -724,5 +705,46 @@ new android.os.Handler(Looper.getMainLooper()).post(() -> {
         AppOpsManager appOps = (AppOpsManager) getSystemService(Context.APP_OPS_SERVICE);
         int mode = appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), getPackageName());
         return mode == AppOpsManager.MODE_ALLOWED;
+    }
+
+    // =========================================================================
+    // АДАПТАЦИЯ ШАПКИ ПОД РЕЖИМ ВСПЛЫВАЮЩЕГО ОКНА
+    // =========================================================================
+    @Override
+    public void onMultiWindowModeChanged(boolean isInMultiWindowMode, android.content.res.Configuration newConfig) {
+        super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig);
+        adjustHeaderForWindowMode(isInMultiWindowMode);
+    }
+
+    private void adjustHeaderForWindowMode(boolean isMultiWindow) {
+        if (mainHeader == null) return;
+        
+        ViewGroup.LayoutParams params = mainHeader.getLayoutParams();
+        
+        if (isMultiWindow) {
+            // Во всплывающем окне делаем шапку компактной (около 50dp)
+            params.height = (int) (50 * getResources().getDisplayMetrics().density);
+            
+            // Убираем системные отступы под статус-бар
+            mainHeader.setPadding(
+                mainHeader.getPaddingLeft(), 
+                (int) (8 * getResources().getDisplayMetrics().density), 
+                mainHeader.getPaddingRight(), 
+                mainHeader.getPaddingBottom()
+            );
+        } else {
+            // В обычном режиме возвращаем стандартный размер (WRAP_CONTENT)
+            params.height = ViewGroup.LayoutParams.WRAP_CONTENT; 
+            
+            // Возвращаем отступ под статус-бар (около 35dp)
+            mainHeader.setPadding(
+                mainHeader.getPaddingLeft(), 
+                (int) (35 * getResources().getDisplayMetrics().density), 
+                mainHeader.getPaddingRight(), 
+                mainHeader.getPaddingBottom()
+            );
+        }
+        
+        mainHeader.setLayoutParams(params);
     }
 }
