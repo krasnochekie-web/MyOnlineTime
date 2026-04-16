@@ -76,9 +76,13 @@ public class MainActivity extends AppCompatActivity {
     private ImageView globalImageView;
     private String currentBgPath = null;
     
+    // Память для идеальных размеров шапки
     private int originalHeaderPaddingTop = -1;
     private int originalHeaderHeight = -1;
     
+    // =========================================================================
+    // ПРЕДОХРАНИТЕЛЬ ОТ МОРГАНИЯ ФОНА ПРИ БЫСТРЫХ КЛИКАХ
+    // =========================================================================
     private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable hideBgRunnable;
 
@@ -141,6 +145,8 @@ public class MainActivity extends AppCompatActivity {
         
         View.OnClickListener bellListener = v -> {
             if (navigator != null) {
+                // БАГФИКС: Прячем заглушку перед открытием уведомлений, чтобы она не перекрывала экран
+                hideLoginScreen();
                 navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
             }
         };
@@ -237,7 +243,6 @@ public class MainActivity extends AppCompatActivity {
                     Looper.myQueue().addIdleHandler(new MessageQueue.IdleHandler() {
                         @Override
                         public boolean queueIdle() {
-                            // === ИСПРАВЛЕНИЕ БАГА "ВСПЫШКИ": Оставили только математику! ===
                             Utils.backgroundExecutor.execute(() -> {
                                 com.myonlinetime.app.utils.UsageMath.preloadCoreStats(MainActivity.this);
                             });
@@ -251,18 +256,28 @@ public class MainActivity extends AppCompatActivity {
 
     public void syncHeaderState() {
         getSupportFragmentManager().executePendingTransactions();
+        
         if (navigator != null && navigator.hasSubScreen()) {
             headerManager.updateHeaderAfterBack();
         } else if (headerManager != null) {
             headerManager.resetHeader();
+            
+            // БАГФИКС: Проверяем, нужно ли вернуть заглушку, если мы закрыли уведомления 
+            // и остались на вкладке Профиля (4) или Поиска (1)
+            GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+            if (account == null && (currentTab == 1 || currentTab == 4)) {
+                showLoginScreen();
+            }
         }
     }
 
     public void updateNotificationBadge() {
         TextView badge = findViewById(R.id.header_bell_badge);
         if (badge == null) return;
+
         SharedPreferences appPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
         String historyJson = appPrefs.getString("notif_history_array", "[]");
+        
         int unreadCount = 0;
         try {
             JSONArray array = new JSONArray(historyJson);
@@ -535,7 +550,10 @@ public class MainActivity extends AppCompatActivity {
         view.setTranslationX(screenWidth);
         container.addView(view);
         
-        view.animate().translationX(0).setDuration(300).start();
+        view.animate()
+                .translationX(0)
+                .setDuration(300)
+                .start();
     }
 
     @Override
