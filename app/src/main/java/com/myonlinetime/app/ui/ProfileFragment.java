@@ -118,22 +118,28 @@ public class ProfileFragment extends Fragment {
         // =========================================================================
         if (appsContainerLocal != null) {
             appsContainerLocal.setLayoutTransition(null); 
+            
+            // Автоматический перерасчет при добавлении новых элементов (например, из StatsHelper)
+            appsContainerLocal.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
+                @Override
+                public void onChildViewAdded(View parent, View child) {
+                    appsContainerLocal.post(() -> applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse));
+                }
+                @Override
+                public void onChildViewRemoved(View parent, View child) {}
+            });
         }
 
         btnExpand.setOnClickListener(v -> {
-            for (int i = 0; i < appsContainerLocal.getChildCount(); i++) {
-                appsContainerLocal.getChildAt(i).setVisibility(View.VISIBLE);
-            }
             btnExpand.setVisibility(View.GONE);
             btnCollapse.setVisibility(View.VISIBLE);
+            applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
         });
 
         btnCollapse.setOnClickListener(v -> {
-            for (int i = 2; i < appsContainerLocal.getChildCount(); i++) {
-                appsContainerLocal.getChildAt(i).setVisibility(View.GONE);
-            }
             btnCollapse.setVisibility(View.GONE);
             btnExpand.setVisibility(View.VISIBLE);
+            applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
         });
 
         followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(finalTargetUid, true)));
@@ -149,7 +155,10 @@ public class ProfileFragment extends Fragment {
 
         if (isMe) {
             nameView.setText(activity.prefs.getString("my_nickname", account.getDisplayName()));
-            aboutView.setText(activity.prefs.getString("my_about", ""));
+            
+            String myAbout = activity.prefs.getString("my_about", "");
+            aboutView.setText(myAbout);
+            applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
             Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + myUid);
             if (cachedAvatar != null) {
@@ -194,6 +203,7 @@ public class ProfileFragment extends Fragment {
                             } else {
                                 aboutView.setText("");
                             }
+                            applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
                             if (user.photo != null && user.photo.length() > 10) {
                                 File localAvatar = new File(activity.getFilesDir(), "avatar_" + myUid + ".png");
@@ -242,7 +252,7 @@ public class ProfileFragment extends Fragment {
                                     localDescriptions.clear();
                                     localDescriptions.putAll(user.appDescriptions);
                                 }
-                                renderOtherUserStats(user.topApps, appsContainerLocal, activity, weekTimeText);
+                                renderOtherUserStats(user.topApps, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
                             }
 
                         } else if (!isMe) nameView.setText(activity.getString(R.string.new_user));
@@ -311,6 +321,43 @@ public class ProfileFragment extends Fragment {
         return view;
     }
 
+    // =========================================================================
+    // ДИНАМИЧЕСКИЙ ДИСПЕТЧЕР ВЫСОТЫ И ПУСТОТЫ
+    // =========================================================================
+    private void applyCollapseLogic(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
+        if (container == null || aboutView == null || btnExpand == null || btnCollapse == null) return;
+        
+        // 1. Убираем пустую подложку, если описания нет
+        boolean isEmptyDesc = aboutView.getText().toString().trim().isEmpty();
+        aboutView.setVisibility(isEmptyDesc ? View.GONE : View.VISIBLE);
+        
+        // 2. Определяем динамический лимит топа
+        int limit = isEmptyDesc ? 3 : 2;
+        int count = container.getChildCount();
+        
+        if (count <= limit) {
+            btnExpand.setVisibility(View.GONE);
+            btnCollapse.setVisibility(View.GONE);
+            for (int i = 0; i < count; i++) {
+                container.getChildAt(i).setVisibility(View.VISIBLE);
+            }
+        } else {
+            if (btnCollapse.getVisibility() == View.VISIBLE) {
+                // Режим полного развертывания
+                btnExpand.setVisibility(View.GONE);
+                for (int i = 0; i < count; i++) {
+                    container.getChildAt(i).setVisibility(View.VISIBLE);
+                }
+            } else {
+                // Режим свернутого списка (применяем новый лимит)
+                btnExpand.setVisibility(View.VISIBLE);
+                for (int i = 0; i < count; i++) {
+                    container.getChildAt(i).setVisibility(i < limit ? View.VISIBLE : View.GONE);
+                }
+            }
+        }
+    }
+
     @Override
     public void onResume() {
         super.onResume();
@@ -361,7 +408,7 @@ public class ProfileFragment extends Fragment {
     // =========================================================================
     // ОПТИМИЗИРОВАННЫЙ РЕНДЕР (Без фризов UI)
     // =========================================================================
-    private void renderOtherUserStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText) {
+    private void renderOtherUserStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
         container.removeAllViews();
         if (topApps == null || topApps.isEmpty() || activity == null) return;
 
@@ -401,10 +448,16 @@ public class ProfileFragment extends Fragment {
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
 
+                int collapsedLimit = aboutView.getText().toString().trim().isEmpty() ? 3 : 2;
                 int currentLimit = 0;
+                
                 for (AppUiData data : preloadedData) {
                     View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, container, false);
-                    if (currentLimit >= 2) view.setVisibility(View.GONE);
+                    
+                    // Мгновенно прячем элементы сверх лимита, чтобы не было моргания
+                    if (btnCollapse.getVisibility() != View.VISIBLE && currentLimit >= collapsedLimit) {
+                        view.setVisibility(View.GONE);
+                    }
 
                     ImageView iconView = view.findViewById(R.id.app_icon);
                     TextView nameView = view.findViewById(R.id.app_name);
@@ -453,10 +506,7 @@ public class ProfileFragment extends Fragment {
                     weekTimeText.setOnClickListener(null); 
                 }
 
-                View btnExpand = ((View)container.getParent()).findViewById(R.id.btn_expand_apps);
-                if (btnExpand != null) {
-                    btnExpand.setVisibility(currentLimit > 2 ? View.VISIBLE : View.GONE);
-                }
+                applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
             });
         });
     }
