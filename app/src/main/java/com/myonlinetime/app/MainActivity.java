@@ -141,9 +141,8 @@ public class MainActivity extends AppCompatActivity {
         
         View.OnClickListener bellListener = v -> {
             if (navigator != null) {
-                View loginView = container.findViewWithTag("login_screen_overlay");
-                if (loginView != null) loginView.setVisibility(View.GONE);
-                
+                // БАГФИКС: Мгновенно прячем заглушку перед открытием экрана уведомлений
+                instantHideLoginScreen();
                 navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
             }
         };
@@ -230,6 +229,7 @@ public class MainActivity extends AppCompatActivity {
 
         handleNotificationIntent(getIntent());
         
+        // Вернули вашу стабильную фоновую предзагрузку UsageMath
         mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
             StatsHelper.syncUserProfile(MainActivity.this);
             loadUserAvatarToBottomNav(); 
@@ -259,14 +259,10 @@ public class MainActivity extends AppCompatActivity {
         } else if (headerManager != null) {
             headerManager.resetHeader();
             
+            // БАГФИКС: Проверяем, нужна ли плашка (если закрыли уведомления без авторизации)
             GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
             if (account == null && (currentTab == 1 || currentTab == 4)) {
-                View loginView = container.findViewWithTag("login_screen_overlay");
-                if (loginView != null) {
-                    loginView.setVisibility(View.VISIBLE);
-                } else {
-                    showLoginScreen();
-                }
+                instantShowLoginScreen();
             }
         }
     }
@@ -504,25 +500,18 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // =========================================================================
-    // БАГФИКС "ПРОСКАКИВАЮЩЕГО" ЭКРАНА И СЛОМАННОЙ НАВИГАЦИИ
-    // =========================================================================
     private void checkAuthAndLoad(int tabIndex) {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         
-        // 1. Всегда переключаем фрагмент! Даже если пользователь не авторизован, 
-        // под плашкой регистрации обязан лежать пустой Профиль или Поиск, а не старый экран!
         if (tabIndex == 1) {
             navigator.switchScreen(1, null); 
         } else if (tabIndex == 4) {
             if (account != null) StatsHelper.syncUserProfile(MainActivity.this);
-            // Если нет аккаунта, передаем пустую строку, чтобы фрагмент просто отрисовал базу
             navigator.switchScreen(4, account != null ? account.getId() : ""); 
         }
         
         syncHeaderState(); 
 
-        // 2. А уже поверх честно переключенного фрагмента накидываем заглушку
         if (account == null) {
             showLoginScreen(); 
         } else {
@@ -530,23 +519,33 @@ public class MainActivity extends AppCompatActivity {
         }
     } 
 
+    // Метод для анимации (переключение вкладок)
     public void hideLoginScreen() {
         final View loginView = container.findViewWithTag("login_screen_overlay");
-        if (loginView != null) {
+        if (loginView != null && loginView.getVisibility() == View.VISIBLE) {
             int screenWidth = getResources().getDisplayMetrics().widthPixels;
             loginView.animate()
                     .translationX(screenWidth)
                     .setDuration(300)
-                    .withEndAction(() -> container.removeView(loginView))
+                    .withEndAction(() -> loginView.setVisibility(View.GONE))
                     .start();
         } 
     }
 
+    // Мгновенное скрытие (для выезда уведомлений)
+    public void instantHideLoginScreen() {
+        final View loginView = container.findViewWithTag("login_screen_overlay");
+        if (loginView != null) {
+            loginView.animate().cancel();
+            loginView.setVisibility(View.GONE);
+        }
+    }
+
+    // Метод для анимации (переключение вкладок)
     public void showLoginScreen() {
         mainHeader.setVisibility(View.VISIBLE);
         headerManager.resetHeader();
         
-        // Если заглушка уже есть в контейнере, но просто спрятана (GONE) - возвращаем её!
         View existingView = container.findViewWithTag("login_screen_overlay");
         if (existingView != null) {
             existingView.setVisibility(View.VISIBLE);
@@ -566,6 +565,21 @@ public class MainActivity extends AppCompatActivity {
         container.addView(view);
         
         view.animate().translationX(0).setDuration(300).start();
+    }
+    
+    // Мгновенное появление (возврат с экрана уведомлений)
+    public void instantShowLoginScreen() {
+        mainHeader.setVisibility(View.VISIBLE);
+        headerManager.resetHeader();
+        
+        View loginView = container.findViewWithTag("login_screen_overlay");
+        if (loginView != null) {
+            loginView.animate().cancel();
+            loginView.setTranslationX(0);
+            loginView.setVisibility(View.VISIBLE);
+        } else {
+            showLoginScreen(); // Фолбэк, если view была удалена
+        }
     }
 
     @Override
