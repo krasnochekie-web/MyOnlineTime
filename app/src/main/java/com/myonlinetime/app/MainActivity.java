@@ -76,13 +76,9 @@ public class MainActivity extends AppCompatActivity {
     private ImageView globalImageView;
     private String currentBgPath = null;
     
-    // Память для идеальных размеров шапки
     private int originalHeaderPaddingTop = -1;
     private int originalHeaderHeight = -1;
     
-    // =========================================================================
-    // ПРЕДОХРАНИТЕЛЬ ОТ МОРГАНИЯ ФОНА ПРИ БЫСТРЫХ КЛИКАХ
-    // =========================================================================
     private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable hideBgRunnable;
 
@@ -145,8 +141,11 @@ public class MainActivity extends AppCompatActivity {
         
         View.OnClickListener bellListener = v -> {
             if (navigator != null) {
-                // БАГФИКС: Прячем заглушку перед открытием уведомлений, чтобы она не перекрывала экран
-                hideLoginScreen();
+                // БАГФИКС: Мгновенно прячем заглушку регистрации (без анимации отъезда вбок)
+                View loginView = container.findViewWithTag("login_screen_overlay");
+                if (loginView != null) loginView.setVisibility(View.GONE);
+                
+                // Теперь экран уведомлений выедет снизу красиво и без артефактов
                 navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
             }
         };
@@ -262,11 +261,16 @@ public class MainActivity extends AppCompatActivity {
         } else if (headerManager != null) {
             headerManager.resetHeader();
             
-            // БАГФИКС: Проверяем, нужно ли вернуть заглушку, если мы закрыли уведомления 
-            // и остались на вкладке Профиля (4) или Поиска (1)
+            // БАГФИКС: Когда возвращаемся с экрана уведомлений, проверяем, нужна ли заглушка
             GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
             if (account == null && (currentTab == 1 || currentTab == 4)) {
-                showLoginScreen();
+                View loginView = container.findViewWithTag("login_screen_overlay");
+                if (loginView != null) {
+                    // Если она уже есть в памяти, просто мгновенно делаем её видимой
+                    loginView.setVisibility(View.VISIBLE);
+                } else {
+                    showLoginScreen();
+                }
             }
         }
     }
@@ -550,10 +554,7 @@ public class MainActivity extends AppCompatActivity {
         view.setTranslationX(screenWidth);
         container.addView(view);
         
-        view.animate()
-                .translationX(0)
-                .setDuration(300)
-                .start();
+        view.animate().translationX(0).setDuration(300).start();
     }
 
     @Override
