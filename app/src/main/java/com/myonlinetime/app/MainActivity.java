@@ -76,9 +76,9 @@ public class MainActivity extends AppCompatActivity {
     private ImageView globalImageView;
     private String currentBgPath = null;
     
-    // =========================================================================
-    // ПРЕДОХРАНИТЕЛЬ ОТ МОРГАНИЯ ФОНА ПРИ БЫСТРЫХ КЛИКАХ
-    // =========================================================================
+    private int originalHeaderPaddingTop = -1;
+    private int originalHeaderHeight = -1;
+    
     private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable hideBgRunnable;
 
@@ -234,23 +234,16 @@ public class MainActivity extends AppCompatActivity {
             try {
                 final GoogleSignInAccount account = task.getResult(ApiException.class);
                 if (account != null && navigator != null) {
-                    
                     Looper.myQueue().addIdleHandler(new MessageQueue.IdleHandler() {
                         @Override
                         public boolean queueIdle() {
+                            // === ИСПРАВЛЕНИЕ БАГА "ВСПЫШКИ": Оставили только математику! ===
                             Utils.backgroundExecutor.execute(() -> {
                                 com.myonlinetime.app.utils.UsageMath.preloadCoreStats(MainActivity.this);
-                                
-                                new android.os.Handler(Looper.getMainLooper()).post(() -> {
-                                    navigator.preloadProfile(account.getId());
-                                    navigator.preloadStats(); 
-                                });
                             });
-                            
                             return false; 
                         }
                     });
-                    
                 }
             } catch (Exception ignored) { }
         });
@@ -258,7 +251,6 @@ public class MainActivity extends AppCompatActivity {
 
     public void syncHeaderState() {
         getSupportFragmentManager().executePendingTransactions();
-        
         if (navigator != null && navigator.hasSubScreen()) {
             headerManager.updateHeaderAfterBack();
         } else if (headerManager != null) {
@@ -269,10 +261,8 @@ public class MainActivity extends AppCompatActivity {
     public void updateNotificationBadge() {
         TextView badge = findViewById(R.id.header_bell_badge);
         if (badge == null) return;
-
         SharedPreferences appPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
         String historyJson = appPrefs.getString("notif_history_array", "[]");
-        
         int unreadCount = 0;
         try {
             JSONArray array = new JSONArray(historyJson);
@@ -366,7 +356,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
-        
         getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(notifListener);
     }
@@ -427,11 +416,9 @@ public class MainActivity extends AppCompatActivity {
         if (intent != null && intent.hasExtra("open_tab")) {
             String tab = intent.getStringExtra("open_tab");
             if ("time".equals(tab)) {
-                
                 if (navigator != null && navigator.hasSubScreen()) {
                     navigator.closeSubScreen();
                 }
-                
                 hideLoginScreen(); 
                 updateNavState(3); 
                 navigator.switchScreen(3, null);
@@ -493,7 +480,6 @@ public class MainActivity extends AppCompatActivity {
             syncHeaderState(); 
             return; 
         }
-        
         if (currentTab != 0) {
             updateNavState(0);
             navigator.switchScreen(0, null);
@@ -549,10 +535,7 @@ public class MainActivity extends AppCompatActivity {
         view.setTranslationX(screenWidth);
         container.addView(view);
         
-        view.animate()
-                .translationX(0)
-                .setDuration(300)
-                .start();
+        view.animate().translationX(0).setDuration(300).start();
     }
 
     @Override
@@ -685,11 +668,9 @@ public class MainActivity extends AppCompatActivity {
         currentTab = index;
         mainHeader.setVisibility(View.VISIBLE);
         mainHeader.bringToFront(); 
-        
         if (permissionOverlay != null && permissionOverlay.getVisibility() == View.VISIBLE) {
             mainHeader.bringToFront();
         }
-
         bottomNav.setVisibility(View.VISIBLE);
         showBottomNav();
 
@@ -706,9 +687,6 @@ public class MainActivity extends AppCompatActivity {
         return mode == AppOpsManager.MODE_ALLOWED;
     }
 
-    // =========================================================================
-    // ТОЧНАЯ ХИРУРГИЧЕСКАЯ АДАПТАЦИЯ ШАПКИ
-    // =========================================================================
     @Override
     public void onMultiWindowModeChanged(boolean isInMultiWindowMode, android.content.res.Configuration newConfig) {
         super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig);
@@ -721,24 +699,19 @@ public class MainActivity extends AppCompatActivity {
         ViewGroup headerGroup = (ViewGroup) mainHeader;
         if (headerGroup.getChildCount() == 0) return;
         
-        // Достаем тот самый внутренний LinearLayout, у которого в XML жестко заданы 76dp и отступ 20dp
         View innerHeader = headerGroup.getChildAt(0);
         ViewGroup.LayoutParams innerParams = innerHeader.getLayoutParams();
 
         if (isMultiWindow) {
-            // В режиме окна делаем высоту 56dp и обнуляем жесткий отступ 20dp, чтобы не плющить иконки
             innerParams.height = (int) (56 * getResources().getDisplayMetrics().density);
             innerHeader.setPadding(
                 innerHeader.getPaddingLeft(), 
-                0, // Убираем верхний отступ
+                0, 
                 innerHeader.getPaddingRight(), 
                 innerHeader.getPaddingBottom()
             );
-            
-            // Также обнуляем отступы внешнего слоя, чтобы fitsSystemWindows нас не смущал
             mainHeader.setPadding(0, 0, 0, 0);
         } else {
-            // В обычном режиме возвращаем всё строго по вашему XML: 76dp высота и 20dp отступ
             innerParams.height = (int) (76 * getResources().getDisplayMetrics().density);
             innerHeader.setPadding(
                 innerHeader.getPaddingLeft(), 
@@ -746,8 +719,6 @@ public class MainActivity extends AppCompatActivity {
                 innerHeader.getPaddingRight(), 
                 innerHeader.getPaddingBottom()
             );
-            
-            // Просим систему снова применить отступ под статус-бар
             mainHeader.requestApplyInsets();
         }
         
