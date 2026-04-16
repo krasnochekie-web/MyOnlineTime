@@ -711,7 +711,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =========================================================================
-    // ИСПРАВЛЕННАЯ АДАПТАЦИЯ ШАПКИ
+    // ТОЧНАЯ МАТЕМАТИЧЕСКАЯ АДАПТАЦИЯ ШАПКИ
     // =========================================================================
     @Override
     public void onMultiWindowModeChanged(boolean isInMultiWindowMode, android.content.res.Configuration newConfig) {
@@ -730,18 +730,25 @@ public class MainActivity extends AppCompatActivity {
             originalHeaderHeight = params.height;
         }
 
+        int smallPadding = (int) (8 * getResources().getDisplayMetrics().density);
+
         if (isMultiWindow) {
-            // В окне убираем отступ под статус-бар, но НЕ трогаем высоту контента
+            // В окне убираем отступ под статус-бар
             mainHeader.setPadding(
                 mainHeader.getPaddingLeft(), 
-                (int) (8 * getResources().getDisplayMetrics().density), 
+                smallPadding, 
                 mainHeader.getPaddingRight(), 
                 mainHeader.getPaddingBottom()
             );
-            // Разрешаем шапке самой облегать иконки, чтобы не плющить их
-            params.height = ViewGroup.LayoutParams.WRAP_CONTENT; 
+            
+            // Если высота шапки жестко задана в XML, высчитываем разницу в отступах
+            // и вычитаем её из общей высоты. Внутреннее пространство (иконки/текст) не пострадает!
+            if (originalHeaderHeight > 0 && originalHeaderPaddingTop > smallPadding) {
+                int paddingDiff = originalHeaderPaddingTop - smallPadding;
+                params.height = originalHeaderHeight - paddingDiff;
+            }
         } else {
-            // Возвращаем всё точно так, как было изначально в XML
+            // Возвращаем всё точно так, как было изначально
             mainHeader.setPadding(
                 mainHeader.getPaddingLeft(), 
                 originalHeaderPaddingTop, 
