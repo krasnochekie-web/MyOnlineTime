@@ -100,7 +100,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         
         // =========================================================================
-        // МАГИЯ Z-ИНДЕКСА: Уведомления и под-экраны всегда поверх любых плашек
+        // МАГИЯ АРХИТЕКТУРЫ: Перехватываем фрагменты прямо при рождении
         // =========================================================================
         getSupportFragmentManager().registerFragmentLifecycleCallbacks(new FragmentManager.FragmentLifecycleCallbacks() {
             @Override
@@ -108,13 +108,15 @@ public class MainActivity extends AppCompatActivity {
                 super.onFragmentViewCreated(fm, f, v, savedInstanceState);
                 String fragName = f.getClass().getSimpleName();
                 
+                // Под-экраны получают Z-индекс 100, чтобы выезжать ПОВЕРХ заглушек
                 if (fragName.contains("NotificationsHistory") || fragName.contains("EditProfile") || fragName.contains("Follows")) {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                         v.setTranslationZ(100f); 
                     }
                 }
                 
-                container.post(() -> enforceLoginOverlays());
+                // Вшиваем плашку мгновенно!
+                applyOverlayToFragment(f);
             }
         }, false);
 
@@ -274,7 +276,7 @@ public class MainActivity extends AppCompatActivity {
             headerManager.updateHeaderAfterBack();
         } else if (headerManager != null) {
             headerManager.resetHeader();
-            container.post(this::enforceLoginOverlays);
+            enforceLoginOverlays();
         }
     }
 
@@ -511,7 +513,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =========================================================================
-    // БЕЗ КОСТЫЛЕЙ: Внедрение плашки по ТОЧНЫМ именам фрагментов
+    // ЖЕЛЕЗОБЕТОННОЕ ВНЕДРЕНИЕ: Работает по вашим точным именам!
     // =========================================================================
     private void checkAuthAndLoad(int tabIndex) {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
@@ -526,67 +528,81 @@ public class MainActivity extends AppCompatActivity {
         getSupportFragmentManager().executePendingTransactions();
         syncHeaderState(); 
         
+        // Надежно обновляем все активные плашки
         enforceLoginOverlays();
-        container.post(this::enforceLoginOverlays);
     } 
 
     public void enforceLoginOverlays() {
-        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
-        boolean noAuth = (account == null);
-
-        // Чистим старый глобальный костыль из контейнера, если он там остался
-        View oldGlobalOverlay = container.findViewWithTag("login_screen_overlay");
-        if (oldGlobalOverlay != null && oldGlobalOverlay.getParent() == container) {
-            container.removeView(oldGlobalOverlay);
+        // Удаляем мусор, если он остался от прошлых экспериментов
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View child = container.getChildAt(i);
+            if ("login_screen_overlay".equals(child.getTag())) {
+                container.removeView(child);
+                i--;
+            }
         }
 
-        // Проходимся по ВСЕМ загруженным в память фрагментам
+        // Проходимся по всем фрагментам
         for (Fragment f : getSupportFragmentManager().getFragments()) {
-            if (f != null && f.getView() instanceof ViewGroup) {
-                String fragName = f.getClass().getSimpleName();
-                
-                // Пропускаем под-экраны (они выезжают поверх всего)
-                if (fragName.contains("Notification") || fragName.contains("Edit") || fragName.contains("Follow")) {
-                    continue;
-                }
-
-                // ВОТ ОНО: проверяем конкретные, точные имена нужных фрагментов!
-                boolean isProtected = fragName.contains("ProfileFragment") || fragName.contains("SearchFragment");
-
-                if (isProtected) {
-                    ViewGroup root = (ViewGroup) f.getView();
-                    View overlay = root.findViewWithTag("login_screen_overlay");
-
-                    if (noAuth) {
-                        // Если нет авторизации, вшиваем плашку прямо в тело фрагмента
-                        if (overlay == null) {
-                            overlay = getLayoutInflater().inflate(R.layout.layout_login_required, root, false);
-                            overlay.setClickable(true); 
-                            overlay.setTag("login_screen_overlay");
-                            
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                                overlay.setTranslationZ(50f); 
-                            }
-                            
-                            Button btn = overlay.findViewById(R.id.btn_login_center);
-                            if (btn != null) btn.setOnClickListener(v -> startActivityForResult(mGoogleSignInClient.getSignInIntent(), RC_SIGN_IN));
-                            
-                            root.addView(overlay);
-                        } else {
-                            overlay.setVisibility(View.VISIBLE);
-                        }
-                    } else {
-                        // Если авторизация есть, прячем плашку
-                        if (overlay != null) {
-                            overlay.setVisibility(View.GONE);
-                        }
-                    }
-                }
-            }
+            applyOverlayToFragment(f);
         }
     }
 
-    // Для совместимости
+    private void applyOverlayToFragment(Fragment f) {
+        if (f == null || !(f.getView() instanceof ViewGroup)) return;
+
+        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+        boolean noAuth = (account == null);
+        String fragName = f.getClass().getSimpleName();
+        
+        // Под-экраны плашкой не кроем
+        if (fragName.contains("Notification") || fragName.contains("Edit") || fragName.contains("Follow")) {
+            return;
+        }
+
+        // ТОЧНЫЕ ИМЕНА ВАШИХ ФРАГМЕНТОВ!
+        boolean needsAuth = fragName.equals("ProfileFragment") || fragName.equals("SearchFragment");
+
+        ViewGroup root = (ViewGroup) f.getView();
+        View overlay = root.findViewWithTag("login_screen_overlay");
+
+        if (needsAuth && noAuth) {
+            if (overlay == null) {
+                try {
+                    overlay = getLayoutInflater().inflate(R.layout.layout_login_required, root, false);
+                    overlay.setClickable(true); 
+                    overlay.setTag("login_screen_overlay");
+                    
+                    // Заставляем плашку 100% занять весь экран фрагмента
+                    ViewGroup.LayoutParams params = new ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, 
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    );
+                    overlay.setLayoutParams(params);
+                    
+                    // Плашка (50) лежит НАД контентом фрагмента, но ПОД уведомлениями (100)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                        overlay.setTranslationZ(50f); 
+                    }
+                    
+                    Button btn = overlay.findViewById(R.id.btn_login_center);
+                    if (btn != null) btn.setOnClickListener(v -> startActivityForResult(mGoogleSignInClient.getSignInIntent(), RC_SIGN_IN));
+                    
+                    root.addView(overlay);
+                } catch (Exception ignored) { }
+            } else {
+                overlay.setVisibility(View.VISIBLE);
+                overlay.bringToFront();
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                    overlay.setTranslationZ(50f); 
+                }
+            }
+        } else {
+            if (overlay != null) overlay.setVisibility(View.GONE);
+        }
+    }
+
+    // Совместимость
     public void showLoginScreen() { enforceLoginOverlays(); }
     public void hideLoginScreen() { enforceLoginOverlays(); }
 
@@ -607,7 +623,7 @@ public class MainActivity extends AppCompatActivity {
                         StatsHelper.syncUserProfile(MainActivity.this);
                         navigator.switchScreen(4, acct.getId()); 
                         
-                        enforceLoginOverlays(); // Убираем плашки после входа
+                        enforceLoginOverlays();
                     }
                     @Override
                     public void onError(String error) {
@@ -734,7 +750,7 @@ public class MainActivity extends AppCompatActivity {
         iconUsage.setSelected(index == 3);
         iconSettings.setSelected(index == 5); 
         
-        container.post(this::enforceLoginOverlays);
+        enforceLoginOverlays();
     }
 
     private boolean hasPermission() {
