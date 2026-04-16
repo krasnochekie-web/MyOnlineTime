@@ -25,6 +25,7 @@ import com.myonlinetime.app.R;
 import com.myonlinetime.app.adapters.AppsAdapter;
 import com.myonlinetime.app.utils.UsageMath;
 import com.myonlinetime.app.utils.Utils;
+import android.content.pm.PackageManager;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -52,7 +53,7 @@ public class StatsTimeFragment extends Fragment {
     private View listFooterCard;
     private View dividerShowMore;
     private TextView btnShowMore;
-    private ProgressBar loadingSpinner; // Наш новый крутящийся лоадер
+    private ProgressBar loadingSpinner; 
     
     private boolean isFirstLoad = true; 
 
@@ -60,7 +61,6 @@ public class StatsTimeFragment extends Fragment {
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        // Загружаем оригинальный макет
         final View originalView = inflater.inflate(R.layout.layout_time_tab, container, false); 
         
         final MainActivity activity = (MainActivity) getActivity();
@@ -69,9 +69,6 @@ public class StatsTimeFragment extends Fragment {
             activity.headerManager.resetHeader();
         }
 
-        // =========================================================================
-        // СОЗДАЕМ КРУТЯЩИЙСЯ ЛОАДЕР (Программно, без изменения XML)
-        // =========================================================================
         FrameLayout rootWrapper = new FrameLayout(activity);
         rootWrapper.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         rootWrapper.addView(originalView);
@@ -79,11 +76,10 @@ public class StatsTimeFragment extends Fragment {
         loadingSpinner = new ProgressBar(activity);
         int spinnerSize = (int) (60 * getResources().getDisplayMetrics().density);
         FrameLayout.LayoutParams spinnerParams = new FrameLayout.LayoutParams(spinnerSize, spinnerSize);
-        spinnerParams.gravity = android.view.Gravity.CENTER; // Ставим ровно по центру экрана
+        spinnerParams.gravity = android.view.Gravity.CENTER; 
         loadingSpinner.setLayoutParams(spinnerParams);
         loadingSpinner.setVisibility(View.GONE);
         
-        // Красим в красивый ютубовский синий цвет
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             loadingSpinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#3EA6FF")));
         }
@@ -177,16 +173,14 @@ public class StatsTimeFragment extends Fragment {
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         }); 
 
-        // Инициируем первую загрузку
         fetchAndApplyData(0, activity);
 
-        // Возвращаем нашу обертку со спиннером вместо обычного макета
         return rootWrapper;
     }
 
     private void fetchAndApplyData(int position, MainActivity activity) {
         Runnable updateUI = () -> {
-            loadingSpinner.setVisibility(View.GONE); // Прячем лоадер, когда всё готово
+            loadingSpinner.setVisibility(View.GONE); 
             
             CachedStats cached = statsCache.get(position);
             if (cached == null || !isAdded()) return;
@@ -207,14 +201,13 @@ public class StatsTimeFragment extends Fragment {
         };
 
         if (statsCache.containsKey(position)) {
-            updateUI.run();
+            new Handler(Looper.getMainLooper()).post(updateUI);
             return; 
         }
 
         if (!isAdded()) return;
         totalTimeText.setText(activity.getString(R.string.loading));
         
-        // Показываем синий лоадер перед началом тяжелых расчетов
         loadingSpinner.setVisibility(View.VISIBLE); 
         
         Utils.backgroundExecutor.execute(() -> {
@@ -244,6 +237,20 @@ public class StatsTimeFragment extends Fragment {
             
             Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
             final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
+            
+            // =========================================================================
+            // ГЛУБОКАЯ ПРЕДЗАГРУЗКА ДАННЫХ ИКОНОК (Магия производительности)
+            // =========================================================================
+            PackageManager pm = activity.getPackageManager();
+            for (String pkg : finalList) {
+                try {
+                    // Это заставит Android извлечь данные приложения с жесткого диска
+                    // и положить их в горячий кэш оперативной памяти до того, как они понадобятся адаптеру
+                    android.content.pm.ApplicationInfo info = pm.getApplicationInfo(pkg, 0);
+                    pm.getApplicationLabel(info); 
+                    pm.getApplicationIcon(info);  
+                } catch (Exception ignored) { }
+            }
             
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (isAdded()) {
