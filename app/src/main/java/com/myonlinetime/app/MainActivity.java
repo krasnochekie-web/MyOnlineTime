@@ -76,6 +76,10 @@ public class MainActivity extends AppCompatActivity {
     private ImageView globalImageView;
     private String currentBgPath = null;
     
+    // Память для идеальных размеров шапки
+    private int originalHeaderPaddingTop = -1;
+    private int originalHeaderHeight = -1;
+    
     // =========================================================================
     // ПРЕДОХРАНИТЕЛЬ ОТ МОРГАНИЯ ФОНА ПРИ БЫСТРЫХ КЛИКАХ
     // =========================================================================
@@ -402,7 +406,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         
-        // Вызов адаптации шапки при каждом возврате в приложение
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
             adjustHeaderForWindowMode(isInMultiWindowMode());
         }
@@ -708,7 +711,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =========================================================================
-    // АДАПТАЦИЯ ШАПКИ ПОД РЕЖИМ ВСПЛЫВАЮЩЕГО ОКНА
+    // ИСПРАВЛЕННАЯ АДАПТАЦИЯ ШАПКИ
     // =========================================================================
     @Override
     public void onMultiWindowModeChanged(boolean isInMultiWindowMode, android.content.res.Configuration newConfig) {
@@ -721,28 +724,31 @@ public class MainActivity extends AppCompatActivity {
         
         ViewGroup.LayoutParams params = mainHeader.getLayoutParams();
         
+        // Один раз сохраняем родные настройки из вашей верстки
+        if (originalHeaderPaddingTop == -1) {
+            originalHeaderPaddingTop = mainHeader.getPaddingTop();
+            originalHeaderHeight = params.height;
+        }
+
         if (isMultiWindow) {
-            // Во всплывающем окне делаем шапку компактной (около 50dp)
-            params.height = (int) (50 * getResources().getDisplayMetrics().density);
-            
-            // Убираем системные отступы под статус-бар
+            // В окне убираем отступ под статус-бар, но НЕ трогаем высоту контента
             mainHeader.setPadding(
                 mainHeader.getPaddingLeft(), 
                 (int) (8 * getResources().getDisplayMetrics().density), 
                 mainHeader.getPaddingRight(), 
                 mainHeader.getPaddingBottom()
             );
-        } else {
-            // В обычном режиме возвращаем стандартный размер (WRAP_CONTENT)
+            // Разрешаем шапке самой облегать иконки, чтобы не плющить их
             params.height = ViewGroup.LayoutParams.WRAP_CONTENT; 
-            
-            // Возвращаем отступ под статус-бар (около 35dp)
+        } else {
+            // Возвращаем всё точно так, как было изначально в XML
             mainHeader.setPadding(
                 mainHeader.getPaddingLeft(), 
-                (int) (35 * getResources().getDisplayMetrics().density), 
+                originalHeaderPaddingTop, 
                 mainHeader.getPaddingRight(), 
                 mainHeader.getPaddingBottom()
             );
+            params.height = originalHeaderHeight; 
         }
         
         mainHeader.setLayoutParams(params);
