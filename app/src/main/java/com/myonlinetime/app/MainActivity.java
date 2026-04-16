@@ -76,10 +76,6 @@ public class MainActivity extends AppCompatActivity {
     private ImageView globalImageView;
     private String currentBgPath = null;
     
-    // Память для идеальных размеров шапки
-    private int originalHeaderPaddingTop = -1;
-    private int originalHeaderHeight = -1;
-    
     // =========================================================================
     // ПРЕДОХРАНИТЕЛЬ ОТ МОРГАНИЯ ФОНА ПРИ БЫСТРЫХ КЛИКАХ
     // =========================================================================
@@ -711,7 +707,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // =========================================================================
-    // ТОЧНАЯ МАТЕМАТИЧЕСКАЯ АДАПТАЦИЯ ШАПКИ
+    // ТОЧНАЯ ХИРУРГИЧЕСКАЯ АДАПТАЦИЯ ШАПКИ
     // =========================================================================
     @Override
     public void onMultiWindowModeChanged(boolean isInMultiWindowMode, android.content.res.Configuration newConfig) {
@@ -720,44 +716,41 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void adjustHeaderForWindowMode(boolean isMultiWindow) {
-        if (mainHeader == null) return;
+        if (mainHeader == null || !(mainHeader instanceof ViewGroup)) return;
         
-        ViewGroup.LayoutParams params = mainHeader.getLayoutParams();
+        ViewGroup headerGroup = (ViewGroup) mainHeader;
+        if (headerGroup.getChildCount() == 0) return;
         
-        // Один раз сохраняем родные настройки из вашей верстки
-        if (originalHeaderPaddingTop == -1) {
-            originalHeaderPaddingTop = mainHeader.getPaddingTop();
-            originalHeaderHeight = params.height;
-        }
-
-        int smallPadding = (int) (8 * getResources().getDisplayMetrics().density);
+        // Достаем тот самый внутренний LinearLayout, у которого в XML жестко заданы 76dp и отступ 20dp
+        View innerHeader = headerGroup.getChildAt(0);
+        ViewGroup.LayoutParams innerParams = innerHeader.getLayoutParams();
 
         if (isMultiWindow) {
-            // В окне убираем отступ под статус-бар
-            mainHeader.setPadding(
-                mainHeader.getPaddingLeft(), 
-                smallPadding, 
-                mainHeader.getPaddingRight(), 
-                mainHeader.getPaddingBottom()
+            // В режиме окна делаем высоту 56dp и обнуляем жесткий отступ 20dp, чтобы не плющить иконки
+            innerParams.height = (int) (56 * getResources().getDisplayMetrics().density);
+            innerHeader.setPadding(
+                innerHeader.getPaddingLeft(), 
+                0, // Убираем верхний отступ
+                innerHeader.getPaddingRight(), 
+                innerHeader.getPaddingBottom()
             );
             
-            // Если высота шапки жестко задана в XML, высчитываем разницу в отступах
-            // и вычитаем её из общей высоты. Внутреннее пространство (иконки/текст) не пострадает!
-            if (originalHeaderHeight > 0 && originalHeaderPaddingTop > smallPadding) {
-                int paddingDiff = originalHeaderPaddingTop - smallPadding;
-                params.height = originalHeaderHeight - paddingDiff;
-            }
+            // Также обнуляем отступы внешнего слоя, чтобы fitsSystemWindows нас не смущал
+            mainHeader.setPadding(0, 0, 0, 0);
         } else {
-            // Возвращаем всё точно так, как было изначально
-            mainHeader.setPadding(
-                mainHeader.getPaddingLeft(), 
-                originalHeaderPaddingTop, 
-                mainHeader.getPaddingRight(), 
-                mainHeader.getPaddingBottom()
+            // В обычном режиме возвращаем всё строго по вашему XML: 76dp высота и 20dp отступ
+            innerParams.height = (int) (76 * getResources().getDisplayMetrics().density);
+            innerHeader.setPadding(
+                innerHeader.getPaddingLeft(), 
+                (int) (20 * getResources().getDisplayMetrics().density), 
+                innerHeader.getPaddingRight(), 
+                innerHeader.getPaddingBottom()
             );
-            params.height = originalHeaderHeight; 
+            
+            // Просим систему снова применить отступ под статус-бар
+            mainHeader.requestApplyInsets();
         }
         
-        mainHeader.setLayoutParams(params);
+        innerHeader.setLayoutParams(innerParams);
     }
 }
