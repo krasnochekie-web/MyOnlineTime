@@ -2,6 +2,7 @@ package com.myonlinetime.app;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
+import androidx.fragment.app.Fragment;
 
 import com.myonlinetime.app.utils.StatsHelper;
 import com.myonlinetime.app.utils.SmartHeaderManager;
@@ -141,8 +142,7 @@ public class MainActivity extends AppCompatActivity {
         
         View.OnClickListener bellListener = v -> {
             if (navigator != null) {
-                // БАГФИКС: Мгновенно прячем заглушку перед открытием экрана уведомлений
-                instantHideLoginScreen();
+                // Ничего не прячем и не скрываем. Просто открываем уведомления поверх текущего экрана!
                 navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
             }
         };
@@ -229,7 +229,6 @@ public class MainActivity extends AppCompatActivity {
 
         handleNotificationIntent(getIntent());
         
-        // Вернули вашу стабильную фоновую предзагрузку UsageMath
         mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
             StatsHelper.syncUserProfile(MainActivity.this);
             loadUserAvatarToBottomNav(); 
@@ -259,10 +258,9 @@ public class MainActivity extends AppCompatActivity {
         } else if (headerManager != null) {
             headerManager.resetHeader();
             
-            // БАГФИКС: Проверяем, нужна ли плашка (если закрыли уведомления без авторизации)
             GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
             if (account == null && (currentTab == 1 || currentTab == 4)) {
-                instantShowLoginScreen();
+                showLoginScreen();
             }
         }
     }
@@ -500,9 +498,13 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // =========================================================================
+    // БАГФИКС "ПРОСКАКИВАЮЩИХ" ЭКРАНОВ: ВНЕДРЕНИЕ ПЛАШКИ ВО ФРАГМЕНТ
+    // =========================================================================
     private void checkAuthAndLoad(int tabIndex) {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         
+        // 1. Всегда честно переключаем фрагмент (чтобы под плашкой не оставалась лента)
         if (tabIndex == 1) {
             navigator.switchScreen(1, null); 
         } else if (tabIndex == 4) {
@@ -510,8 +512,11 @@ public class MainActivity extends AppCompatActivity {
             navigator.switchScreen(4, account != null ? account.getId() : ""); 
         }
         
+        // Принудительно заставляем Android отрисовать фрагмент
+        getSupportFragmentManager().executePendingTransactions();
         syncHeaderState(); 
 
+        // 2. Внедряем плашку прямо в тело отрисованного фрагмента
         if (account == null) {
             showLoginScreen(); 
         } else {
@@ -519,67 +524,49 @@ public class MainActivity extends AppCompatActivity {
         }
     } 
 
-    // Метод для анимации (переключение вкладок)
-    public void hideLoginScreen() {
-        final View loginView = container.findViewWithTag("login_screen_overlay");
-        if (loginView != null && loginView.getVisibility() == View.VISIBLE) {
-            int screenWidth = getResources().getDisplayMetrics().widthPixels;
-            loginView.animate()
-                    .translationX(screenWidth)
-                    .setDuration(300)
-                    .withEndAction(() -> loginView.setVisibility(View.GONE))
-                    .start();
-        } 
-    }
-
-    // Мгновенное скрытие (для выезда уведомлений)
-    public void instantHideLoginScreen() {
-        final View loginView = container.findViewWithTag("login_screen_overlay");
-        if (loginView != null) {
-            loginView.animate().cancel();
-            loginView.setVisibility(View.GONE);
-        }
-    }
-
-    // Метод для анимации (переключение вкладок)
     public void showLoginScreen() {
         mainHeader.setVisibility(View.VISIBLE);
         headerManager.resetHeader();
         
-        View existingView = container.findViewWithTag("login_screen_overlay");
-        if (existingView != null) {
-            existingView.setVisibility(View.VISIBLE);
-            existingView.animate().translationX(0).setDuration(300).start();
-            return; 
-        }
-        
-        View view = getLayoutInflater().inflate(R.layout.layout_login_required, container, false);
-        view.setClickable(true);
-        view.setTag("login_screen_overlay"); 
-        
-        Button btn = view.findViewById(R.id.btn_login_center);
-        btn.setOnClickListener(v -> startActivityForResult(mGoogleSignInClient.getSignInIntent(), RC_SIGN_IN));
-        
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        view.setTranslationX(screenWidth);
-        container.addView(view);
-        
-        view.animate().translationX(0).setDuration(300).start();
-    }
-    
-    // Мгновенное появление (возврат с экрана уведомлений)
-    public void instantShowLoginScreen() {
-        mainHeader.setVisibility(View.VISIBLE);
-        headerManager.resetHeader();
-        
-        View loginView = container.findViewWithTag("login_screen_overlay");
-        if (loginView != null) {
-            loginView.animate().cancel();
-            loginView.setTranslationX(0);
-            loginView.setVisibility(View.VISIBLE);
+        // Ищем текущий фрагмент (Профиль или Поиск)
+        Fragment currentFrag = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
+        if (currentFrag != null && currentFrag.getView() instanceof ViewGroup) {
+            ViewGroup fragRoot = (ViewGroup) currentFrag.getView();
+            
+            // Если плашка уже вшита в фрагмент - ничего не делаем
+            if (fragRoot.findViewWithTag("login_screen_overlay") != null) return;
+            
+            View view = getLayoutInflater().inflate(R.layout.layout_login_required, fragRoot, false);
+            view.setClickable(true);
+            view.setTag("login_screen_overlay"); 
+            
+            // МГНОВЕННО добавляем плашку внутрь фрагмента!
+            // Теперь она будет анимироваться синхронно с переходом вкладок.
+            fragRoot.addView(view);
+            
         } else {
-            showLoginScreen(); // Фолбэк, если view была удалена
+            // Фолбэк на случай, если фрагмент еще не успел создать View
+            if (container.findViewWithTag("login_screen_overlay") == null) {
+                View view = getLayoutInflater().inflate(R.layout.layout_login_required, container, false);
+                view.setClickable(true);
+                view.setTag("login_screen_overlay"); 
+                container.addView(view);
+            }
         }
+    }
+
+    public void hideLoginScreen() {
+        // Удаляем плашку ИЗ ФРАГМЕНТА
+        Fragment currentFrag = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
+        if (currentFrag != null && currentFrag.getView() instanceof ViewGroup) {
+            ViewGroup fragRoot = (ViewGroup) currentFrag.getView();
+            View loginView = fragRoot.findViewWithTag("login_screen_overlay");
+            if (loginView != null) fragRoot.removeView(loginView);
+        }
+        
+        // Удаляем из контейнера (фолбэк)
+        View fallbackView = container.findViewWithTag("login_screen_overlay");
+        if (fallbackView != null) container.removeView(fallbackView);
     }
 
     @Override
