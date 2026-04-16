@@ -141,11 +141,9 @@ public class MainActivity extends AppCompatActivity {
         
         View.OnClickListener bellListener = v -> {
             if (navigator != null) {
-                // БАГФИКС: Мгновенно прячем заглушку регистрации (без анимации отъезда вбок)
                 View loginView = container.findViewWithTag("login_screen_overlay");
                 if (loginView != null) loginView.setVisibility(View.GONE);
                 
-                // Теперь экран уведомлений выедет снизу красиво и без артефактов
                 navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
             }
         };
@@ -261,12 +259,10 @@ public class MainActivity extends AppCompatActivity {
         } else if (headerManager != null) {
             headerManager.resetHeader();
             
-            // БАГФИКС: Когда возвращаемся с экрана уведомлений, проверяем, нужна ли заглушка
             GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
             if (account == null && (currentTab == 1 || currentTab == 4)) {
                 View loginView = container.findViewWithTag("login_screen_overlay");
                 if (loginView != null) {
-                    // Если она уже есть в памяти, просто мгновенно делаем её видимой
                     loginView.setVisibility(View.VISIBLE);
                 } else {
                     showLoginScreen();
@@ -508,21 +504,29 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // =========================================================================
+    // БАГФИКС "ПРОСКАКИВАЮЩЕГО" ЭКРАНА И СЛОМАННОЙ НАВИГАЦИИ
+    // =========================================================================
     private void checkAuthAndLoad(int tabIndex) {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+        
+        // 1. Всегда переключаем фрагмент! Даже если пользователь не авторизован, 
+        // под плашкой регистрации обязан лежать пустой Профиль или Поиск, а не старый экран!
+        if (tabIndex == 1) {
+            navigator.switchScreen(1, null); 
+        } else if (tabIndex == 4) {
+            if (account != null) StatsHelper.syncUserProfile(MainActivity.this);
+            // Если нет аккаунта, передаем пустую строку, чтобы фрагмент просто отрисовал базу
+            navigator.switchScreen(4, account != null ? account.getId() : ""); 
+        }
+        
+        syncHeaderState(); 
+
+        // 2. А уже поверх честно переключенного фрагмента накидываем заглушку
         if (account == null) {
             showLoginScreen(); 
         } else {
             hideLoginScreen(); 
-            if (tabIndex == 1) {
-                navigator.switchScreen(1, null); 
-                syncHeaderState(); 
-            }
-            if (tabIndex == 4) {
-                StatsHelper.syncUserProfile(MainActivity.this);
-                navigator.switchScreen(4, account.getId()); 
-                syncHeaderState(); 
-            }
         }
     } 
 
@@ -541,7 +545,14 @@ public class MainActivity extends AppCompatActivity {
     public void showLoginScreen() {
         mainHeader.setVisibility(View.VISIBLE);
         headerManager.resetHeader();
-        if (container.findViewWithTag("login_screen_overlay") != null) return; 
+        
+        // Если заглушка уже есть в контейнере, но просто спрятана (GONE) - возвращаем её!
+        View existingView = container.findViewWithTag("login_screen_overlay");
+        if (existingView != null) {
+            existingView.setVisibility(View.VISIBLE);
+            existingView.animate().translationX(0).setDuration(300).start();
+            return; 
+        }
         
         View view = getLayoutInflater().inflate(R.layout.layout_login_required, container, false);
         view.setClickable(true);
