@@ -2,6 +2,7 @@ package com.myonlinetime.app.ui;
 
 import android.app.Dialog;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
@@ -213,6 +214,22 @@ public class ChartFragment extends Fragment {
                 weeklyData.add(dayData); 
                 barMillis[i] = dailyTotal;
                 dayLabels[i] = dayShort;
+            }
+
+            // =========================================================================
+            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА ИКОНОК ДЛЯ ГРАФИКОВ
+            // =========================================================================
+            PackageManager pm = activity.getPackageManager();
+            for (DayData day : weeklyData) {
+                // Берем топ-15 приложений за каждый день (больше на экране графиков обычно и не нужно)
+                int limit = Math.min(15, day.appList.size());
+                for (int i = 0; i < limit; i++) {
+                    try {
+                        // Заставляем Android вытащить иконку с диска в горячий кэш оперативной памяти
+                        android.content.pm.ApplicationInfo info = pm.getApplicationInfo(day.appList.get(i), 0);
+                        pm.getApplicationIcon(info); 
+                    } catch (Exception ignored) { }
+                }
             }
 
             new Handler(Looper.getMainLooper()).post(() -> {
