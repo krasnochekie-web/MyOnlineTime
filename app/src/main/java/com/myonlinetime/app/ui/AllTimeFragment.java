@@ -103,9 +103,6 @@ public class AllTimeFragment extends Fragment {
         return view;
     }
 
-    // =========================================================================
-    // СПУСКОВОЙ КРЮЧОК АНИМАЦИИ (Срабатывает только когда вкладка видима)
-    // =========================================================================
     @Override
     public void onResume() {
         super.onResume();
@@ -139,7 +136,6 @@ public class AllTimeFragment extends Fragment {
     }
     
     private void loadAndCalculateStats() {
-        // Ставим "нули" на время загрузки
         mainValTxt.setText(getString(R.string.format_days_hours, 0, 0));
         subValTxt.setText(getString(R.string.format_total_hours_mins, 0, 0));
         yesterdayValTxt.setText(getString(R.string.format_plus_hours_mins, 0, 0));
@@ -151,9 +147,16 @@ public class AllTimeFragment extends Fragment {
             long startDate = prefs.getLong(KEY_START_DATE, 0);
             long lastUpdate = prefs.getLong(KEY_LAST_UPDATE, 0);
             long historicalTotalMillis = prefs.getLong(KEY_TOTAL_TIME, 0);
-            Map<String, Long> historicalAppsMap = loadAppsFromCache();
+            Map<String, Long> historicalAppsMapRaw = loadAppsFromCache();
+            
+            // ЖЕСТКАЯ ОЧИСТКА КЭША ОТ ДУБЛИКАТОВ
+            Map<String, Long> historicalAppsMap = new HashMap<>();
+            for (Map.Entry<String, Long> entry : historicalAppsMapRaw.entrySet()) {
+                String cleanPkg = entry.getKey().trim();
+                Long current = historicalAppsMap.get(cleanPkg);
+                historicalAppsMap.put(cleanPkg, (current == null ? 0L : current) + entry.getValue());
+            }
 
-            // Подстраховка: если фрагмент загрузился быстрее, чем MainActivity успел инициализировать UsageMath
             if (UsageMath.todayStartMillis == 0) {
                 Calendar cal = Calendar.getInstance();
                 cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
@@ -165,16 +168,14 @@ public class AllTimeFragment extends Fragment {
 
             long todayStartMillis = UsageMath.todayStartMillis;
 
-            // 1. ОБНОВЛЕНИЕ ИСТОРИЧЕСКОГО КЭША (До начала сегодняшнего дня)
+            // 1. ОБНОВЛЕНИЕ ИСТОРИЧЕСКОГО КЭША
             if (startDate == 0) {
-                // Первый запуск: Грузим агрегированную историю за год через UsageMath
                 Calendar oneYearAgo = Calendar.getInstance();
                 oneYearAgo.add(Calendar.YEAR, -1);
                 
                 historicalAppsMap = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, oneYearAgo.getTimeInMillis(), todayStartMillis);
                 historicalTotalMillis = UsageMath.sumMap(historicalAppsMap);
 
-                // Легкий запрос просто чтобы найти самую раннюю точку отсчета
                 UsageStatsManager usm = (UsageStatsManager) activity.getSystemService(Context.USAGE_STATS_SERVICE);
                 List<UsageStats> yearlyStats = usm.queryUsageStats(UsageStatsManager.INTERVAL_YEARLY, oneYearAgo.getTimeInMillis(), System.currentTimeMillis());
                 long earliestStart = System.currentTimeMillis();
@@ -190,10 +191,9 @@ public class AllTimeFragment extends Fragment {
                 saveToCache(startDate, lastUpdate, historicalTotalMillis, historicalAppsMap);
                 
             } else if (lastUpdate < todayStartMillis) {
-                // Пользователь не открывал приложение пару дней. Догружаем пропущенные дни.
                 Map<String, Long> gapTimes = UsageMath.getFilteredExactTimes(activity, lastUpdate, todayStartMillis);
                 for (Map.Entry<String, Long> entry : gapTimes.entrySet()) {
-                    String pkg = entry.getKey();
+                    String pkg = entry.getKey().trim();
                     long time = entry.getValue();
                     Long current = historicalAppsMap.get(pkg);
                     historicalAppsMap.put(pkg, (current == null ? 0L : current) + time);
@@ -203,7 +203,7 @@ public class AllTimeFragment extends Fragment {
                 saveToCache(startDate, lastUpdate, historicalTotalMillis, historicalAppsMap);
             }
 
-            // 2. БЕРЕМ ГОТОВЫЕ ДАННЫЕ ЗА СЕГОДНЯ И ВЧЕРА (За 0 миллисекунд из кэша UsageMath)
+            // 2. БЕРЕМ ГОТОВЫЕ ДАННЫЕ ЗА СЕГОДНЯ И ВЧЕРА
             Map<String, Long> todayTimes = UsageMath.todayExactCache != null ? 
                                            UsageMath.todayExactCache : 
                                            UsageMath.getFilteredExactTimes(activity, todayStartMillis, System.currentTimeMillis());
@@ -214,10 +214,10 @@ public class AllTimeFragment extends Fragment {
             
             long yesterdayTotal = UsageMath.sumMap(yesterdayTimes);
 
-            // 3. ФИКС БАГА: Сливаем исторический кэш с данными ЗА СЕГОДНЯ для отображения в UI
+            // 3. ФИКС БАГА С ДУБЛИКАТАМИ: Сливаем исторический кэш с данными ЗА СЕГОДНЯ
             Map<String, Long> finalAppsMap = new HashMap<>(historicalAppsMap);
             for (Map.Entry<String, Long> entry : todayTimes.entrySet()) {
-                String pkg = entry.getKey();
+                String pkg = entry.getKey().trim(); // Обрезаем пробелы для 100% слияния
                 Long current = finalAppsMap.get(pkg);
                 finalAppsMap.put(pkg, (current == null ? 0L : current) + entry.getValue());
             }
@@ -230,7 +230,7 @@ public class AllTimeFragment extends Fragment {
             Collections.sort(sortedApps, (left, right) -> Long.compare(finalAppsMap.get(right), finalAppsMap.get(left)));
 
             // =========================================================================
-            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА: БЕЗ ЛИМИТОВ + ПОДДЕРЖКА УДАЛЕННЫХ ПРИЛОЖЕНИЙ
+            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА БЕЗ ЛИМИТОВ
             // =========================================================================
             PackageManager pm = activity.getPackageManager();
             for (String pkgName : sortedApps) {
@@ -240,10 +240,8 @@ public class AllTimeFragment extends Fragment {
                     
                     android.content.pm.ApplicationInfo info;
                     try {
-                        // Пробуем найти живое приложение
                         info = pm.getApplicationInfo(pkgName, 0);
                     } catch (PackageManager.NameNotFoundException e) {
-                        // Вытаскиваем удаленного "призрака"
                         info = pm.getApplicationInfo(pkgName, flag);
                     }
                     
@@ -270,9 +268,6 @@ public class AllTimeFragment extends Fragment {
         });
     }
 
-    // =========================================================================
-    // ЛОГИКА САМОЙ АНИМАЦИИ
-    // =========================================================================
     private void runNumbersAnimation() {
         isAnimated = true; 
 
@@ -320,8 +315,9 @@ public class AllTimeFragment extends Fragment {
     private void saveToCache(long startDate, long lastUpdate, long totalTime, Map<String, Long> appsMap) {
         try {
             JSONObject json = new JSONObject();
+            // Очищаем ключи перед сохранением в кэш
             for (Map.Entry<String, Long> entry : appsMap.entrySet()) {
-                json.put(entry.getKey(), entry.getValue());
+                json.put(entry.getKey().trim(), entry.getValue());
             }
             prefs.edit()
                 .putLong(KEY_START_DATE, startDate)
