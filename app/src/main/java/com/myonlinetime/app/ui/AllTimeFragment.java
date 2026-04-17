@@ -55,9 +55,6 @@ public class AllTimeFragment extends Fragment {
     private static final String KEY_TOTAL_TIME = "total_time_millis";
     private static final String KEY_APPS_JSON = "apps_data_json";
 
-    // =========================================================================
-    // ПЕРЕМЕННЫЕ ДЛЯ УМНОЙ АНИМАЦИИ
-    // =========================================================================
     private boolean isDataReady = false; 
     private boolean isAnimated = false; 
     
@@ -134,6 +131,16 @@ public class AllTimeFragment extends Fragment {
         btnOk.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
     }
+
+    // =========================================================================
+    // БРОНЕБОЙНАЯ ОЧИСТКА ИМЕН ПАКЕТОВ ОТ ДУБЛИКАТОВ
+    // =========================================================================
+    private String cleanPackageName(String pkg) {
+        if (pkg == null) return "";
+        // Оставляем только буквы, цифры и точки. Приводим к нижнему регистру.
+        // Выжигает невидимые пробелы, табуляции и прочий мусор.
+        return pkg.replaceAll("[^a-zA-Z0-9.]", "").toLowerCase();
+    }
     
     private void loadAndCalculateStats() {
         mainValTxt.setText(getString(R.string.format_days_hours, 0, 0));
@@ -149,10 +156,10 @@ public class AllTimeFragment extends Fragment {
             long historicalTotalMillis = prefs.getLong(KEY_TOTAL_TIME, 0);
             Map<String, Long> historicalAppsMapRaw = loadAppsFromCache();
             
-            // ЖЕСТКАЯ ОЧИСТКА КЭША ОТ ДУБЛИКАТОВ
+            // СЛИВАЕМ КЭШ С ИСПОЛЬЗОВАНИЕМ ОЧИСТКИ
             Map<String, Long> historicalAppsMap = new HashMap<>();
             for (Map.Entry<String, Long> entry : historicalAppsMapRaw.entrySet()) {
-                String cleanPkg = entry.getKey().trim();
+                String cleanPkg = cleanPackageName(entry.getKey());
                 Long current = historicalAppsMap.get(cleanPkg);
                 historicalAppsMap.put(cleanPkg, (current == null ? 0L : current) + entry.getValue());
             }
@@ -168,12 +175,17 @@ public class AllTimeFragment extends Fragment {
 
             long todayStartMillis = UsageMath.todayStartMillis;
 
-            // 1. ОБНОВЛЕНИЕ ИСТОРИЧЕСКОГО КЭША
             if (startDate == 0) {
                 Calendar oneYearAgo = Calendar.getInstance();
                 oneYearAgo.add(Calendar.YEAR, -1);
                 
-                historicalAppsMap = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, oneYearAgo.getTimeInMillis(), todayStartMillis);
+                Map<String, Long> rawYearly = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, oneYearAgo.getTimeInMillis(), todayStartMillis);
+                for (Map.Entry<String, Long> entry : rawYearly.entrySet()) {
+                    String cleanPkg = cleanPackageName(entry.getKey());
+                    Long current = historicalAppsMap.get(cleanPkg);
+                    historicalAppsMap.put(cleanPkg, (current == null ? 0L : current) + entry.getValue());
+                }
+                
                 historicalTotalMillis = UsageMath.sumMap(historicalAppsMap);
 
                 UsageStatsManager usm = (UsageStatsManager) activity.getSystemService(Context.USAGE_STATS_SERVICE);
@@ -193,17 +205,16 @@ public class AllTimeFragment extends Fragment {
             } else if (lastUpdate < todayStartMillis) {
                 Map<String, Long> gapTimes = UsageMath.getFilteredExactTimes(activity, lastUpdate, todayStartMillis);
                 for (Map.Entry<String, Long> entry : gapTimes.entrySet()) {
-                    String pkg = entry.getKey().trim();
+                    String cleanPkg = cleanPackageName(entry.getKey());
                     long time = entry.getValue();
-                    Long current = historicalAppsMap.get(pkg);
-                    historicalAppsMap.put(pkg, (current == null ? 0L : current) + time);
+                    Long current = historicalAppsMap.get(cleanPkg);
+                    historicalAppsMap.put(cleanPkg, (current == null ? 0L : current) + time);
                 }
                 historicalTotalMillis = UsageMath.sumMap(historicalAppsMap);
                 lastUpdate = todayStartMillis;
                 saveToCache(startDate, lastUpdate, historicalTotalMillis, historicalAppsMap);
             }
 
-            // 2. БЕРЕМ ГОТОВЫЕ ДАННЫЕ ЗА СЕГОДНЯ И ВЧЕРА
             Map<String, Long> todayTimes = UsageMath.todayExactCache != null ? 
                                            UsageMath.todayExactCache : 
                                            UsageMath.getFilteredExactTimes(activity, todayStartMillis, System.currentTimeMillis());
@@ -214,12 +225,12 @@ public class AllTimeFragment extends Fragment {
             
             long yesterdayTotal = UsageMath.sumMap(yesterdayTimes);
 
-            // 3. ФИКС БАГА С ДУБЛИКАТАМИ: Сливаем исторический кэш с данными ЗА СЕГОДНЯ
+            // ФИНАЛЬНОЕ СЛИЯНИЕ "СЕГОДНЯ" И "ИСТОРИИ" (Защита от дубликатов включена)
             Map<String, Long> finalAppsMap = new HashMap<>(historicalAppsMap);
             for (Map.Entry<String, Long> entry : todayTimes.entrySet()) {
-                String pkg = entry.getKey().trim(); // Обрезаем пробелы для 100% слияния
-                Long current = finalAppsMap.get(pkg);
-                finalAppsMap.put(pkg, (current == null ? 0L : current) + entry.getValue());
+                String cleanPkg = cleanPackageName(entry.getKey());
+                Long current = finalAppsMap.get(cleanPkg);
+                finalAppsMap.put(cleanPkg, (current == null ? 0L : current) + entry.getValue());
             }
 
             long finalTotalMillis = UsageMath.sumMap(finalAppsMap);
@@ -229,9 +240,6 @@ public class AllTimeFragment extends Fragment {
             List<String> sortedApps = new ArrayList<>(finalAppsMap.keySet());
             Collections.sort(sortedApps, (left, right) -> Long.compare(finalAppsMap.get(right), finalAppsMap.get(left)));
 
-            // =========================================================================
-            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА БЕЗ ЛИМИТОВ
-            // =========================================================================
             PackageManager pm = activity.getPackageManager();
             for (String pkgName : sortedApps) {
                 try {
@@ -250,7 +258,6 @@ public class AllTimeFragment extends Fragment {
                 } catch (Exception ignored) { }
             }
 
-            // 4. ВОЗВРАЩАЕМСЯ В ГЛАВНЫЙ ПОТОК ДЛЯ ОТРИСОВКИ
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
                 
@@ -306,7 +313,7 @@ public class AllTimeFragment extends Fragment {
             Iterator<String> keys = json.keys();
             while (keys.hasNext()) {
                 String key = keys.next();
-                map.put(key, json.getLong(key));
+                map.put(cleanPackageName(key), json.getLong(key));
             }
         } catch (Exception e) { e.printStackTrace(); }
         return map;
@@ -315,9 +322,8 @@ public class AllTimeFragment extends Fragment {
     private void saveToCache(long startDate, long lastUpdate, long totalTime, Map<String, Long> appsMap) {
         try {
             JSONObject json = new JSONObject();
-            // Очищаем ключи перед сохранением в кэш
             for (Map.Entry<String, Long> entry : appsMap.entrySet()) {
-                json.put(entry.getKey().trim(), entry.getValue());
+                json.put(cleanPackageName(entry.getKey()), entry.getValue());
             }
             prefs.edit()
                 .putLong(KEY_START_DATE, startDate)
