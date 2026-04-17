@@ -417,7 +417,8 @@ public class ProfileFragment extends Fragment {
             int limit = 0;
 
             for (Map.Entry<String, Long> entry : topApps.entrySet()) {
-                String pkgName = entry.getKey();
+                // Бронебойная очистка от дублей, но без искажения регистра
+                String pkgName = entry.getKey().replaceAll("\\s+", "");
 
                 if (localHiddenApps.contains(pkgName)) continue;
                 if (limit >= 10) break;
