@@ -15,6 +15,7 @@ import android.view.Window;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
+import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -217,16 +218,17 @@ public class ChartFragment extends Fragment {
             }
 
             // =========================================================================
-            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА ИКОНОК ДЛЯ ГРАФИКОВ
+            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА ИКОНОК И НАЗВАНИЙ ДЛЯ ГРАФИКОВ
             // =========================================================================
             PackageManager pm = activity.getPackageManager();
             for (DayData day : weeklyData) {
-                // Берем топ-15 приложений за каждый день (больше на экране графиков обычно и не нужно)
+                // Берем топ-15 приложений за каждый день
                 int limit = Math.min(15, day.appList.size());
                 for (int i = 0; i < limit; i++) {
                     try {
-                        // Заставляем Android вытащить иконку с диска в горячий кэш оперативной памяти
+                        // Загоняем в горячий кэш ОС и название, и иконку
                         android.content.pm.ApplicationInfo info = pm.getApplicationInfo(day.appList.get(i), 0);
+                        pm.getApplicationLabel(info); 
                         pm.getApplicationIcon(info); 
                     } catch (Exception ignored) { }
                 }
