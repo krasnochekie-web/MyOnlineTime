@@ -6,6 +6,7 @@ import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 
@@ -45,7 +46,6 @@ public class UsageMath {
             yCal.add(Calendar.DAY_OF_YEAR, -1);
             yesterdayStartMillis = yCal.getTimeInMillis();
 
-            // Считаем и СРАЗУ сохраняем в сейф, чтобы не потерять быстрые тесты
             todayExactCache = getFilteredExactTimes(context, todayStartMillis, System.currentTimeMillis());
             saveToSafeCache(context, todayStartMillis, todayExactCache);
 
@@ -58,11 +58,18 @@ public class UsageMath {
     // ТОЧНАЯ МАТЕМАТИКА (Сегодня / Вчера)
     // =========================================================================
     public static Map<String, Long> getFilteredExactTimes(Context context, long start, long end) {
-        Map<String, Long> systemData = fetchFromAndroidSystem(context, start, end);
+        Set<String> currentInstalledApps = getInstalledApps(context);
+        String launcherPkg = getDefaultLauncher(context);
+
+        Map<String, Long> systemData = fetchFromAndroidSystem(context, start, end, currentInstalledApps, launcherPkg);
         Map<String, Long> safeData = loadFromSafeCache(context, start);
         
         for (Map.Entry<String, Long> entry : safeData.entrySet()) {
             String pkg = entry.getKey();
+            
+            // РЕТРОАКТИВНАЯ ОЧИСТКА: Выжигаем системный мусор из старого кэша
+            if (!isValidApp(context, pkg, currentInstalledApps, launcherPkg)) continue;
+            
             long safeTime = entry.getValue();
             long sysTime = systemData.containsKey(pkg) ? systemData.get(pkg) : 0L;
             
@@ -73,13 +80,10 @@ public class UsageMath {
         return systemData;
     }
 
-    private static Map<String, Long> fetchFromAndroidSystem(Context context, long start, long end) {
+    private static Map<String, Long> fetchFromAndroidSystem(Context context, long start, long end, Set<String> currentInstalledApps, String launcherPkg) {
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
         if (usm == null) return results;
-
-        Set<String> currentInstalledApps = getInstalledApps(context);
-        String launcherPkg = getDefaultLauncher(context);
 
         UsageEvents events = usm.queryEvents(start, end);
         Map<String, Long> openTimes = new HashMap<>();
@@ -119,7 +123,7 @@ public class UsageMath {
     }
 
     // =========================================================================
-    // АГРЕГИРОВАННАЯ МАТЕМАТИКА (Неделя / Месяц / Год + Нижние карточки)
+    // АГРЕГИРОВАННАЯ МАТЕМАТИКА (Неделя / Месяц / Год)
     // =========================================================================
     public static Map<String, Long> getFilteredStats(Context context, int interval, long start, long end) {
         Map<String, Long> results = new HashMap<>();
@@ -129,7 +133,6 @@ public class UsageMath {
         Set<String> currentInstalledApps = getInstalledApps(context);
         String launcherPkg = getDefaultLauncher(context);
 
-        // 1. Берем данные от системы (без удаленных приложений)
         List<UsageStats> stats = usm.queryUsageStats(interval, start, end);
         if (stats != null) {
             for (UsageStats s : stats) {
@@ -144,15 +147,15 @@ public class UsageMath {
             }
         }
         
-        // 2. ВОТ ОНО! Достаем потерянные данные из нашего Сейфа за весь период
         Map<String, Long> safeData = getSafeDataForInterval(context, start, end);
         for (Map.Entry<String, Long> entry : safeData.entrySet()) {
             String pkg = entry.getKey();
+            
+            // РЕТРОАКТИВНАЯ ОЧИСТКА 
+            if (!isValidApp(context, pkg, currentInstalledApps, launcherPkg)) continue;
+            
             long safeTime = entry.getValue();
             long sysTime = results.containsKey(pkg) ? results.get(pkg) : 0L;
-            
-            // Если система удалила данные (sysTime = 0), мы берем спасенные данные (safeTime).
-            // Идеально работает для карточек Неделя/Месяц/Год!
             results.put(pkg, Math.max(safeTime, sysTime));
         }
         
@@ -198,7 +201,6 @@ public class UsageMath {
         return map;
     }
 
-    // Собирает математическую сумму из Сейфа за каждый день указанного периода
     private static Map<String, Long> getSafeDataForInterval(Context context, long start, long end) {
         Map<String, Long> aggregatedSafe = new HashMap<>();
         Calendar cal = Calendar.getInstance();
@@ -258,10 +260,13 @@ public class UsageMath {
     private static boolean isValidApp(Context context, String pkg, Set<String> installedApps, String launcherPkg) {
         if (pkg == null) return false;
         
+        // БРОНЕБОЙНЫЙ ФИЛЬТР: Отсекаем все системные настройки и эмуляторы!
         boolean isSystemTrash = pkg.equals("android") || 
                                 pkg.equals("com.android.systemui") || 
                                 pkg.equals("com.google.android.gms") || 
-                                pkg.equals("com.android.settings") || 
+                                pkg.equals("com.android.vending") || 
+                                pkg.contains("settings") ||  // Убиваем ВСЕ варианты Настроек
+                                pkg.contains("launcher") ||  // Убиваем системные лаунчеры
                                 pkg.equals(launcherPkg);
         
         if (isSystemTrash) return false;
@@ -271,6 +276,17 @@ public class UsageMath {
             context.getPackageManager().getApplicationInfo(pkg, 0);
             return false; 
         } catch (PackageManager.NameNotFoundException e) {
+            try {
+                int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
+                           PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
+                ApplicationInfo info = context.getPackageManager().getApplicationInfo(pkg, flag);
+                
+                boolean isSystemApp = (info.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+                boolean isUpdatedSystemApp = (info.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0;
+                
+                if (isSystemApp || isUpdatedSystemApp) return false; 
+            } catch (Exception ignored) {}
+
             return true; 
         }
     }
