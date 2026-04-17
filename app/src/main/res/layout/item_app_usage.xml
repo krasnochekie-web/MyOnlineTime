@@ -38,7 +38,8 @@
                     android:id="@+id/app_name"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
+                    android:layout_weight="0"
+                    android:maxWidth="200dp"
                     android:text="App Name"
                     android:textSize="13sp"
                     android:textStyle="bold"
@@ -66,6 +67,11 @@
                     android:src="@drawable/ic_lock"
                     app:tint="@color/textDynamic"
                     android:visibility="gone" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
             </LinearLayout>
 
             <TextView
