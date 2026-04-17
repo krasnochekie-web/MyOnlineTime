@@ -8,6 +8,7 @@
     <string name="feed">Feed</string>
     <string name="find">Find</string>
     <string name="time">Time</string>
+	<string name="toast_app_deleted">Deleted</string>
 	<string name="text_for_a_week">За неделю</string>
 <string name="placeholder_dots">...</string>
 <string name="placeholder_zero">0</string>
