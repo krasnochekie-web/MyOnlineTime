@@ -218,15 +218,24 @@ public class ChartFragment extends Fragment {
             }
 
             // =========================================================================
-            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА: БЕЗ ЛИМИТОВ
+            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА: БЕЗ ЛИМИТОВ + ПОДДЕРЖКА УДАЛЕННЫХ ПРИЛОЖЕНИЙ
             // =========================================================================
             PackageManager pm = activity.getPackageManager();
             for (DayData day : weeklyData) {
-                // Убрали лимит! Проходимся по абсолютно всем приложениям
                 for (String pkgName : day.appList) {
                     try {
-                        // Загоняем в горячий кэш ОС и название, и иконку
-                        android.content.pm.ApplicationInfo info = pm.getApplicationInfo(pkgName, 0);
+                        int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
+                                   PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
+                        
+                        android.content.pm.ApplicationInfo info;
+                        try {
+                            // Ищем живое приложение
+                            info = pm.getApplicationInfo(pkgName, 0);
+                        } catch (PackageManager.NameNotFoundException e) {
+                            // Вытаскиваем удаленного призрака!
+                            info = pm.getApplicationInfo(pkgName, flag);
+                        }
+                        
                         pm.getApplicationLabel(info); 
                         pm.getApplicationIcon(info); 
                     } catch (Exception ignored) { }
