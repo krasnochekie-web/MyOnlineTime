@@ -79,7 +79,8 @@ public class UsageMath {
             } else if (event.getEventType() == UsageEvents.Event.ACTIVITY_PAUSED) {
                 if (openTimes.containsKey(pkg)) {
                     long duration = event.getTimeStamp() - openTimes.get(pkg);
-                    if (duration > 0 && isValidApp(pkg)) {
+                    // ПЕРЕДАЕМ CONTEXT ДЛЯ УМНОЙ ПРОВЕРКИ
+                    if (duration > 0 && isValidApp(context, pkg)) {
                         Long current = results.get(pkg);
                         results.put(pkg, (current == null ? 0L : current) + duration);
                     }
@@ -106,7 +107,8 @@ public class UsageMath {
                 long time = s.getTotalTimeInForeground();
                 String pkg = s.getPackageName();
                 
-                if (time > 0 && isValidApp(pkg)) {
+                // ПЕРЕДАЕМ CONTEXT ДЛЯ УМНОЙ ПРОВЕРКИ
+                if (time > 0 && isValidApp(context, pkg)) {
                     Long current = results.get(pkg);
                     long currentVal = (current == null) ? 0L : current;
 
@@ -133,7 +135,7 @@ public class UsageMath {
     }
 
     // =========================================================================
-    // ЕДИНЫЙ ФИЛЬТР МУСОРА (Больше никакого дублирования проверок)
+    // ЕДИНЫЙ ФИЛЬТР МУСОРА (С поддержкой удаленных приложений!)
     // =========================================================================
     private static void initAppFilters(Context context) {
         if (cachedUserApps != null && cachedLauncherPkg != null) return;
@@ -154,15 +156,30 @@ public class UsageMath {
         cachedLauncherPkg = defaultLauncher != null ? defaultLauncher.activityInfo.packageName : "";
     }
 
-    private static boolean isValidApp(String pkg) {
+    private static boolean isValidApp(Context context, String pkg) {
         if (pkg == null) return false;
+        
         boolean isSystemTrash = pkg.equals("android") || 
                                 pkg.equals("com.android.systemui") || 
                                 pkg.equals("com.google.android.gms") || 
                                 pkg.equals("com.android.settings") || 
                                 pkg.equals(cachedLauncherPkg);
         
-        return cachedUserApps.contains(pkg) && !isSystemTrash;
+        if (isSystemTrash) return false;
+
+        // 1. Нормальное установленное приложение (есть в меню)
+        if (cachedUserApps.contains(pkg)) return true;
+
+        // 2. Если его нет в меню, проверим: оно вообще существует в системе?
+        try {
+            context.getPackageManager().getApplicationInfo(pkg, 0);
+            // Пакет установлен, но в меню его нет -> это фоновый процесс/служба. Мусор.
+            return false;
+        } catch (PackageManager.NameNotFoundException e) {
+            // ОШИБКА: Пакет не установлен!
+            // Раз Android зафиксировал для него экранное время, значит оно было удалено.
+            // Пропускаем "призрака" в статистику, чтобы время сходилось!
+            return true;
+        }
     }
-          }
-                     
+}
