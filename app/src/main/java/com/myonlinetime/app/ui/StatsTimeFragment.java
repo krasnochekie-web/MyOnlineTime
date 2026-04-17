@@ -31,8 +31,10 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class StatsTimeFragment extends Fragment {
 
@@ -239,49 +241,41 @@ public class StatsTimeFragment extends Fragment {
             final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
             
             // =========================================================================
-            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА ИКОНОК (Магия для Графиков и За всё время)
+            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА ИКОНОК И НАЗВАНИЙ (ДЛЯ ВСЕХ ЭКРАНОВ РАЗОМ)
             // =========================================================================
             PackageManager pm = activity.getPackageManager();
             
-            // 1. Предзагружаем иконки для текущего экрана
-            for (String pkg : finalList) {
-                try {
-                    android.content.pm.ApplicationInfo info = pm.getApplicationInfo(pkg, 0);
-                    pm.getApplicationIcon(info);  
-                } catch (Exception ignored) { }
-            }
+            // Создаем единый список уникальных приложений, чтобы не загружать одно и то же дважды
+            Set<String> allPackagesToPreload = new HashSet<>(finalList);
 
-            // 2. Если это стартовая загрузка приложения (position == 0 и кэш пуст), 
-            // мы "вхолостую" прогреваем иконки для экранов Графиков и "За всё время".
-            // Ваша математика остается нетронутой!
+            // Если это первичный запуск, подтягиваем еще пакеты для Графиков и Истории
             if (position == 0 && statsCache.isEmpty()) {
                 try {
-                    // Тянем топ за неделю (для Графиков)
+                    // Тянем пакеты за неделю (для Графиков)
                     Calendar wCal = Calendar.getInstance(); wCal.add(Calendar.DAY_OF_YEAR, -7);
                     Map<String, Long> wStats = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, wCal.getTimeInMillis(), endTime);
                     if (wStats != null) {
-                        List<String> wList = new ArrayList<>(wStats.keySet());
-                        Collections.sort(wList, (l, r) -> Long.compare(wStats.get(r), wStats.get(l)));
-                        for (int i = 0; i < Math.min(15, wList.size()); i++) {
-                            android.content.pm.ApplicationInfo info = pm.getApplicationInfo(wList.get(i), 0);
-                            pm.getApplicationIcon(info);
-                        }
+                        allPackagesToPreload.addAll(wStats.keySet());
                     }
                     
-                    // Тянем топ за год (для экрана "За всё время")
+                    // Тянем пакеты за год (для экрана "За всё время")
                     Calendar yCal = Calendar.getInstance(); yCal.add(Calendar.YEAR, -1);
                     Map<String, Long> yStats = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, yCal.getTimeInMillis(), endTime);
                     if (yStats != null) {
-                        List<String> yList = new ArrayList<>(yStats.keySet());
-                        Collections.sort(yList, (l, r) -> Long.compare(yStats.get(r), yStats.get(l)));
-                        for (int i = 0; i < Math.min(15, yList.size()); i++) {
-                            android.content.pm.ApplicationInfo info = pm.getApplicationInfo(yList.get(i), 0);
-                            pm.getApplicationIcon(info);
-                        }
+                        allPackagesToPreload.addAll(yStats.keySet());
                     }
                 } catch (Exception ignored) {}
             }
-            
+
+            // Выкачиваем в оперативку названия и иконки для ВСЕХ собранных пакетов без лимитов
+            for (String pkg : allPackagesToPreload) {
+                try {
+                    android.content.pm.ApplicationInfo info = pm.getApplicationInfo(pkg, 0);
+                    pm.getApplicationLabel(info); // Загоняем название
+                    pm.getApplicationIcon(info);  // Загоняем картинку
+                } catch (Exception ignored) { }
+            }
+
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (isAdded()) {
                     statsCache.put(position, new CachedStats(finalList, finalExactTimes, finalTotalMillis));
