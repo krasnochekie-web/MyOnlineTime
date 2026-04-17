@@ -45,9 +45,8 @@ public class UsageMath {
             yCal.add(Calendar.DAY_OF_YEAR, -1);
             yesterdayStartMillis = yCal.getTimeInMillis();
 
-            long now = System.currentTimeMillis();
-            
-            todayExactCache = getFilteredExactTimes(context, todayStartMillis, now);
+            // Считаем и СРАЗУ сохраняем в сейф, чтобы не потерять быстрые тесты
+            todayExactCache = getFilteredExactTimes(context, todayStartMillis, System.currentTimeMillis());
             saveToSafeCache(context, todayStartMillis, todayExactCache);
 
             yesterdayExactCache = getFilteredExactTimes(context, yesterdayStartMillis, todayStartMillis);
@@ -55,6 +54,9 @@ public class UsageMath {
         });
     }
 
+    // =========================================================================
+    // ТОЧНАЯ МАТЕМАТИКА (Сегодня / Вчера)
+    // =========================================================================
     public static Map<String, Long> getFilteredExactTimes(Context context, long start, long end) {
         Map<String, Long> systemData = fetchFromAndroidSystem(context, start, end);
         Map<String, Long> safeData = loadFromSafeCache(context, start);
@@ -87,7 +89,6 @@ public class UsageMath {
             events.getNextEvent(event);
             if (event.getPackageName() == null) continue;
             
-            // Убрали toLowerCase! Только удаление пробелов.
             String pkg = event.getPackageName().replaceAll("\\s+", ""); 
             
             if (event.getEventType() == UsageEvents.Event.ACTIVITY_RESUMED) {
@@ -117,6 +118,51 @@ public class UsageMath {
         return results;
     }
 
+    // =========================================================================
+    // АГРЕГИРОВАННАЯ МАТЕМАТИКА (Неделя / Месяц / Год + Нижние карточки)
+    // =========================================================================
+    public static Map<String, Long> getFilteredStats(Context context, int interval, long start, long end) {
+        Map<String, Long> results = new HashMap<>();
+        UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
+        if (usm == null) return results;
+
+        Set<String> currentInstalledApps = getInstalledApps(context);
+        String launcherPkg = getDefaultLauncher(context);
+
+        // 1. Берем данные от системы (без удаленных приложений)
+        List<UsageStats> stats = usm.queryUsageStats(interval, start, end);
+        if (stats != null) {
+            for (UsageStats s : stats) {
+                if (s.getPackageName() == null) continue;
+                long time = s.getTotalTimeInForeground();
+                String pkg = s.getPackageName().replaceAll("\\s+", "");
+                
+                if (time > 0 && isValidApp(context, pkg, currentInstalledApps, launcherPkg)) {
+                    Long current = results.get(pkg);
+                    results.put(pkg, (current == null ? 0L : current) + time);
+                }
+            }
+        }
+        
+        // 2. ВОТ ОНО! Достаем потерянные данные из нашего Сейфа за весь период
+        Map<String, Long> safeData = getSafeDataForInterval(context, start, end);
+        for (Map.Entry<String, Long> entry : safeData.entrySet()) {
+            String pkg = entry.getKey();
+            long safeTime = entry.getValue();
+            long sysTime = results.containsKey(pkg) ? results.get(pkg) : 0L;
+            
+            // Если система удалила данные (sysTime = 0), мы берем спасенные данные (safeTime).
+            // Идеально работает для карточек Неделя/Месяц/Год!
+            results.put(pkg, Math.max(safeTime, sysTime));
+        }
+        
+        return results;
+    }
+
+    // =========================================================================
+    // ЛОГИКА "СЕЙФА" (Независимое хранилище времени)
+    // =========================================================================
+    
     private static String getDayKey(long timestamp) {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy_MM_dd", Locale.US);
         return "day_" + sdf.format(new Date(timestamp));
@@ -152,30 +198,32 @@ public class UsageMath {
         return map;
     }
 
-    public static Map<String, Long> getFilteredStats(Context context, int interval, long start, long end) {
-        Map<String, Long> results = new HashMap<>();
-        UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
-        if (usm == null) return results;
-
-        Set<String> currentInstalledApps = getInstalledApps(context);
-        String launcherPkg = getDefaultLauncher(context);
-
-        List<UsageStats> stats = usm.queryUsageStats(interval, start, end);
-        if (stats != null) {
-            for (UsageStats s : stats) {
-                if (s.getPackageName() == null) continue;
-                long time = s.getTotalTimeInForeground();
-                // Убрали toLowerCase!
-                String pkg = s.getPackageName().replaceAll("\\s+", "");
-                
-                if (time > 0 && isValidApp(context, pkg, currentInstalledApps, launcherPkg)) {
-                    Long current = results.get(pkg);
-                    results.put(pkg, (current == null ? 0L : current) + time);
-                }
+    // Собирает математическую сумму из Сейфа за каждый день указанного периода
+    private static Map<String, Long> getSafeDataForInterval(Context context, long start, long end) {
+        Map<String, Long> aggregatedSafe = new HashMap<>();
+        Calendar cal = Calendar.getInstance();
+        cal.setTimeInMillis(start);
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        
+        long endLimit = end;
+        while (cal.getTimeInMillis() <= endLimit) {
+            Map<String, Long> dayData = loadFromSafeCache(context, cal.getTimeInMillis());
+            for (Map.Entry<String, Long> entry : dayData.entrySet()) {
+                String pkg = entry.getKey();
+                long current = aggregatedSafe.containsKey(pkg) ? aggregatedSafe.get(pkg) : 0L;
+                aggregatedSafe.put(pkg, current + entry.getValue());
             }
+            cal.add(Calendar.DAY_OF_YEAR, 1);
         }
-        return results;
+        return aggregatedSafe;
     }
+
+    // =========================================================================
+    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+    // =========================================================================
 
     public static long sumMap(Map<String, Long> map) {
         long total = 0;
