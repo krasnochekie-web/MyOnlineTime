@@ -218,16 +218,15 @@ public class ChartFragment extends Fragment {
             }
 
             // =========================================================================
-            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА ИКОНОК И НАЗВАНИЙ ДЛЯ ГРАФИКОВ
+            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА: БЕЗ ЛИМИТОВ
             // =========================================================================
             PackageManager pm = activity.getPackageManager();
             for (DayData day : weeklyData) {
-                // Берем топ-15 приложений за каждый день
-                int limit = Math.min(15, day.appList.size());
-                for (int i = 0; i < limit; i++) {
+                // Убрали лимит! Проходимся по абсолютно всем приложениям
+                for (String pkgName : day.appList) {
                     try {
                         // Загоняем в горячий кэш ОС и название, и иконку
-                        android.content.pm.ApplicationInfo info = pm.getApplicationInfo(day.appList.get(i), 0);
+                        android.content.pm.ApplicationInfo info = pm.getApplicationInfo(pkgName, 0);
                         pm.getApplicationLabel(info); 
                         pm.getApplicationIcon(info); 
                     } catch (Exception ignored) { }
