@@ -318,15 +318,24 @@ public class ProfileFragment extends Fragment {
     }
 
     // =========================================================================
-    // ДИНАМИЧЕСКИЙ ДИСПЕТЧЕР ВЫСОТЫ И ПУСТОТЫ
+    // УМНЫЙ ПАРСЕР ИМЕН ДЛЯ ПРОФИЛЯ
     // =========================================================================
+    private String formatDeletedAppName(String pkg) {
+        try {
+            String[] parts = pkg.split("\\.");
+            String name = parts[parts.length - 1]; 
+            return name.substring(0, 1).toUpperCase() + name.substring(1); 
+        } catch (Exception e) {
+            return pkg;
+        }
+    }
+
     private void applyCollapseLogic(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
         if (container == null || aboutView == null || btnExpand == null || btnCollapse == null) return;
         
         boolean isEmptyDesc = aboutView.getText().toString().trim().isEmpty();
         aboutView.setVisibility(isEmptyDesc ? View.GONE : View.VISIBLE);
         
-        // ЖЕЛЕЗОБЕТОННОЕ СКРЫТИЕ ПОДЛОЖКИ: прячем родительскую карточку
         if (aboutView.getParent() instanceof ViewGroup) {
             ViewGroup parent = (ViewGroup) aboutView.getParent();
             if (parent.getBackground() != null || parent.getChildCount() == 1) {
@@ -414,10 +423,14 @@ public class ProfileFragment extends Fragment {
 
         Utils.backgroundExecutor.execute(() -> {
             PackageManager pm = activity.getPackageManager();
+            
+            // Подключаемся к нашему вечному сейфу имен и иконок
+            SharedPreferences dbNames = activity.getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
+            File dbIconsDir = new File(activity.getFilesDir(), "saved_app_icons");
+
             int limit = 0;
 
             for (Map.Entry<String, Long> entry : topApps.entrySet()) {
-                // Бронебойная очистка от дублей, но без искажения регистра
                 String pkgName = entry.getKey().replaceAll("\\s+", "");
 
                 if (localHiddenApps.contains(pkgName)) continue;
@@ -429,22 +442,38 @@ public class ProfileFragment extends Fragment {
                 data.description = localDescriptions.get(pkgName);
                 data.isDeleted = false;
 
+                android.content.pm.ApplicationInfo appInfo = null;
+
                 try {
-                    int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
-                               PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
-                    
-                    android.content.pm.ApplicationInfo appInfo;
+                    appInfo = pm.getApplicationInfo(pkgName, 0);
+                } catch (PackageManager.NameNotFoundException e) {
+                    data.isDeleted = true; // Нашли удаленное приложение!
                     try {
-                        appInfo = pm.getApplicationInfo(pkgName, 0);
-                    } catch (PackageManager.NameNotFoundException e) {
+                        int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
+                                   PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
                         appInfo = pm.getApplicationInfo(pkgName, flag);
-                        data.isDeleted = true; // Нашли удаленное приложение!
-                    }
-                    
+                    } catch (PackageManager.NameNotFoundException ignored) {}
+                }
+
+                // === 1. ДОСТАЕМ ИМЯ ===
+                String cachedName = dbNames.getString(pkgName, null);
+                if (cachedName != null) {
+                    data.appName = cachedName;
+                } else if (appInfo != null) {
                     data.appName = pm.getApplicationLabel(appInfo).toString();
-                    data.icon = pm.getApplicationIcon(appInfo);
-                } catch (Exception e) {
-                    data.appName = pkgName;
+                } else {
+                    // Если нет ни в нашей базе, ни в системе - парсим из пакета
+                    data.appName = formatDeletedAppName(pkgName);
+                }
+
+                // === 2. ДОСТАЕМ ИКОНКУ ===
+                File diskIcon = new File(dbIconsDir, pkgName + ".png");
+                if (diskIcon.exists()) {
+                    data.icon = android.graphics.drawable.Drawable.createFromPath(diskIcon.getAbsolutePath());
+                } else if (appInfo != null) {
+                    try {
+                        data.icon = pm.getApplicationIcon(appInfo);
+                    } catch (Exception ignored) {}
                 }
 
                 preloadedData.add(data);
@@ -482,7 +511,11 @@ public class ProfileFragment extends Fragment {
                     }
 
                     nameView.setText(data.appName);
-                    if (data.icon != null) iconView.setImageDrawable(data.icon);
+                    if (data.icon != null) {
+                        iconView.setImageDrawable(data.icon);
+                    } else {
+                        iconView.setImageResource(android.R.drawable.sym_def_app_icon);
+                    }
                     timeView.setText(Utils.formatTime(activity, data.time));
                     
                     // Логика корзины для удаленных приложений
@@ -608,19 +641,29 @@ public class ProfileFragment extends Fragment {
         EditText editDesc = dialog.findViewById(R.id.dialog_edit_description);
         TextView titleView = dialog.findViewById(R.id.dialog_title);
 
-        PackageManager pm = activity.getPackageManager();
+        // Ищем имя в сейфе для диалогового окна
+        SharedPreferences dbNames = activity.getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
         String appName = pkgName;
-        try {
-            int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
-                       PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
-            android.content.pm.ApplicationInfo info;
+        String cachedName = dbNames.getString(pkgName, null);
+        
+        if (cachedName != null) {
+            appName = cachedName;
+        } else {
+            PackageManager pm = activity.getPackageManager();
             try {
-                info = pm.getApplicationInfo(pkgName, 0);
-            } catch (PackageManager.NameNotFoundException e) {
-                info = pm.getApplicationInfo(pkgName, flag);
+                int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
+                           PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
+                android.content.pm.ApplicationInfo info;
+                try {
+                    info = pm.getApplicationInfo(pkgName, 0);
+                } catch (PackageManager.NameNotFoundException e) {
+                    info = pm.getApplicationInfo(pkgName, flag);
+                }
+                appName = pm.getApplicationLabel(info).toString();
+            } catch (Exception e) {
+                appName = formatDeletedAppName(pkgName);
             }
-            appName = pm.getApplicationLabel(info).toString();
-        } catch (Exception e) {}
+        }
 
         titleView.setText(activity.getString(R.string.action_description) + " " + appName);
 
