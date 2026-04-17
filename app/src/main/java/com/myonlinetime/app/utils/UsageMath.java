@@ -47,7 +47,6 @@ public class UsageMath {
 
             long now = System.currentTimeMillis();
             
-            // Считаем и СРАЗУ сохраняем в сейф, чтобы не потерять быстрые тесты
             todayExactCache = getFilteredExactTimes(context, todayStartMillis, now);
             saveToSafeCache(context, todayStartMillis, todayExactCache);
 
@@ -56,18 +55,10 @@ public class UsageMath {
         });
     }
 
-    // =========================================================================
-    // ГЛАВНЫЙ МЕТОД: Теперь он объединяет данные Android и наш Сейф
-    // =========================================================================
     public static Map<String, Long> getFilteredExactTimes(Context context, long start, long end) {
-        // 1. Сначала берем то, что "выжило" в системе Android
         Map<String, Long> systemData = fetchFromAndroidSystem(context, start, end);
-        
-        // 2. Достаем то, что мы успели сохранить в свой Сейф за этот день
         Map<String, Long> safeData = loadFromSafeCache(context, start);
         
-        // 3. СЛИЯНИЕ: Берем максимальное значение из двух источников
-        // Это гарантирует: если Android стер данные после удаления, наш Сейф их вернет
         for (Map.Entry<String, Long> entry : safeData.entrySet()) {
             String pkg = entry.getKey();
             long safeTime = entry.getValue();
@@ -76,9 +67,7 @@ public class UsageMath {
             systemData.put(pkg, Math.max(safeTime, sysTime));
         }
         
-        // Сохраняем результат слияния обратно в сейф (обновляем записи)
         saveToSafeCache(context, start, systemData);
-        
         return systemData;
     }
 
@@ -98,7 +87,8 @@ public class UsageMath {
             events.getNextEvent(event);
             if (event.getPackageName() == null) continue;
             
-            String pkg = event.getPackageName().trim().toLowerCase(); 
+            // Убрали toLowerCase! Только удаление пробелов.
+            String pkg = event.getPackageName().replaceAll("\\s+", ""); 
             
             if (event.getEventType() == UsageEvents.Event.ACTIVITY_RESUMED) {
                 openTimes.put(pkg, event.getTimeStamp());
@@ -115,7 +105,6 @@ public class UsageMath {
             }
         }
         
-        // Закрываем "висящие" сессии текущим моментом
         long endToUse = Math.min(end, System.currentTimeMillis());
         for (Map.Entry<String, Long> entry : openTimes.entrySet()) {
             String pkg = entry.getKey();
@@ -128,10 +117,6 @@ public class UsageMath {
         return results;
     }
 
-    // =========================================================================
-    // ЛОГИКА "СЕЙФА" (Независимое хранилище времени)
-    // =========================================================================
-    
     private static String getDayKey(long timestamp) {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy_MM_dd", Locale.US);
         return "day_" + sdf.format(new Date(timestamp));
@@ -167,13 +152,7 @@ public class UsageMath {
         return map;
     }
 
-    // =========================================================================
-    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
-    // =========================================================================
-
     public static Map<String, Long> getFilteredStats(Context context, int interval, long start, long end) {
-        // Для больших интервалов (год/месяц) мы пока полагаемся на систему, 
-        // но с жестким суммированием и очисткой дублей
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
         if (usm == null) return results;
@@ -186,7 +165,8 @@ public class UsageMath {
             for (UsageStats s : stats) {
                 if (s.getPackageName() == null) continue;
                 long time = s.getTotalTimeInForeground();
-                String pkg = s.getPackageName().trim().toLowerCase();
+                // Убрали toLowerCase!
+                String pkg = s.getPackageName().replaceAll("\\s+", "");
                 
                 if (time > 0 && isValidApp(context, pkg, currentInstalledApps, launcherPkg)) {
                     Long current = results.get(pkg);
@@ -214,7 +194,7 @@ public class UsageMath {
         mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
         List<ResolveInfo> resolvedInfos = pm.queryIntentActivities(mainIntent, 0);
         for (ResolveInfo info : resolvedInfos) {
-            apps.add(info.activityInfo.packageName.trim().toLowerCase());
+            apps.add(info.activityInfo.packageName.replaceAll("\\s+", ""));
         }
         return apps;
     }
@@ -224,7 +204,7 @@ public class UsageMath {
         Intent homeIntent = new Intent(Intent.ACTION_MAIN);
         homeIntent.addCategory(Intent.CATEGORY_HOME);
         ResolveInfo defaultLauncher = pm.resolveActivity(homeIntent, PackageManager.MATCH_DEFAULT_ONLY);
-        return defaultLauncher != null ? defaultLauncher.activityInfo.packageName.trim().toLowerCase() : "";
+        return defaultLauncher != null ? defaultLauncher.activityInfo.packageName.replaceAll("\\s+", "") : "";
     }
 
     private static boolean isValidApp(Context context, String pkg, Set<String> installedApps, String launcherPkg) {
