@@ -61,6 +61,7 @@ public class ProfileFragment extends Fragment {
         android.graphics.drawable.Drawable icon;
         long time;
         String description;
+        boolean isDeleted; // Флаг для удаленных приложений
     }
 
     public static ProfileFragment newInstance(String targetUid) {
@@ -425,9 +426,20 @@ public class ProfileFragment extends Fragment {
                 data.pkgName = pkgName;
                 data.time = entry.getValue();
                 data.description = localDescriptions.get(pkgName);
+                data.isDeleted = false;
 
                 try {
-                    android.content.pm.ApplicationInfo appInfo = pm.getApplicationInfo(pkgName, 0);
+                    int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
+                               PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
+                    
+                    android.content.pm.ApplicationInfo appInfo;
+                    try {
+                        appInfo = pm.getApplicationInfo(pkgName, 0);
+                    } catch (PackageManager.NameNotFoundException e) {
+                        appInfo = pm.getApplicationInfo(pkgName, flag);
+                        data.isDeleted = true; // Нашли удаленное приложение!
+                    }
+                    
                     data.appName = pm.getApplicationLabel(appInfo).toString();
                     data.icon = pm.getApplicationIcon(appInfo);
                 } catch (Exception e) {
@@ -458,6 +470,7 @@ public class ProfileFragment extends Fragment {
                     TextView descView = view.findViewById(R.id.app_custom_description);
                     ImageView lockView = view.findViewById(R.id.app_lock_icon);
                     ImageView optionsBtn = view.findViewById(R.id.btn_app_options);
+                    ImageView iconDeleted = view.findViewById(R.id.icon_deleted);
 
                     if (optionsBtn != null) optionsBtn.setVisibility(View.GONE);
                     if (lockView != null) lockView.setVisibility(View.GONE);
@@ -470,6 +483,17 @@ public class ProfileFragment extends Fragment {
                     nameView.setText(data.appName);
                     if (data.icon != null) iconView.setImageDrawable(data.icon);
                     timeView.setText(Utils.formatTime(activity, data.time));
+                    
+                    // Логика корзины для удаленных приложений
+                    if (iconDeleted != null) {
+                        if (data.isDeleted) {
+                            iconDeleted.setVisibility(View.VISIBLE);
+                            iconDeleted.setOnClickListener(v -> Toast.makeText(activity, R.string.toast_app_deleted, Toast.LENGTH_SHORT).show());
+                        } else {
+                            iconDeleted.setVisibility(View.GONE);
+                            iconDeleted.setOnClickListener(null);
+                        }
+                    }
                     
                     container.addView(view);
                     currentLimit++;
@@ -586,7 +610,15 @@ public class ProfileFragment extends Fragment {
         PackageManager pm = activity.getPackageManager();
         String appName = pkgName;
         try {
-            appName = pm.getApplicationLabel(pm.getApplicationInfo(pkgName, 0)).toString();
+            int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
+                       PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
+            android.content.pm.ApplicationInfo info;
+            try {
+                info = pm.getApplicationInfo(pkgName, 0);
+            } catch (PackageManager.NameNotFoundException e) {
+                info = pm.getApplicationInfo(pkgName, flag);
+            }
+            appName = pm.getApplicationLabel(info).toString();
         } catch (Exception e) {}
 
         titleView.setText(activity.getString(R.string.action_description) + " " + appName);
