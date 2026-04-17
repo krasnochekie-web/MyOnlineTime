@@ -197,13 +197,30 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         holder.currentPkg = pkg;
         holder.iconView.setImageDrawable(null); 
 
-        // 1. ПРОВЕРЯЕМ, УДАЛЕНО ЛИ ПРИЛОЖЕНИЕ (Моментальная проверка)
+        // 1. ПРОВЕРЯЕМ, УДАЛЕНО ЛИ ПРИЛОЖЕНИЕ (Умная проверка системных флагов)
         boolean isDeleted = false;
         ApplicationInfo activeAppInfo = null;
+
         try {
             activeAppInfo = pm.getApplicationInfo(pkg, 0);
         } catch (PackageManager.NameNotFoundException e) {
-            isDeleted = true;
+            try {
+                int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
+                           PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
+                activeAppInfo = pm.getApplicationInfo(pkg, flag);
+                
+                // СПАСАЕМ СИСТЕМНЫЕ ПРИЛОЖЕНИЯ: Проверяем, скрыто ли оно оболочкой
+                boolean isInstalled = (activeAppInfo.flags & ApplicationInfo.FLAG_INSTALLED) != 0;
+                boolean isSystemApp = (activeAppInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+                
+                if (!isInstalled && !isSystemApp) {
+                    isDeleted = true; // Физически удалено пользователем
+                } else {
+                    isDeleted = false; // Просто отключенный/скрытый системный процесс
+                }
+            } catch (PackageManager.NameNotFoundException ignored) {
+                isDeleted = true; // Система вообще не знает этот пакет - 100% удален
+            }
         }
 
         // Показываем или прячем корзину
