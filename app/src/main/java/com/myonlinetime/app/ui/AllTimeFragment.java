@@ -230,15 +230,25 @@ public class AllTimeFragment extends Fragment {
             Collections.sort(sortedApps, (left, right) -> Long.compare(finalAppsMap.get(right), finalAppsMap.get(left)));
 
             // =========================================================================
-            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА: ГРУЗИМ ВООБЩЕ ВСЕ ПРИЛОЖЕНИЯ
+            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА: БЕЗ ЛИМИТОВ + ПОДДЕРЖКА УДАЛЕННЫХ ПРИЛОЖЕНИЙ
             // =========================================================================
             PackageManager pm = activity.getPackageManager();
-            // Убрали лимит! Теперь идем по всему списку sortedApps от начала и до конца
             for (String pkgName : sortedApps) {
                 try {
-                    android.content.pm.ApplicationInfo info = pm.getApplicationInfo(pkgName, 0);
-                    pm.getApplicationLabel(info); // Загоняем в кэш ОС название
-                    pm.getApplicationIcon(info);  // Загоняем в кэш иконку
+                    int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
+                               PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
+                    
+                    android.content.pm.ApplicationInfo info;
+                    try {
+                        // Пробуем найти живое приложение
+                        info = pm.getApplicationInfo(pkgName, 0);
+                    } catch (PackageManager.NameNotFoundException e) {
+                        // Вытаскиваем удаленного "призрака"
+                        info = pm.getApplicationInfo(pkgName, flag);
+                    }
+                    
+                    pm.getApplicationLabel(info); 
+                    pm.getApplicationIcon(info);  
                 } catch (Exception ignored) { }
             }
 
