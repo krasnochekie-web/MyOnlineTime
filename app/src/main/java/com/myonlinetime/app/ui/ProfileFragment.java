@@ -4,6 +4,7 @@ import androidx.fragment.app.Fragment;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -442,17 +443,28 @@ public class ProfileFragment extends Fragment {
                 data.description = localDescriptions.get(pkgName);
                 data.isDeleted = false;
 
-                android.content.pm.ApplicationInfo appInfo = null;
+                ApplicationInfo appInfo = null;
 
                 try {
                     appInfo = pm.getApplicationInfo(pkgName, 0);
                 } catch (PackageManager.NameNotFoundException e) {
-                    data.isDeleted = true; // Нашли удаленное приложение!
                     try {
                         int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
                                    PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
                         appInfo = pm.getApplicationInfo(pkgName, flag);
-                    } catch (PackageManager.NameNotFoundException ignored) {}
+                        
+                        // СПАСАЕМ СИСТЕМНЫЕ ПРИЛОЖЕНИЯ: Проверяем, скрыто ли оно оболочкой
+                        boolean isInstalled = (appInfo.flags & ApplicationInfo.FLAG_INSTALLED) != 0;
+                        boolean isSystemApp = (appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+                        
+                        if (!isInstalled && !isSystemApp) {
+                            data.isDeleted = true; // Физически удалено пользователем
+                        } else {
+                            data.isDeleted = false; // Просто отключенный/скрытый системный процесс
+                        }
+                    } catch (PackageManager.NameNotFoundException ignored) {
+                        data.isDeleted = true; // Система вообще не знает этот пакет - 100% удален
+                    }
                 }
 
                 // === 1. ДОСТАЕМ ИМЯ ===
@@ -653,7 +665,7 @@ public class ProfileFragment extends Fragment {
             try {
                 int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
                            PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
-                android.content.pm.ApplicationInfo info;
+                ApplicationInfo info;
                 try {
                     info = pm.getApplicationInfo(pkgName, 0);
                 } catch (PackageManager.NameNotFoundException e) {
