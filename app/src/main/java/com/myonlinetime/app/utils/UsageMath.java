@@ -18,7 +18,6 @@ import java.util.Set;
 public class UsageMath {
 
     // === ГЛОБАЛЬНЫЙ КЭШ ===
-    // Храним готовые посчитанные мапы, чтобы фрагменты получали их за 0 миллисекунд
     public static Map<String, Long> todayExactCache = null;
     public static Map<String, Long> yesterdayExactCache = null;
     
@@ -34,7 +33,6 @@ public class UsageMath {
     // =========================================================================
     public static void preloadCoreStats(final Context context) {
         Utils.backgroundExecutor.execute(() -> {
-            // 1. Фиксируем ЕДИНЫЕ границы времени для всего приложения
             Calendar cal = Calendar.getInstance();
             cal.set(Calendar.HOUR_OF_DAY, 0);
             cal.set(Calendar.MINUTE, 0);
@@ -46,10 +44,8 @@ public class UsageMath {
             yCal.add(Calendar.DAY_OF_YEAR, -1);
             yesterdayStartMillis = yCal.getTimeInMillis();
 
-            // 2. Предзагружаем списки приложений
             initAppFilters(context);
 
-            // 3. Считаем ТОЧНОЕ время за Сегодня и Вчера (самое тяжелое)
             long now = System.currentTimeMillis();
             todayExactCache = getFilteredExactTimes(context, todayStartMillis, now);
             yesterdayExactCache = getFilteredExactTimes(context, yesterdayStartMillis, todayStartMillis);
@@ -64,7 +60,7 @@ public class UsageMath {
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
         if (usm == null) return results;
 
-        initAppFilters(context); // На всякий случай проверяем кэш фильтров
+        initAppFilters(context); 
 
         UsageEvents events = usm.queryEvents(start, end);
         Map<String, Long> openTimes = new HashMap<>();
@@ -76,10 +72,10 @@ public class UsageMath {
             
             if (event.getEventType() == UsageEvents.Event.ACTIVITY_RESUMED) {
                 openTimes.put(pkg, event.getTimeStamp());
-            } else if (event.getEventType() == UsageEvents.Event.ACTIVITY_PAUSED) {
+            } else if (event.getEventType() == UsageEvents.Event.ACTIVITY_PAUSED || 
+                       event.getEventType() == UsageEvents.Event.ACTIVITY_STOPPED) {
                 if (openTimes.containsKey(pkg)) {
                     long duration = event.getTimeStamp() - openTimes.get(pkg);
-                    // ПЕРЕДАЕМ CONTEXT ДЛЯ УМНОЙ ПРОВЕРКИ
                     if (duration > 0 && isValidApp(context, pkg)) {
                         Long current = results.get(pkg);
                         results.put(pkg, (current == null ? 0L : current) + duration);
@@ -88,11 +84,23 @@ public class UsageMath {
                 }
             }
         }
+        
+        // ЗАКРЫВАЕМ ВИСЯЩИЕ СЕССИИ (если приложение удалили/убили до события PAUSED)
+        long endToUse = Math.min(end, System.currentTimeMillis());
+        for (Map.Entry<String, Long> entry : openTimes.entrySet()) {
+            String pkg = entry.getKey();
+            long duration = endToUse - entry.getValue();
+            if (duration > 0 && isValidApp(context, pkg)) {
+                Long current = results.get(pkg);
+                results.put(pkg, (current == null ? 0L : current) + duration);
+            }
+        }
+        
         return results;
     }
 
     // =========================================================================
-    // МАТЕМАТИКА (Агрегированная - для месяцев и лет, так как Events там взорвет память)
+    // МАТЕМАТИКА (Агрегированная - для месяцев и лет)
     // =========================================================================
     public static Map<String, Long> getFilteredStats(Context context, int interval, long start, long end) {
         Map<String, Long> results = new HashMap<>();
@@ -107,23 +115,18 @@ public class UsageMath {
                 long time = s.getTotalTimeInForeground();
                 String pkg = s.getPackageName();
                 
-                // ПЕРЕДАЕМ CONTEXT ДЛЯ УМНОЙ ПРОВЕРКИ
                 if (time > 0 && isValidApp(context, pkg)) {
                     Long current = results.get(pkg);
                     long currentVal = (current == null) ? 0L : current;
-
-                    if (interval == UsageStatsManager.INTERVAL_YEARLY) {
-                        results.put(pkg, Math.max(currentVal, time));
-                    } else {
-                        results.put(pkg, currentVal + time);
-                    }
+                    
+                    // БЕЗУСЛОВНОЕ СУММИРОВАНИЕ! Идеально склеивает данные до удаления и после переустановки
+                    results.put(pkg, currentVal + time);
                 }
             }
         }
         return results;
     }
 
-    // Удобный метод для быстрого подсчета суммы из готовой мапы
     public static long sumMap(Map<String, Long> map) {
         long total = 0;
         if (map != null) {
@@ -135,7 +138,7 @@ public class UsageMath {
     }
 
     // =========================================================================
-    // ЕДИНЫЙ ФИЛЬТР МУСОРА (С поддержкой удаленных приложений!)
+    // УМНЫЙ ФИЛЬТР МУСОРА (С динамическим радаром новых/удаленных приложений)
     // =========================================================================
     private static void initAppFilters(Context context) {
         if (cachedUserApps != null && cachedLauncherPkg != null) return;
@@ -167,18 +170,25 @@ public class UsageMath {
         
         if (isSystemTrash) return false;
 
-        // 1. Нормальное установленное приложение (есть в меню)
+        // 1. Быстрая проверка: мы уже знаем это приложение
         if (cachedUserApps.contains(pkg)) return true;
 
-        // 2. Если его нет в меню, проверим: оно вообще существует в системе?
+        // 2. Глубокая проверка для свежескачанных или удаленных приложений
         try {
             context.getPackageManager().getApplicationInfo(pkg, 0);
-            // Пакет установлен, но в меню его нет -> это фоновый процесс/служба. Мусор.
-            return false;
+            
+            // Если установлено, проверяем, можно ли его запустить (не фоновая ли это системная служба)
+            Intent intent = context.getPackageManager().getLaunchIntentForPackage(pkg);
+            if (intent != null) {
+                // Это свежескачанное приложение! Добавляем в радар
+                cachedUserApps.add(pkg); 
+                return true;
+            } else {
+                return false; // Установлено, но без интерфейса. Мусор.
+            }
         } catch (PackageManager.NameNotFoundException e) {
-            // ОШИБКА: Пакет не установлен!
-            // Раз Android зафиксировал для него экранное время, значит оно было удалено.
-            // Пропускаем "призрака" в статистику, чтобы время сходилось!
+            // ОШИБКА: Пакет не установлен! 
+            // Раз Android зафиксировал для него экранное время, значит, оно 100% было удалено пользователем.
             return true;
         }
     }
