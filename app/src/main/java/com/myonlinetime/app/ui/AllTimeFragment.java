@@ -6,6 +6,7 @@ import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
@@ -227,6 +228,19 @@ public class AllTimeFragment extends Fragment {
 
             List<String> sortedApps = new ArrayList<>(finalAppsMap.keySet());
             Collections.sort(sortedApps, (left, right) -> Long.compare(finalAppsMap.get(right), finalAppsMap.get(left)));
+
+            // =========================================================================
+            // ТА САМАЯ ПРЕДЗАГРУЗКА ИКОНОК ДЛЯ ЭКРАНА "ЗА ВСЕ ВРЕМЯ"
+            // =========================================================================
+            PackageManager pm = activity.getPackageManager();
+            // Берем топ-25 (этого с запасом хватит, чтобы покрыть видимую область экрана)
+            int preloadLimit = Math.min(25, sortedApps.size());
+            for (int i = 0; i < preloadLimit; i++) {
+                try {
+                    android.content.pm.ApplicationInfo info = pm.getApplicationInfo(sortedApps.get(i), 0);
+                    pm.getApplicationIcon(info); // Заставляем ОС закэшировать иконку в ОЗУ
+                } catch (Exception ignored) { }
+            }
 
             // 4. ВОЗВРАЩАЕМСЯ В ГЛАВНЫЙ ПОТОК ДЛЯ ОТРИСОВКИ
             new Handler(Looper.getMainLooper()).post(() -> {
