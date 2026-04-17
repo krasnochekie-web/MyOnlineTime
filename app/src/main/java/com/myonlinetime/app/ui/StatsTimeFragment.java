@@ -239,17 +239,47 @@ public class StatsTimeFragment extends Fragment {
             final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
             
             // =========================================================================
-            // ГЛУБОКАЯ ПРЕДЗАГРУЗКА ДАННЫХ ИКОНОК (Магия производительности)
+            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА ИКОНОК (Магия для Графиков и За всё время)
             // =========================================================================
             PackageManager pm = activity.getPackageManager();
+            
+            // 1. Предзагружаем иконки для текущего экрана
             for (String pkg : finalList) {
                 try {
-                    // Это заставит Android извлечь данные приложения с жесткого диска
-                    // и положить их в горячий кэш оперативной памяти до того, как они понадобятся адаптеру
                     android.content.pm.ApplicationInfo info = pm.getApplicationInfo(pkg, 0);
-                    pm.getApplicationLabel(info); 
                     pm.getApplicationIcon(info);  
                 } catch (Exception ignored) { }
+            }
+
+            // 2. Если это стартовая загрузка приложения (position == 0 и кэш пуст), 
+            // мы "вхолостую" прогреваем иконки для экранов Графиков и "За всё время".
+            // Ваша математика остается нетронутой!
+            if (position == 0 && statsCache.isEmpty()) {
+                try {
+                    // Тянем топ за неделю (для Графиков)
+                    Calendar wCal = Calendar.getInstance(); wCal.add(Calendar.DAY_OF_YEAR, -7);
+                    Map<String, Long> wStats = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, wCal.getTimeInMillis(), endTime);
+                    if (wStats != null) {
+                        List<String> wList = new ArrayList<>(wStats.keySet());
+                        Collections.sort(wList, (l, r) -> Long.compare(wStats.get(r), wStats.get(l)));
+                        for (int i = 0; i < Math.min(15, wList.size()); i++) {
+                            android.content.pm.ApplicationInfo info = pm.getApplicationInfo(wList.get(i), 0);
+                            pm.getApplicationIcon(info);
+                        }
+                    }
+                    
+                    // Тянем топ за год (для экрана "За всё время")
+                    Calendar yCal = Calendar.getInstance(); yCal.add(Calendar.YEAR, -1);
+                    Map<String, Long> yStats = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, yCal.getTimeInMillis(), endTime);
+                    if (yStats != null) {
+                        List<String> yList = new ArrayList<>(yStats.keySet());
+                        Collections.sort(yList, (l, r) -> Long.compare(yStats.get(r), yStats.get(l)));
+                        for (int i = 0; i < Math.min(15, yList.size()); i++) {
+                            android.content.pm.ApplicationInfo info = pm.getApplicationInfo(yList.get(i), 0);
+                            pm.getApplicationIcon(info);
+                        }
+                    }
+                } catch (Exception ignored) {}
             }
             
             new Handler(Looper.getMainLooper()).post(() -> {
