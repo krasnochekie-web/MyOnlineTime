@@ -260,13 +260,18 @@ public class UsageMath {
     private static boolean isValidApp(Context context, String pkg, Set<String> installedApps, String launcherPkg) {
         if (pkg == null) return false;
         
+        String lowerPkg = pkg.toLowerCase();
+
         // БРОНЕБОЙНЫЙ ФИЛЬТР: Отсекаем все системные настройки и эмуляторы!
         boolean isSystemTrash = pkg.equals("android") || 
                                 pkg.equals("com.android.systemui") || 
                                 pkg.equals("com.google.android.gms") || 
                                 pkg.equals("com.android.vending") || 
-                                pkg.contains("settings") ||  // Убиваем ВСЕ варианты Настроек
-                                pkg.contains("launcher") ||  // Убиваем системные лаунчеры
+                                lowerPkg.contains("settings") ||      // Убиваем ВСЕ варианты Настроек
+                                lowerPkg.contains("launcher") ||      // Убиваем системные лаунчеры
+                                lowerPkg.contains("bluestacks") ||    // Убиваем все скрытые сервисы эмулятора
+                                lowerPkg.contains("documentsui") ||   // Убиваем системный файловый пикер
+                                lowerPkg.contains("filemanager") ||   // Убиваем встроенные файловые менеджеры
                                 pkg.equals(launcherPkg);
         
         if (isSystemTrash) return false;
