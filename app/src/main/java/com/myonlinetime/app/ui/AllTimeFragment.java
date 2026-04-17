@@ -230,15 +230,15 @@ public class AllTimeFragment extends Fragment {
             Collections.sort(sortedApps, (left, right) -> Long.compare(finalAppsMap.get(right), finalAppsMap.get(left)));
 
             // =========================================================================
-            // ТА САМАЯ ПРЕДЗАГРУЗКА ИКОНОК ДЛЯ ЭКРАНА "ЗА ВСЕ ВРЕМЯ"
+            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА: ГРУЗИМ ВООБЩЕ ВСЕ ПРИЛОЖЕНИЯ
             // =========================================================================
             PackageManager pm = activity.getPackageManager();
-            // Берем топ-25 (этого с запасом хватит, чтобы покрыть видимую область экрана)
-            int preloadLimit = Math.min(25, sortedApps.size());
-            for (int i = 0; i < preloadLimit; i++) {
+            // Убрали лимит! Теперь идем по всему списку sortedApps от начала и до конца
+            for (String pkgName : sortedApps) {
                 try {
-                    android.content.pm.ApplicationInfo info = pm.getApplicationInfo(sortedApps.get(i), 0);
-                    pm.getApplicationIcon(info); // Заставляем ОС закэшировать иконку в ОЗУ
+                    android.content.pm.ApplicationInfo info = pm.getApplicationInfo(pkgName, 0);
+                    pm.getApplicationLabel(info); // Загоняем в кэш ОС название
+                    pm.getApplicationIcon(info);  // Загоняем в кэш иконку
                 } catch (Exception ignored) { }
             }
 
