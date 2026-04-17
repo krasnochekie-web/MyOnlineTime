@@ -12,10 +12,14 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
+
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.utils.Utils;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -153,38 +157,72 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         holder.currentPkg = pkg;
         holder.iconView.setImageDrawable(null); 
 
-        String cachedName = nameCache.get(pkg);
+        // =====================================================================
+        // УМНЫЙ ПОИСК ДАННЫХ ПРИЛОЖЕНИЯ (ВКЛЮЧАЯ УДАЛЕННЫЕ)
+        // =====================================================================
         ApplicationInfo appInfo = null;
+        boolean isDeleted = false;
 
+        try {
+            // Сначала ищем как обычно
+            appInfo = pm.getApplicationInfo(pkg, 0);
+        } catch (PackageManager.NameNotFoundException e) {
+            // Если не нашли - значит оно удалено! Достаем из системного кэша призраков
+            isDeleted = true;
+            try {
+                int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
+                           PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
+                appInfo = pm.getApplicationInfo(pkg, flag);
+            } catch (PackageManager.NameNotFoundException ignored) {}
+        }
+
+        // Включаем/отключаем корзину
+        if (isDeleted && holder.iconDeleted != null) {
+            holder.iconDeleted.setVisibility(View.VISIBLE);
+            holder.iconDeleted.setOnClickListener(v -> 
+                Toast.makeText(context, R.string.toast_app_deleted, Toast.LENGTH_SHORT).show()
+            );
+        } else if (holder.iconDeleted != null) {
+            holder.iconDeleted.setVisibility(View.GONE);
+            holder.iconDeleted.setOnClickListener(null); // Снимаем клик, чтобы не мешал
+        }
+
+        // === РАБОТА С НАЗВАНИЕМ ===
+        String cachedName = nameCache.get(pkg);
         if (cachedName != null) {
             holder.nameView.setText(cachedName);
         } else {
-            try {
-                appInfo = pm.getApplicationInfo(pkg, 0);
+            if (appInfo != null) {
                 cachedName = pm.getApplicationLabel(appInfo).toString();
                 nameCache.put(pkg, cachedName);
                 holder.nameView.setText(cachedName);
-            } catch (Exception e) {
+            } else {
+                // Если система стерла даже кэш удаленного приложения, показываем имя пакета (напр. com.whatsapp)
                 holder.nameView.setText(pkg);
             }
         }
 
+        // === РАБОТА С ИКОНКОЙ ===
         Drawable cachedIcon = iconCache.get(pkg);
         if (cachedIcon != null) {
             holder.iconView.setImageDrawable(cachedIcon);
         } else {
             holder.iconView.setImageResource(android.R.drawable.sym_def_app_icon);
             final ApplicationInfo finalAppInfo = appInfo; 
+            
+            // Если иконки нет в кэше, грузим её в фоне, чтобы список не тормозил
             executorService.execute(() -> {
                 try {
-                    ApplicationInfo infoToUse = finalAppInfo != null ? finalAppInfo : pm.getApplicationInfo(pkg, 0);
-                    Drawable appIcon = pm.getApplicationIcon(infoToUse);
-                    iconCache.put(pkg, appIcon);
-                    mainHandler.post(() -> {
-                        if (pkg.equals(holder.currentPkg)) {
-                            holder.iconView.setImageDrawable(appIcon);
-                        }
-                    });
+                    if (finalAppInfo != null) {
+                        Drawable appIcon = pm.getApplicationIcon(finalAppInfo);
+                        iconCache.put(pkg, appIcon);
+                        mainHandler.post(() -> {
+                            // Проверяем, не прокрутил ли пользователь список, пока грузилась картинка
+                            if (pkg.equals(holder.currentPkg)) {
+                                holder.iconView.setImageDrawable(appIcon);
+                            }
+                        });
+                    }
                 } catch (Exception ignored) {}
             });
         }
@@ -197,7 +235,10 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     }
 
     static class AppViewHolder extends RecyclerView.ViewHolder {
-        ImageView iconView; TextView nameView; TextView timeView;
+        ImageView iconView; 
+        TextView nameView; 
+        TextView timeView;
+        ImageView iconDeleted; // Наша новая иконка корзины!
         String currentPkg;
 
         public AppViewHolder(@NonNull View itemView) {
@@ -205,7 +246,7 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
             iconView = itemView.findViewById(R.id.app_icon);
             nameView = itemView.findViewById(R.id.app_name);
             timeView = itemView.findViewById(R.id.app_time);
+            iconDeleted = itemView.findViewById(R.id.icon_deleted); // Инициализируем корзину
         }
     }
-                            }
-
+}
