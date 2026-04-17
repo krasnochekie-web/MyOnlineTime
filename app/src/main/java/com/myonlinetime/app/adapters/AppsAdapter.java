@@ -1,8 +1,12 @@
 package com.myonlinetime.app.adapters;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
@@ -20,6 +24,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.utils.Utils;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -42,8 +48,13 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     private final ExecutorService executorService;
     private final Handler mainHandler;
     
+    // Оперативная память (RAM)
     private static final LruCache<String, Drawable> iconCache = new LruCache<>(150);
     private static final HashMap<String, String> nameCache = new HashMap<>();
+
+    // Жесткий диск (Надежная локальная база данных)
+    private SharedPreferences dbNames;
+    private File dbIconsDir;
 
     public AppsAdapter(Context context, int itemLayoutId, boolean isLimitEnabled) {
         this.context = context;
@@ -52,13 +63,19 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         this.isLimitEnabled = isLimitEnabled;
         this.executorService = Executors.newFixedThreadPool(4);
         this.mainHandler = new Handler(Looper.getMainLooper());
+
+        // Инициализируем нашу вечную базу данных
+        this.dbNames = context.getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
+        this.dbIconsDir = new File(context.getFilesDir(), "saved_app_icons");
+        if (!this.dbIconsDir.exists()) {
+            this.dbIconsDir.mkdirs();
+        }
     }
 
     public void updateData(List<String> newPackages, Map<String, Long> newTimes) {
         this.packageNames = newPackages != null ? newPackages : new ArrayList<>();
         this.exactTimes = newTimes != null ? newTimes : new HashMap<>();
         
-        // Лимит в 3 элемента только если isLimitEnabled = true (главный экран)
         this.visibleLimit = isLimitEnabled ? Math.min(3, this.packageNames.size()) : this.packageNames.size();
         this.hasStartedExpanding = false;
         notifyDataSetChanged();
@@ -79,9 +96,7 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         int oldLimit = visibleLimit;
         visibleLimit = Math.min(packageNames.size(), visibleLimit + 20);
         
-        // Убираем шов у старой последней ячейки
         if (oldLimit > 0) notifyItemChanged(oldLimit - 1);
-        
         notifyItemRangeInserted(oldLimit, visibleLimit - oldLimit);
         return isFullyExpanded(); 
     }
@@ -92,9 +107,7 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         visibleLimit = Math.min(3, packageNames.size());
         hasStartedExpanding = false;
         
-        // Возвращаем закругление новой последней ячейке
         if (visibleLimit > 0) notifyItemChanged(visibleLimit - 1);
-        
         notifyItemRangeRemoved(visibleLimit, oldLimit - visibleLimit);
     }
 
@@ -105,16 +118,45 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         return new AppViewHolder(view);
     }
 
+    // Сохранение иконки в файл
+    private void saveIconToDisk(Drawable drawable, String pkgName) {
+        try {
+            Bitmap bitmap;
+            if (drawable instanceof BitmapDrawable) {
+                bitmap = ((BitmapDrawable) drawable).getBitmap();
+            } else {
+                bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
+                Canvas canvas = new Canvas(bitmap);
+                drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+                drawable.draw(canvas);
+            }
+            File file = new File(dbIconsDir, pkgName + ".png");
+            FileOutputStream out = new FileOutputStream(file);
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+            out.flush();
+            out.close();
+        } catch (Exception ignored) { }
+    }
+
+    // Умный парсер для совсем уж мертвых пакетов
+    private String formatDeletedAppName(String pkg) {
+        try {
+            String[] parts = pkg.split("\\.");
+            String name = parts[parts.length - 1]; 
+            return name.substring(0, 1).toUpperCase() + name.substring(1); 
+        } catch (Exception e) {
+            return pkg;
+        }
+    }
+
     @Override
     public void onBindViewHolder(@NonNull AppViewHolder holder, int position) {
         int currentTotalVisible = getItemCount();
         float density = context.getResources().getDisplayMetrics().density;
 
-        // === ГИБКАЯ МАГИЯ ФОНОВ И ОТСТУПОВ ===
         RecyclerView.LayoutParams params = (RecyclerView.LayoutParams) holder.itemView.getLayoutParams();
         
         if (isLimitEnabled) {
-            // РЕЖИМ LEGO (Главный экран)
             boolean hasFooter = (packageNames.size() > 3) && (!hasStartedExpanding || isFullyExpanded());
 
             if (currentTotalVisible == 1 && !hasFooter) {
@@ -138,7 +180,6 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
                 }
             }
         } else {
-            // РЕЖИМ КРАСИВОЙ КАРТОЧКИ (Графики / За всё время)
             holder.itemView.setBackgroundResource(R.drawable.bg_app_card);
             if (params != null) {
                 params.leftMargin = (int) (16 * density);
@@ -148,7 +189,6 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
             }
         }
         if (params != null) holder.itemView.setLayoutParams(params);
-        // ============================================
 
         String pkg = packageNames.get(position);
         Long exactTime = exactTimes.get(pkg);
@@ -157,26 +197,16 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         holder.currentPkg = pkg;
         holder.iconView.setImageDrawable(null); 
 
-        // =====================================================================
-        // УМНЫЙ ПОИСК ДАННЫХ ПРИЛОЖЕНИЯ (ВКЛЮЧАЯ УДАЛЕННЫЕ)
-        // =====================================================================
-        ApplicationInfo appInfo = null;
+        // 1. ПРОВЕРЯЕМ, УДАЛЕНО ЛИ ПРИЛОЖЕНИЕ (Моментальная проверка)
         boolean isDeleted = false;
-
+        ApplicationInfo activeAppInfo = null;
         try {
-            // Сначала ищем как обычно
-            appInfo = pm.getApplicationInfo(pkg, 0);
+            activeAppInfo = pm.getApplicationInfo(pkg, 0);
         } catch (PackageManager.NameNotFoundException e) {
-            // Если не нашли - значит оно удалено! Достаем из системного кэша призраков
             isDeleted = true;
-            try {
-                int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
-                           PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
-                appInfo = pm.getApplicationInfo(pkg, flag);
-            } catch (PackageManager.NameNotFoundException ignored) {}
         }
 
-        // Включаем/отключаем корзину
+        // Показываем или прячем корзину
         if (isDeleted && holder.iconDeleted != null) {
             holder.iconDeleted.setVisibility(View.VISIBLE);
             holder.iconDeleted.setOnClickListener(v -> 
@@ -184,42 +214,59 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
             );
         } else if (holder.iconDeleted != null) {
             holder.iconDeleted.setVisibility(View.GONE);
-            holder.iconDeleted.setOnClickListener(null); // Снимаем клик, чтобы не мешал
+            holder.iconDeleted.setOnClickListener(null);
         }
 
-        // === РАБОТА С НАЗВАНИЕМ ===
-        String cachedName = nameCache.get(pkg);
-        if (cachedName != null) {
-            holder.nameView.setText(cachedName);
+        // 2. ДОСТАЕМ ИМЯ (RAM -> Диск -> Система)
+        String finalName = nameCache.get(pkg);
+        if (finalName != null) {
+            holder.nameView.setText(finalName);
         } else {
-            if (appInfo != null) {
-                cachedName = pm.getApplicationLabel(appInfo).toString();
-                nameCache.put(pkg, cachedName);
-                holder.nameView.setText(cachedName);
+            finalName = dbNames.getString(pkg, null);
+            if (finalName != null) {
+                nameCache.put(pkg, finalName);
+                holder.nameView.setText(finalName);
+            } else if (activeAppInfo != null) {
+                // Впервые видим живое приложение! Сохраняем навсегда в базу
+                finalName = pm.getApplicationLabel(activeAppInfo).toString();
+                dbNames.edit().putString(pkg, finalName).apply();
+                nameCache.put(pkg, finalName);
+                holder.nameView.setText(finalName);
             } else {
-                // Если система стерла даже кэш удаленного приложения, показываем имя пакета (напр. com.whatsapp)
-                holder.nameView.setText(pkg);
+                // Приложение уже удалено, и в базе его нет. Запускаем парсер.
+                holder.nameView.setText(formatDeletedAppName(pkg));
             }
         }
 
-        // === РАБОТА С ИКОНКОЙ ===
+        // 3. ДОСТАЕМ ИКОНКУ (RAM -> Диск -> Система)
         Drawable cachedIcon = iconCache.get(pkg);
         if (cachedIcon != null) {
             holder.iconView.setImageDrawable(cachedIcon);
         } else {
             holder.iconView.setImageResource(android.R.drawable.sym_def_app_icon);
-            final ApplicationInfo finalAppInfo = appInfo; 
+            final ApplicationInfo finalAppInfo = activeAppInfo; 
             
-            // Если иконки нет в кэше, грузим её в фоне, чтобы список не тормозил
             executorService.execute(() -> {
                 try {
-                    if (finalAppInfo != null) {
-                        Drawable appIcon = pm.getApplicationIcon(finalAppInfo);
+                    Drawable appIcon = null;
+                    File diskIcon = new File(dbIconsDir, pkg + ".png");
+                    
+                    // Ищем на диске
+                    if (diskIcon.exists()) {
+                        appIcon = Drawable.createFromPath(diskIcon.getAbsolutePath());
+                    } 
+                    // Если на диске нет, но приложение еще живое - достаем из системы и СОХРАНЯЕМ
+                    else if (finalAppInfo != null) {
+                        appIcon = pm.getApplicationIcon(finalAppInfo);
+                        saveIconToDisk(appIcon, pkg);
+                    }
+
+                    if (appIcon != null) {
                         iconCache.put(pkg, appIcon);
+                        final Drawable finalIconToSet = appIcon;
                         mainHandler.post(() -> {
-                            // Проверяем, не прокрутил ли пользователь список, пока грузилась картинка
                             if (pkg.equals(holder.currentPkg)) {
-                                holder.iconView.setImageDrawable(appIcon);
+                                holder.iconView.setImageDrawable(finalIconToSet);
                             }
                         });
                     }
@@ -238,7 +285,7 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         ImageView iconView; 
         TextView nameView; 
         TextView timeView;
-        ImageView iconDeleted; // Наша новая иконка корзины!
+        ImageView iconDeleted; 
         String currentPkg;
 
         public AppViewHolder(@NonNull View itemView) {
@@ -246,7 +293,7 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
             iconView = itemView.findViewById(R.id.app_icon);
             nameView = itemView.findViewById(R.id.app_name);
             timeView = itemView.findViewById(R.id.app_time);
-            iconDeleted = itemView.findViewById(R.id.icon_deleted); // Инициализируем корзину
+            iconDeleted = itemView.findViewById(R.id.icon_deleted); 
         }
     }
 }
