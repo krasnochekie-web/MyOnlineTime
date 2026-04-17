@@ -267,10 +267,19 @@ public class StatsTimeFragment extends Fragment {
                 } catch (Exception ignored) {}
             }
 
-            // Выкачиваем в оперативку названия и иконки для ВСЕХ собранных пакетов без лимитов
+            // Выкачиваем в оперативку названия и иконки для ВСЕХ собранных пакетов без лимитов, включая УДАЛЕННЫЕ!
             for (String pkg : allPackagesToPreload) {
                 try {
-                    android.content.pm.ApplicationInfo info = pm.getApplicationInfo(pkg, 0);
+                    int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
+                               PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
+                    
+                    android.content.pm.ApplicationInfo info;
+                    try {
+                        info = pm.getApplicationInfo(pkg, 0); // Сначала ищем обычные
+                    } catch (PackageManager.NameNotFoundException e) {
+                        info = pm.getApplicationInfo(pkg, flag); // Подхватываем "призраков"
+                    }
+
                     pm.getApplicationLabel(info); // Загоняем название
                     pm.getApplicationIcon(info);  // Загоняем картинку
                 } catch (Exception ignored) { }
