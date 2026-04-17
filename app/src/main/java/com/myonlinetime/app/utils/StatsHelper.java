@@ -1,6 +1,8 @@
 package com.myonlinetime.app.utils;
 
 import android.app.usage.UsageStatsManager;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.Handler;
@@ -10,6 +12,7 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.fragment.app.Fragment;
 
@@ -20,6 +23,7 @@ import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 import com.myonlinetime.app.ui.ProfileFragment; 
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
@@ -35,6 +39,18 @@ public class StatsHelper {
         String appName;
         android.graphics.drawable.Drawable icon;
         long time;
+        boolean isDeleted; // Флаг для корзины
+    }
+
+    // Парсер для совсем уж мертвых приложений, которых нет даже в Сейфе
+    private static String formatDeletedAppName(String pkg) {
+        try {
+            String[] parts = pkg.split("\\.");
+            String name = parts[parts.length - 1]; 
+            return name.substring(0, 1).toUpperCase() + name.substring(1); 
+        } catch (Exception e) {
+            return pkg;
+        }
     }
 
     // 1. МЕТОД ДЛЯ ФОНОВОЙ СИНХРОНИЗАЦИИ С СЕРВЕРОМ
@@ -80,9 +96,8 @@ public class StatsHelper {
         });
     }
 
-    // 2. МЕТОД ДЛЯ ОТРИСОВКИ ТОП-10 В ПРОФИЛЕ (ОПТИМИЗИРОВАННЫЙ)
+    // 2. МЕТОД ДЛЯ ОТРИСОВКИ ТОП-10 В ПРОФИЛЕ (ОПТИМИЗИРОВАННЫЙ С ПОДДЕРЖКОЙ УДАЛЕННЫХ)
     public static void loadStatsToProfile(final MainActivity activity, final TextView weekTimeText, final LinearLayout appsContainer) {
-        // Отключаем системные анимации Layout'a для мгновенной вставки элементов
         if (appsContainer != null) {
             appsContainer.setLayoutTransition(null);
             appsContainer.removeAllViews();
@@ -101,6 +116,8 @@ public class StatsHelper {
             Collections.sort(finalList, (left, right) -> Long.compare(exactTimes.get(right), exactTimes.get(left)));
 
             PackageManager pm = activity.getPackageManager();
+            SharedPreferences dbNames = activity.getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
+            File dbIconsDir = new File(activity.getFilesDir(), "saved_app_icons");
             final List<AppData> preloadedData = new ArrayList<>();
 
             // 1. Собираем тяжелые иконки и названия в ФОНЕ!
@@ -111,13 +128,39 @@ public class StatsHelper {
                 AppData data = new AppData();
                 data.pkgName = pkg;
                 data.time = exactTimes.get(pkg);
+                data.isDeleted = false;
                 
+                ApplicationInfo appInfo = null;
+
                 try {
-                    ApplicationInfo appInfo = pm.getApplicationInfo(pkg, 0);
+                    appInfo = pm.getApplicationInfo(pkg, 0);
+                } catch (PackageManager.NameNotFoundException e) {
+                    data.isDeleted = true; // Нашли удаленное приложение!
+                    try {
+                        int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
+                                   PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
+                        appInfo = pm.getApplicationInfo(pkg, flag);
+                    } catch (PackageManager.NameNotFoundException ignored) {}
+                }
+
+                // ДОСТАЕМ ИМЯ (Из Сейфа или системы)
+                String cachedName = dbNames.getString(pkg, null);
+                if (cachedName != null) {
+                    data.appName = cachedName;
+                } else if (appInfo != null) {
                     data.appName = pm.getApplicationLabel(appInfo).toString();
-                    data.icon = pm.getApplicationIcon(appInfo);
-                } catch (Exception e) {
-                    data.appName = pkg;
+                } else {
+                    data.appName = formatDeletedAppName(pkg);
+                }
+
+                // ДОСТАЕМ ИКОНКУ (Из Сейфа или системы)
+                File diskIcon = new File(dbIconsDir, pkg + ".png");
+                if (diskIcon.exists()) {
+                    data.icon = android.graphics.drawable.Drawable.createFromPath(diskIcon.getAbsolutePath());
+                } else if (appInfo != null) {
+                    try {
+                        data.icon = pm.getApplicationIcon(appInfo);
+                    } catch (Exception ignored) {}
                 }
                 
                 preloadedData.add(data);
@@ -150,10 +193,26 @@ public class StatsHelper {
                     ImageView iconView = view.findViewById(R.id.app_icon);
                     TextView nameView = view.findViewById(R.id.app_name);
                     TextView timeView = view.findViewById(R.id.app_time);
+                    ImageView iconDeleted = view.findViewById(R.id.icon_deleted);
                     
                     nameView.setText(data.appName);
-                    if (data.icon != null) iconView.setImageDrawable(data.icon);
+                    if (data.icon != null) {
+                        iconView.setImageDrawable(data.icon);
+                    } else {
+                        iconView.setImageResource(android.R.drawable.sym_def_app_icon);
+                    }
                     timeView.setText(Utils.formatTime(activity, data.time));
+                    
+                    // Логика корзины
+                    if (iconDeleted != null) {
+                        if (data.isDeleted) {
+                            iconDeleted.setVisibility(View.VISIBLE);
+                            iconDeleted.setOnClickListener(v -> Toast.makeText(activity, R.string.toast_app_deleted, Toast.LENGTH_SHORT).show());
+                        } else {
+                            iconDeleted.setVisibility(View.GONE);
+                            iconDeleted.setOnClickListener(null);
+                        }
+                    }
                     
                     appsContainer.addView(view);
 
