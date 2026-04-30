@@ -8,6 +8,10 @@
     <string name="find">Поиск</string>
     <string name="time">Время</string>
 	<string name="notif_max_count">99+</string>
+	<string name="saved_successfully">Успешно сохранено!</string>
+<string name="background_selected_success">Фон успешно выбран. Нажмите сохранить!</string>
+<string name="err_file_size_limit">Выбранный файл превышает размер данных в</string>
+<string name="err_processing_file">Ошибка при чтении файла</string>
 	<string name="toast_app_deleted">Удалено</string>
 	<string name="text_for_a_week">За неделю</string>
 <string name="placeholder_dots">...</string>
