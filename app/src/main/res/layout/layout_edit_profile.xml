@@ -3,7 +3,9 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/transparent"> <LinearLayout 
+    android:background="@android:color/transparent"> 
+    
+    <LinearLayout 
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
@@ -115,16 +117,27 @@
                         android:textSize="11sp"
                         android:layout_marginBottom="8dp"/>
 
+                    <!-- Текст увеличен до 16sp для удобного ввода -->
                     <EditText
                         android:id="@+id/input_about"
                         android:layout_width="match_parent"
                         android:layout_height="150dp"
                         android:background="@drawable/bg_input_field"
                         android:textColor="@color/textDynamic" 
-                        android:textSize="12sp"
-                        android:gravity="top|left"
+                        android:textSize="16sp"
+                        android:gravity="top|start"
                         android:padding="16dp"
                         android:alpha="0.85"/>
+                        
+                    <!-- Новый счетчик символов 0/1024 -->
+                    <TextView
+                        android:id="@+id/text_about_counter"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:textColor="@color/textGrayDynamic"
+                        android:textSize="12sp"
+                        android:layout_marginTop="4dp" />
                 </LinearLayout>
 
                 <Button
