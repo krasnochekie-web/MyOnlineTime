@@ -72,20 +72,18 @@ public class EditProfileFragment extends Fragment {
 
         final EditText inputName = view.findViewById(R.id.input_nickname);
         final EditText inputAbout = view.findViewById(R.id.input_about);
-        final TextView aboutCounter = view.findViewById(R.id.text_about_counter); // НОВЫЙ ЭЛЕМЕНТ В XML
+        final TextView aboutCounter = view.findViewById(R.id.text_about_counter); 
         View btnChangePhoto = view.findViewById(R.id.btn_change_photo);
         View btnChangeBackground = view.findViewById(R.id.btn_change_background);
         ImageView avatarPreview = view.findViewById(R.id.edit_avatar_preview);
         View btnSave = view.findViewById(R.id.btn_save_changes);
 
-        // Устанавливаем жесткие лимиты на уровне системы Android
         inputName.setFilters(new InputFilter[]{new InputFilter.LengthFilter(32)});
         inputAbout.setFilters(new InputFilter[]{new InputFilter.LengthFilter(1024)});
 
         inputName.setText(currentName);
         inputAbout.setText(currentAbout);
 
-        // Логика счетчика символов для описания
         if (aboutCounter != null) {
             aboutCounter.setText(currentAbout.length() + "/1024");
             inputAbout.addTextChangedListener(new TextWatcher() {
@@ -97,7 +95,6 @@ public class EditProfileFragment extends Fragment {
             });
         }
 
-        // Загрузка текущей аватарки
         Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + acct.getId());
         if (cachedAvatar != null && avatarPreview != null) {
             Glide.with(activity).load(cachedAvatar).circleCrop().into(avatarPreview);
@@ -115,23 +112,27 @@ public class EditProfileFragment extends Fragment {
             }
         }
 
-        // Назначаем клики на системный пикер (выбираем картинки И видео)
-        String[] mimeTypes = new String[]{"image/*", "video/*"};
+        // --- ИСПРАВЛЕНИЕ: ЖЕСТКОЕ ОГРАНИЧЕНИЕ ТИПОВ ФАЙЛОВ ---
+        // Для аватарки разрешаем ТОЛЬКО картинки (убрали video/*)
+        String[] photoMimeTypes = new String[]{"image/*"};
         
-        View.OnClickListener photoClickListener = v -> photoPicker.launch(mimeTypes);
+        // Для фона разрешаем и картинки, и видео (ведь ExoPlayer в фоне мы оставили)
+        String[] backgroundMimeTypes = new String[]{"image/*", "video/*"};
+        
+        View.OnClickListener photoClickListener = v -> photoPicker.launch(photoMimeTypes);
         if (btnChangePhoto != null) btnChangePhoto.setOnClickListener(photoClickListener);
         if (avatarPreview != null) avatarPreview.setOnClickListener(photoClickListener);
 
         if (btnChangeBackground != null) {
-            btnChangeBackground.setOnClickListener(v -> bgPicker.launch(mimeTypes));
+            btnChangeBackground.setOnClickListener(v -> bgPicker.launch(backgroundMimeTypes));
         }
+        // --------------------------------------------------------
 
-        // Сохранение изменений
         btnSave.setOnClickListener(v -> { 
              final String n = inputName.getText().toString().trim();
              final String a = inputAbout.getText().toString().trim();
              
-             btnSave.setEnabled(false); // Защита от двойного клика!
+             btnSave.setEnabled(false); 
              
              if (activity.mGoogleSignInClient != null) {
                  activity.mGoogleSignInClient.silentSignIn().addOnSuccessListener(freshAccount -> {
@@ -139,12 +140,10 @@ public class EditProfileFragment extends Fragment {
                          @Override public void onSuccess(String token) {
                              activity.vpsToken = token;
                              
-                             // Вызываем обновленный метод API с фоном и аватаркой
                              VpsApi.saveUserProfile(activity.vpsToken, n, a, pendingPhotoBase64, pendingBgBase64, new VpsApi.Callback() {
                                  @Override public void onSuccess(String result) {
                                      if (!isAdded()) return;
                                      
-                                     // 1. Мгновенно обновляем локальный кэш
                                      activity.prefs.edit()
                                              .putString("my_nickname", n)
                                              .putString("my_about", a)
@@ -155,14 +154,12 @@ public class EditProfileFragment extends Fragment {
                                      }
                                      if (pendingBgBase64 != null) {
                                          activity.prefs.edit().putString("my_bg_base64", pendingBgBase64).apply();
-                                         activity.currentBgBase64 = pendingBgBase64; // Обновляем глобальную переменную
+                                         activity.currentBgBase64 = pendingBgBase64; 
                                      }
 
-                                     // 2. Рапортуем об успехе и перерисовываем фон
                                      Toast.makeText(activity, R.string.saved_successfully, Toast.LENGTH_SHORT).show();
                                      activity.updateGlobalBackground(true);
                                      
-                                     // 3. Плавно возвращаемся назад
                                      activity.navigator.closeSubScreen();
                                  }
                                  @Override public void onError(String error) { 
@@ -194,9 +191,6 @@ public class EditProfileFragment extends Fragment {
         return view;
     }
 
-    // ========================================================
-    // ЛОГИКА ОБРАБОТКИ МЕДИА (ВЕС ФАЙЛА + BASE64)
-    // ========================================================
     private void processMediaFile(Uri uri, int maxMb, boolean isPhoto) {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
@@ -215,7 +209,6 @@ public class EditProfileFragment extends Fragment {
                 byte[] fileBytes = buffer.toByteArray();
                 is.close();
 
-                // Проверка размера файла
                 long fileSizeInMB = fileBytes.length / (1024 * 1024);
                 if (fileSizeInMB >= maxMb) {
                     activity.runOnUiThread(() -> {
@@ -225,7 +218,6 @@ public class EditProfileFragment extends Fragment {
                     return;
                 }
 
-                // Превращаем в Base64
                 String base64 = android.util.Base64.encodeToString(fileBytes, android.util.Base64.DEFAULT);
 
                 activity.runOnUiThread(() -> {
@@ -247,9 +239,6 @@ public class EditProfileFragment extends Fragment {
         });
     }
 
-    // ========================================================
-    // МЕТОД ДЛЯ НАСТРОЙКИ ШАПКИ
-    // ========================================================
     private void setupHeader(MainActivity activity) {
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
