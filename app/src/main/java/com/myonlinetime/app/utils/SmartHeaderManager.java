@@ -64,6 +64,24 @@ public class SmartHeaderManager {
         return null;
     }
 
+    // =========================================================================
+    // НОВЫЙ МЕТОД: Показывает кнопку назад и меняет заголовок
+    // =========================================================================
+    public void showBackButton(String title, View.OnClickListener listener) {
+        isRestoringTitle = true;
+        headerTitle.setText(title);
+        isRestoringTitle = false;
+
+        headerBackBtn.setVisibility(View.VISIBLE);
+        headerBackBtn.setOnClickListener(listener);
+
+        // Сохраняем заголовок для текущего фрагмента, чтобы он не потерялся при восстановлении
+        Fragment top = getTopFragment();
+        if (top != null) {
+            fragmentTitles.put(top.getClass().getSimpleName(), title);
+        }
+    }
+
     public void updateHeaderAfterBack() {
         forceRestoreCurrentSubScreen();
     }
@@ -75,19 +93,12 @@ public class SmartHeaderManager {
         if (top != null) {
             String className = top.getClass().getSimpleName();
 
-            // =========================================================================
-            // ЛОГИКА КОЛОКОЛЬЧИКА:
-            // Прячем только если мы на экране истории уведомлений.
-            // На всех остальных второстепенных экранах (подписчики и т.д.) - ПОКАЗЫВАЕМ.
-            // =========================================================================
             boolean isHistoryScreen = className.contains("NotificationsHistory");
-            
             int bellVisibility = isHistoryScreen ? View.GONE : View.VISIBLE;
             
             if (bellContainer != null) bellContainer.setVisibility(bellVisibility);
             if (bellBtn != null) bellBtn.setVisibility(bellVisibility);
 
-            // Если колокольчик стал видимым, обновляем на нем цифру уведомлений
             if (!isHistoryScreen && updateBadgeCallback != null) {
                 updateBadgeCallback.run();
             }
@@ -102,7 +113,6 @@ public class SmartHeaderManager {
     }
 
     public void resetHeader() {
-        // Если фрагмент умирает и пытается сбросить шапку, проверяем, нет ли под ним другого саб-скрина
         if (activity.navigator != null && activity.navigator.hasSubScreen()) {
             forceRestoreCurrentSubScreen();
             return; 
