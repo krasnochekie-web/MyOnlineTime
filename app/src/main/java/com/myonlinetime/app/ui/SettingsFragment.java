@@ -119,25 +119,21 @@ public class SettingsFragment extends Fragment {
 
         return view;
     }
-
-    private void loadUserData(View view) {
+private void loadUserData(View view) {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
 
         ImageView avatarView = view.findViewById(R.id.settings_avatar);
         TextView nicknameView = view.findViewById(R.id.settings_nickname);
-        View btnChangeEmail = view.findViewById(R.id.btn_change_email);
-        View btnDeleteAccount = view.findViewById(R.id.btn_delete_account);
-        View btnSwitchAccount = view.findViewById(R.id.btn_switch_account);
+        View accountBlock = view.findViewById(R.id.settings_account_block); // Находим новый блок!
         View signOutBtn = view.findViewById(R.id.btn_sign_out);
 
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         
         if (account != null) {
-            // === АВТОРИЗОВАН: ПОКАЗЫВАЕМ БЛОК АККАУНТА ===
+            // === АВТОРИЗОВАН ===
             if (nicknameView != null) {
                 nicknameView.setVisibility(View.VISIBLE);
-                // ЧИТАЕМ ИЗ ЕДИНОГО ИСТОЧНИКА ИСТИНЫ (КЭША)
                 String savedName = activity.prefs.getString("my_nickname", account.getDisplayName());
                 nicknameView.setText(savedName != null ? savedName : getString(R.string.default_user_name));
             }
@@ -147,7 +143,6 @@ public class SettingsFragment extends Fragment {
             }
             if (regDateTxt != null) {
                 regDateTxt.setVisibility(View.VISIBLE);
-                // Достаем дату из кэша (если есть)
                 String createdAt = activity.prefs.getString("my_created_at", "");
                 if (!createdAt.isEmpty()) {
                     regDateTxt.setText(getString(R.string.settings_reg_date, createdAt));
@@ -170,7 +165,6 @@ public class SettingsFragment extends Fragment {
                         } catch (Exception e){}
                     }
                 } else {
-                    // Запасной вариант - фото из Google
                     if (account.getPhotoUrl() != null) {
                         Glide.with(this).load(account.getPhotoUrl()).circleCrop().into(avatarView);
                     } else {
@@ -179,6 +173,24 @@ public class SettingsFragment extends Fragment {
                 }
             }
 
+            // Показываем весь блок аккаунта (линию, заголовок и кнопки внутри)
+            if (accountBlock != null) accountBlock.setVisibility(View.VISIBLE);
+            
+            setDynamicButtonText(signOutBtn, R.string.btn_sign_out);
+
+        } else {
+            // === ГОСТЬ ===
+            if (nicknameView != null) nicknameView.setVisibility(View.GONE);
+            if (accountIdTxt != null) accountIdTxt.setVisibility(View.GONE);
+            if (regDateTxt != null) regDateTxt.setVisibility(View.GONE);
+            if (avatarView != null) avatarView.setVisibility(View.GONE);
+            
+            // Скрываем ВЕСЬ блок аккаунта разом!
+            if (accountBlock != null) accountBlock.setVisibility(View.GONE);
+            
+            setDynamicButtonText(signOutBtn, R.string.btn_sign_in_google);
+        }
+    }
             // Показываем кнопки управления аккаунтом
             if (btnChangeEmail != null) btnChangeEmail.setVisibility(View.VISIBLE);
             if (btnDeleteAccount != null) btnDeleteAccount.setVisibility(View.VISIBLE);
