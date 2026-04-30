@@ -7,8 +7,9 @@ import java.util.Map;
 
 public class User {
 
-    @SerializedName("id")
-    public String id;
+    // ИСПРАВЛЕНИЕ: Сервер отправляет ключ "uid", а не "id"
+    @SerializedName("uid")
+    public String uid;
 
     @SerializedName("nickname")
     public String nickname;
@@ -19,14 +20,22 @@ public class User {
     @SerializedName("photo")
     public String photo;
 
+    // --- НОВЫЕ ПОЛЯ (ФОН И ДАТА РЕГИСТРАЦИИ) ---
+
+    @SerializedName("background")
+    public String background;
+
+    @SerializedName("createdAt")
+    public String createdAt;
+
+    // ------------------------------------------
+
     @SerializedName("totalTime")
     public long totalTime;
 
     @SerializedName("topApps")
     public Map<String, Long> topApps;
 
-    // --- НОВЫЕ ПОЛЯ ДЛЯ СКРЫТИЯ И ОПИСАНИЙ ---
-    
     @SerializedName("hiddenApps")
     public List<String> hiddenApps;
 
