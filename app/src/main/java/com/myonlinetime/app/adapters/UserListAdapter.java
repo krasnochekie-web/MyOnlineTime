@@ -12,11 +12,11 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.models.User;
+import com.myonlinetime.app.utils.Utils;
 
 import java.util.ArrayList;
 import java.util.List;
 
-// Наследуемся от современного RecyclerView
 public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserViewHolder> {
     private List<User> users = new ArrayList<>();
     private MainActivity activity;
@@ -26,48 +26,59 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
     }
 
     public void setUsers(List<User> newUsers) {
-        this.users = newUsers != null ? newUsers : new ArrayList<User>();
+        this.users = newUsers != null ? newUsers : new ArrayList<>();
         notifyDataSetChanged();
     }
 
     @NonNull
     @Override
     public UserViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        // Создаем физическую карточку
         View view = LayoutInflater.from(activity).inflate(R.layout.item_search_user, parent, false);
         return new UserViewHolder(view);
     }
 
     @Override
     public void onBindViewHolder(@NonNull UserViewHolder holder, int position) {
-        // Заполняем карточку данными
         final User u = users.get(position);
         
         holder.name.setText(u.nickname != null ? u.nickname : activity.getString(R.string.new_user));
         holder.avatar.setImageResource(android.R.drawable.sym_def_app_icon);
 
-        // Загрузка аватарки с встроенной поддержкой GIF (убрали .asBitmap())
+        // Уникальная метка для карточки, чтобы при быстрой прокрутке картинки не путались
+        holder.avatar.setTag(u.uid);
+
         if (u.photo != null && u.photo.length() > 10) {
             if (u.photo.startsWith("http")) {
-                // Обычная ссылка
                 Glide.with(activity).load(u.photo).circleCrop().into(holder.avatar);
             } else {
-                // Base64 (теперь поддерживает GIF анимацию)
-                try {
-                    byte[] imageByteArray = android.util.Base64.decode(u.photo, android.util.Base64.DEFAULT);
-                    Glide.with(activity).load(imageByteArray).circleCrop().into(holder.avatar);
-                } catch (Exception e) {}
+                // Асинхронная расшифровка тяжелого Base64 (спасает от вылетов и фризов)
+                Utils.backgroundExecutor.execute(() -> {
+                    try {
+                        byte[] imageByteArray = android.util.Base64.decode(u.photo, android.util.Base64.DEFAULT);
+                        
+                        // Проверка на видео (магические байты MP4)
+                        boolean isVideo = imageByteArray.length > 8 &&
+                                          imageByteArray[4] == 0x66 && imageByteArray[5] == 0x74 &&
+                                          imageByteArray[6] == 0x79 && imageByteArray[7] == 0x70;
+
+                        activity.runOnUiThread(() -> {
+                            // Отрисовываем, только если карточка не успела уехать при скролле
+                            if (u.uid.equals(holder.avatar.getTag())) {
+                                if (isVideo) {
+                                    // В поиске для видео-аватарок ставим иконку (плейер в списке убьет телефон)
+                                    holder.avatar.setImageResource(android.R.drawable.sym_def_app_icon); 
+                                } else {
+                                    Glide.with(activity).load(imageByteArray).circleCrop().into(holder.avatar);
+                                }
+                            }
+                        });
+                    } catch (Exception e) {}
+                });
             }
         }
 
-        // Клик по карточке
-        holder.itemView.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                // ИСПРАВЛЕНИЕ: Передаем именно UID пользователя, а не внутренний id.
-                // Теперь фрагмент профиля точно поймет, чью страницу нужно загрузить!
-                activity.navigator.switchScreen(4, u.uid);
-            }
+        holder.itemView.setOnClickListener(v -> {
+            activity.navigator.switchScreen(4, u.uid);
         });
     }
 
@@ -76,7 +87,6 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
         return users.size();
     }
 
-    // Тот самый ViewHolder
     static class UserViewHolder extends RecyclerView.ViewHolder {
         ImageView avatar;
         TextView name;
