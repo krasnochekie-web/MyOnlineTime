@@ -33,29 +33,29 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
     @NonNull
     @Override
     public UserViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        // Создаем физическую карточку (вызывается только пару раз для видимых элементов)
+        // Создаем физическую карточку
         View view = LayoutInflater.from(activity).inflate(R.layout.item_search_user, parent, false);
         return new UserViewHolder(view);
     }
 
     @Override
     public void onBindViewHolder(@NonNull UserViewHolder holder, int position) {
-        // Заполняем карточку данными (вызывается при быстром скроллинге)
+        // Заполняем карточку данными
         final User u = users.get(position);
         
         holder.name.setText(u.nickname != null ? u.nickname : activity.getString(R.string.new_user));
         holder.avatar.setImageResource(android.R.drawable.sym_def_app_icon);
 
-        // Пока используем твой старый метод. Потом заменим на Glide!
+        // Загрузка аватарки с встроенной поддержкой GIF (убрали .asBitmap())
         if (u.photo != null && u.photo.length() > 10) {
             if (u.photo.startsWith("http")) {
-                // Если это обычная ссылка с сервера (новое будущее!)
+                // Обычная ссылка
                 Glide.with(activity).load(u.photo).circleCrop().into(holder.avatar);
             } else {
-                // Если это старый Base64 (обратная совместимость)
+                // Base64 (теперь поддерживает GIF анимацию)
                 try {
                     byte[] imageByteArray = android.util.Base64.decode(u.photo, android.util.Base64.DEFAULT);
-                    Glide.with(activity).asBitmap().load(imageByteArray).circleCrop().into(holder.avatar);
+                    Glide.with(activity).load(imageByteArray).circleCrop().into(holder.avatar);
                 } catch (Exception e) {}
             }
         }
@@ -64,7 +64,9 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
         holder.itemView.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                activity.navigator.switchScreen(4, u.id);
+                // ИСПРАВЛЕНИЕ: Передаем именно UID пользователя, а не внутренний id.
+                // Теперь фрагмент профиля точно поймет, чью страницу нужно загрузить!
+                activity.navigator.switchScreen(4, u.uid);
             }
         });
     }
@@ -74,7 +76,7 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
         return users.size();
     }
 
-    // Тот самый ViewHolder, который теперь является обязательным стандартом
+    // Тот самый ViewHolder
     static class UserViewHolder extends RecyclerView.ViewHolder {
         ImageView avatar;
         TextView name;
@@ -86,4 +88,3 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
         }
     }
 }
-
