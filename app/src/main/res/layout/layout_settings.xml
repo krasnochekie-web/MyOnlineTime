@@ -15,14 +15,16 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- Шапка профиля -->
+        <!-- ОБЪЕДИНЕННЫЙ БЛОК ШАПКИ (Аватар + Ник + Инфо) -->
         <LinearLayout
+            android:id="@+id/settings_user_header_block"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:gravity="center_horizontal"
             android:layout_marginTop="12dp"
-            android:layout_marginBottom="24dp">
+            android:layout_marginBottom="24dp"
+            android:visibility="visible">
 
             <ImageView
                 android:id="@+id/settings_avatar"
@@ -36,7 +38,6 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="@string/guest_user_name"
                 android:textColor="@color/textDynamic"
                 android:textSize="20sp"
                 android:textStyle="bold" />
@@ -58,12 +59,13 @@
                 android:textSize="14sp" />
         </LinearLayout>
 
-        <!-- БЛОК АВТОРИЗОВАННОГО ПОЛЬЗОВАТЕЛЯ -->
+        <!-- БЛОК КНОПОК АККАУНТА (Тоже скрывается при выходе) -->
         <LinearLayout
             android:id="@+id/settings_account_block"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:visibility="visible">
 
             <View
                 android:layout_width="match_parent"
@@ -82,7 +84,6 @@
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
-            <!-- Все кнопки аккаунта на одной подложке! -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -117,7 +118,7 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- БЛОК ГОСТЯ (Показывается только если не вошли) -->
+        <!-- БЛОК ГОСТЯ (Показывается если НЕ авторизован) -->
         <LinearLayout
             android:id="@+id/settings_guest_login_block"
             android:layout_width="match_parent"
@@ -189,7 +190,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:background="@drawable/bg_button_active" 
+                android:background="@drawable/bg_theme_toggle_inactive" 
                 android:gravity="center"
                 android:paddingVertical="10dp"
                 android:text="@string/settings_theme_dark"
