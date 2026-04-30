@@ -15,6 +15,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
+        <!-- Шапка профиля -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -35,7 +36,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="Guest"
+                android:text="@string/guest_user_name"
                 android:textColor="@color/textDynamic"
                 android:textSize="20sp"
                 android:textStyle="bold" />
@@ -57,7 +58,7 @@
                 android:textSize="14sp" />
         </LinearLayout>
 
-        <!-- НОВЫЙ БЛОК: Обертка для всех настроек аккаунта (чтобы скрывать их разом) -->
+        <!-- БЛОК АВТОРИЗОВАННОГО ПОЛЬЗОВАТЕЛЯ -->
         <LinearLayout
             android:id="@+id/settings_account_block"
             android:layout_width="match_parent"
@@ -81,6 +82,7 @@
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
+            <!-- Все кнопки аккаунта на одной подложке! -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -106,26 +108,35 @@
                     style="@style/SettingsItemStyle"
                     android:text="@string/settings_delete_account"
                     app:drawableStartCompat="@drawable/ic_delete" />
+
+                <TextView
+                    android:id="@+id/btn_sign_out"
+                    style="@style/SettingsItemStyle"
+                    android:text="@string/settings_sign_out"
+                    app:drawableStartCompat="@drawable/ic_logout" />
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Кнопка Выйти/Войти вынесена из блока, так как она нужна всегда -->
+        <!-- БЛОК ГОСТЯ (Показывается только если не вошли) -->
         <LinearLayout
+            android:id="@+id/settings_guest_login_block"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="16dp"
             android:layout_marginTop="16dp"
             android:background="@drawable/bg_app_card"
             android:orientation="vertical"
-            android:paddingVertical="8dp">
+            android:paddingVertical="8dp"
+            android:visibility="gone">
             
             <TextView
-                android:id="@+id/btn_sign_out"
+                android:id="@+id/btn_sign_in_guest"
                 style="@style/SettingsItemStyle"
-                android:text="@string/settings_sign_out"
-                app:drawableStartCompat="@drawable/ic_logout" />
+                android:text="@string/btn_sign_in_google"
+                app:drawableStartCompat="@drawable/ic_switch" />
         </LinearLayout>
 
+        <!-- ОФОРМЛЕНИЕ -->
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
@@ -185,6 +196,7 @@
                 android:textColor="@color/textDynamic" />
         </LinearLayout>
 
+        <!-- ОБЩИЕ -->
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
@@ -229,6 +241,7 @@
                 app:drawableStartCompat="@drawable/ic_clear" />
         </LinearLayout>
 
+        <!-- ПРОЧЕЕ -->
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
