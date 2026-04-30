@@ -6,7 +6,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
@@ -39,14 +38,7 @@ import com.myonlinetime.app.models.User;
 import com.myonlinetime.app.utils.StatsHelper;
 import com.myonlinetime.app.utils.Utils;
 
-// ExoPlayer импорты
-import androidx.media3.common.MediaItem;
-import androidx.media3.common.Player;
-import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.ui.PlayerView;
-
 import java.io.File;
-import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -62,10 +54,6 @@ public class ProfileFragment extends Fragment {
     private final Gson gson = new Gson();
     
     private boolean isMe = false;
-
-    // Переменные для видеоаватара
-    private ExoPlayer exoPlayer;
-    private PlayerView playerView;
     private ImageView avatarView;
 
     private static class AppUiData {
@@ -99,10 +87,9 @@ public class ProfileFragment extends Fragment {
         if (account == null) return view;
 
         final String myUid = account.getId();
-        isMe = targetUid.equals(myUid) || targetUid.isEmpty(); // Если пусто - это свой профиль
+        isMe = targetUid.equals(myUid) || targetUid.isEmpty(); 
         final String finalTargetUid = isMe ? myUid : targetUid;
 
-        // НАСТРОЙКА НАВИГАЦИИ И ШАПКИ
         activity.mainHeader.setVisibility(View.VISIBLE);
         if (!isMe) {
             activity.headerManager.showBackButton(activity.getString(R.string.title_search), v -> {
@@ -118,7 +105,6 @@ public class ProfileFragment extends Fragment {
         final TextView aboutView = view.findViewById(R.id.profile_about);
         
         avatarView = view.findViewById(R.id.profile_avatar);
-        playerView = view.findViewById(R.id.profile_video_avatar); 
         
         final View btnEdit = view.findViewById(R.id.btn_edit_profile);
         final Button btnFollow = view.findViewById(R.id.btn_follow);
@@ -318,7 +304,6 @@ public class ProfileFragment extends Fragment {
             }
         };
 
-        // --- ИСПРАВЛЕНИЕ АВТОРИЗАЦИИ (ЗАЩИТА ОТ ПРОТУХШЕГО ТОКЕНА) ---
         if (activity.vpsToken != null) {
             fetchProfileData.run();
         } else {
@@ -333,7 +318,6 @@ public class ProfileFragment extends Fragment {
                         @Override public void onError(String error) {}
                     });
                 }).addOnFailureListener(e -> {
-                    // Если токен совсем умер, авторизуемся по старинке
                     VpsApi.authenticateWithGoogle(activity, account.getIdToken(), new VpsApi.LoginCallback() {
                         @Override
                         public void onSuccess(final String token) {
@@ -345,7 +329,6 @@ public class ProfileFragment extends Fragment {
                 });
             }
         }
-        // -------------------------------------------------------------
 
         return view;
     }
@@ -367,55 +350,13 @@ public class ProfileFragment extends Fragment {
         Utils.backgroundExecutor.execute(() -> {
             try {
                 byte[] mediaBytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
-                
-                boolean isVideo = mediaBytes.length > 8 &&
-                                  mediaBytes[4] == 0x66 && mediaBytes[5] == 0x74 &&
-                                  mediaBytes[6] == 0x79 && mediaBytes[7] == 0x70; // 'ftyp'
-
                 new Handler(Looper.getMainLooper()).post(() -> {
                     if (!isAdded()) return;
-
-                    if (isVideo && playerView != null) {
-                        avatarView.setVisibility(View.GONE);
-                        playerView.setVisibility(View.VISIBLE);
-
-                        if (exoPlayer == null) {
-                            exoPlayer = new ExoPlayer.Builder(activity).build();
-                            playerView.setPlayer(exoPlayer);
-                            playerView.setUseController(false); 
-                            exoPlayer.setVolume(0f); 
-                            exoPlayer.setRepeatMode(Player.REPEAT_MODE_ONE); 
-                        }
-
-                        try {
-                            File tempVid = new File(activity.getCacheDir(), "temp_avatar.mp4");
-                            FileOutputStream fos = new FileOutputStream(tempVid);
-                            fos.write(mediaBytes);
-                            fos.close();
-                            
-                            MediaItem mediaItem = MediaItem.fromUri(android.net.Uri.fromFile(tempVid));
-                            exoPlayer.setMediaItem(mediaItem);
-                            exoPlayer.prepare();
-                            exoPlayer.play();
-                        } catch (Exception e) { e.printStackTrace(); }
-
-                    } else {
-                        if (playerView != null) playerView.setVisibility(View.GONE);
-                        avatarView.setVisibility(View.VISIBLE);
-                        Glide.with(activity).load(mediaBytes).circleCrop().into(avatarView);
-                    }
+                    avatarView.setVisibility(View.VISIBLE);
+                    Glide.with(activity).load(mediaBytes).circleCrop().into(avatarView);
                 });
             } catch (Exception e) {}
         });
-    }
-
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-        if (exoPlayer != null) {
-            exoPlayer.release();
-            exoPlayer = null;
-        }
     }
 
     private String formatDeletedAppName(String pkg) {
@@ -471,16 +412,8 @@ public class ProfileFragment extends Fragment {
         if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(isMe);
         }
-        if (exoPlayer != null) exoPlayer.play();
     }
 
-    @Override
-    public void onPause() {
-        super.onPause();
-        if (exoPlayer != null) exoPlayer.pause();
-    }
-
-    // --- ИСПРАВЛЕНИЕ: МГНОВЕННАЯ РЕАКТИВНОСТЬ ДАННЫХ ИЗ КЭША ---
     @Override
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
@@ -495,7 +428,6 @@ public class ProfileFragment extends Fragment {
                 } else {
                     activity.headerManager.resetHeader();
                     
-                    // Обновляем UI моментально из кэша
                     TextView nameView = getView() != null ? getView().findViewById(R.id.profile_name) : null;
                     TextView aboutView = getView() != null ? getView().findViewById(R.id.profile_about) : null;
                     GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
@@ -508,16 +440,13 @@ public class ProfileFragment extends Fragment {
                     }
                 }
                 activity.updateGlobalBackground(isMe);
-                if (exoPlayer != null) exoPlayer.play();
             } else {
                 if (activity.navigator != null && activity.navigator.getCurrentTabIndex() != 4) {
                     activity.updateGlobalBackground(false);
                 }
-                if (exoPlayer != null) exoPlayer.pause();
             }
         }
     }
-    // -----------------------------------------------------------
 
     private void loadLocalCacheAsync(Runnable onLoaded) {
         Utils.backgroundExecutor.execute(() -> {
