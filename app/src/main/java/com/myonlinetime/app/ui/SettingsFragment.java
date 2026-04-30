@@ -119,7 +119,8 @@ public class SettingsFragment extends Fragment {
 
         return view;
     }
-private void loadUserData(View view) {
+
+    private void loadUserData(View view) {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
 
@@ -189,28 +190,6 @@ private void loadUserData(View view) {
             if (accountBlock != null) accountBlock.setVisibility(View.GONE);
             
             setDynamicButtonText(signOutBtn, R.string.btn_sign_in_google);
-        }
-    }
-            // Показываем кнопки управления аккаунтом
-            if (btnChangeEmail != null) btnChangeEmail.setVisibility(View.VISIBLE);
-            if (btnDeleteAccount != null) btnDeleteAccount.setVisibility(View.VISIBLE);
-            if (btnSwitchAccount != null) btnSwitchAccount.setVisibility(View.VISIBLE);
-            
-            setDynamicButtonText(signOutBtn, R.string.btn_sign_out); // Текст "Выйти"
-
-        } else {
-            // === ГОСТЬ: ПОЛНОСТЬЮ СКРЫВАЕМ БЛОК АККАУНТА ===
-            if (nicknameView != null) nicknameView.setVisibility(View.GONE);
-            if (accountIdTxt != null) accountIdTxt.setVisibility(View.GONE);
-            if (regDateTxt != null) regDateTxt.setVisibility(View.GONE);
-            if (avatarView != null) avatarView.setVisibility(View.GONE);
-            
-            // Скрываем лишние кнопки (интерфейс сдвинется вверх)
-            if (btnChangeEmail != null) btnChangeEmail.setVisibility(View.GONE);
-            if (btnDeleteAccount != null) btnDeleteAccount.setVisibility(View.GONE);
-            if (btnSwitchAccount != null) btnSwitchAccount.setVisibility(View.GONE);
-            
-            setDynamicButtonText(signOutBtn, R.string.btn_sign_in_google); // Текст "Войти"
         }
     }
 
