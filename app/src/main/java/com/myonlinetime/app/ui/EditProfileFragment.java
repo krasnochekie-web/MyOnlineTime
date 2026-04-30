@@ -133,51 +133,62 @@ public class EditProfileFragment extends Fragment {
              
              btnSave.setEnabled(false); // Защита от двойного клика!
              
-             VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
-                 @Override public void onSuccess(String token) {
-                     activity.vpsToken = token;
-                     
-                     // Вызываем обновленный метод API с фоном и аватаркой
-                     VpsApi.saveUserProfile(activity.vpsToken, n, a, pendingPhotoBase64, pendingBgBase64, new VpsApi.Callback() {
-                         @Override public void onSuccess(String result) {
-                             if (!isAdded()) return;
+             if (activity.mGoogleSignInClient != null) {
+                 activity.mGoogleSignInClient.silentSignIn().addOnSuccessListener(freshAccount -> {
+                     VpsApi.authenticateWithGoogle(activity, freshAccount.getIdToken(), new VpsApi.LoginCallback() {
+                         @Override public void onSuccess(String token) {
+                             activity.vpsToken = token;
                              
-                             // 1. Мгновенно обновляем локальный кэш
-                             activity.prefs.edit()
-                                     .putString("my_nickname", n)
-                                     .putString("my_about", a)
-                                     .apply();
+                             // Вызываем обновленный метод API с фоном и аватаркой
+                             VpsApi.saveUserProfile(activity.vpsToken, n, a, pendingPhotoBase64, pendingBgBase64, new VpsApi.Callback() {
+                                 @Override public void onSuccess(String result) {
+                                     if (!isAdded()) return;
                                      
-                             if (pendingPhotoBase64 != null) {
-                                 activity.prefs.edit().putString("my_photo_base64", pendingPhotoBase64).apply();
-                             }
-                             if (pendingBgBase64 != null) {
-                                 activity.prefs.edit().putString("my_bg_base64", pendingBgBase64).apply();
-                                 activity.currentBgBase64 = pendingBgBase64; // Обновляем глобальную переменную
-                             }
+                                     // 1. Мгновенно обновляем локальный кэш
+                                     activity.prefs.edit()
+                                             .putString("my_nickname", n)
+                                             .putString("my_about", a)
+                                             .apply();
+                                             
+                                     if (pendingPhotoBase64 != null) {
+                                         activity.prefs.edit().putString("my_photo_base64", pendingPhotoBase64).apply();
+                                     }
+                                     if (pendingBgBase64 != null) {
+                                         activity.prefs.edit().putString("my_bg_base64", pendingBgBase64).apply();
+                                         activity.currentBgBase64 = pendingBgBase64; // Обновляем глобальную переменную
+                                     }
 
-                             // 2. Рапортуем об успехе и перерисовываем фон
-                             Toast.makeText(activity, R.string.saved_successfully, Toast.LENGTH_SHORT).show();
-                             activity.updateGlobalBackground(true);
-                             
-                             // 3. Плавно возвращаемся назад
-                             activity.navigator.closeSubScreen();
+                                     // 2. Рапортуем об успехе и перерисовываем фон
+                                     Toast.makeText(activity, R.string.saved_successfully, Toast.LENGTH_SHORT).show();
+                                     activity.updateGlobalBackground(true);
+                                     
+                                     // 3. Плавно возвращаемся назад
+                                     activity.navigator.closeSubScreen();
+                                 }
+                                 @Override public void onError(String error) { 
+                                     if (isAdded()) {
+                                         Toast.makeText(activity, activity.getString(R.string.err_saving) + " " + error, Toast.LENGTH_LONG).show(); 
+                                         btnSave.setEnabled(true);
+                                     }
+                                 }
+                             });
                          }
-                         @Override public void onError(String error) { 
+                         @Override public void onError(String error) {
                              if (isAdded()) {
-                                 Toast.makeText(activity, activity.getString(R.string.err_saving) + " " + error, Toast.LENGTH_LONG).show(); 
+                                 Toast.makeText(activity, activity.getString(R.string.err_token) + error, Toast.LENGTH_LONG).show();
                                  btnSave.setEnabled(true);
                              }
                          }
                      });
-                 }
-                 @Override public void onError(String error) {
+                 }).addOnFailureListener(e -> {
                      if (isAdded()) {
-                         Toast.makeText(activity, activity.getString(R.string.err_token) + error, Toast.LENGTH_LONG).show();
+                         Toast.makeText(activity, "Не удалось обновить сессию Google. Перезапустите приложение.", Toast.LENGTH_LONG).show();
                          btnSave.setEnabled(true);
                      }
-                 }
-             });
+                 });
+             } else {
+                 btnSave.setEnabled(true);
+             }
         });
 
         return view;
