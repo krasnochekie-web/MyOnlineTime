@@ -126,16 +126,30 @@ public class SearchFragment extends Fragment {
             if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
                 executeSearchApi(activity.vpsToken, query);
             } else {
-                // Токена нет, запрашиваем новый
-                GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
-                if(acct != null) {
-                    VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
-                        @Override
-                        public void onSuccess(String token) {
-                            activity.vpsToken = token;
-                            executeSearchApi(token, query);
+                // Токена нет, запрашиваем новый с защитой от протухания (silentSignIn)
+                if (activity.mGoogleSignInClient != null) {
+                    activity.mGoogleSignInClient.silentSignIn().addOnSuccessListener(freshAccount -> {
+                        VpsApi.authenticateWithGoogle(activity, freshAccount.getIdToken(), new VpsApi.LoginCallback() {
+                            @Override
+                            public void onSuccess(String token) {
+                                activity.vpsToken = token;
+                                executeSearchApi(token, query);
+                            }
+                            @Override public void onError(String e) {}
+                        });
+                    }).addOnFailureListener(e -> {
+                        // Фолбэк, если тихое обновление не удалось
+                        GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
+                        if(acct != null) {
+                            VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
+                                @Override
+                                public void onSuccess(String token) {
+                                    activity.vpsToken = token;
+                                    executeSearchApi(token, query);
+                                }
+                                @Override public void onError(String ex) {}
+                            });
                         }
-                        @Override public void onError(String e) {}
                     });
                 }
             }
