@@ -8,6 +8,10 @@
     <string name="feed">Feed</string>
     <string name="find">Find</string>
     <string name="time">Time</string>
+	<string name="saved_successfully">Saved successfully!</string>
+<string name="background_selected_success">Background selected successfully. Press save!</string>
+<string name="err_file_size_limit">Selected file exceeds the data limit of</string>
+<string name="err_processing_file">Error processing file</string>
 	<string name="toast_app_deleted">Deleted</string>
 	<string name="text_for_a_week">За неделю</string>
 <string name="placeholder_dots">...</string>
