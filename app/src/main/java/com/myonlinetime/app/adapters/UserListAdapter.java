@@ -51,25 +51,15 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
             if (u.photo.startsWith("http")) {
                 Glide.with(activity).load(u.photo).circleCrop().into(holder.avatar);
             } else {
-                // Асинхронная расшифровка тяжелого Base64 (спасает от вылетов и фризов)
+                // Асинхронная расшифровка Base64 (без всяких проверок на видео)
                 Utils.backgroundExecutor.execute(() -> {
                     try {
                         byte[] imageByteArray = android.util.Base64.decode(u.photo, android.util.Base64.DEFAULT);
                         
-                        // Проверка на видео (магические байты MP4)
-                        boolean isVideo = imageByteArray.length > 8 &&
-                                          imageByteArray[4] == 0x66 && imageByteArray[5] == 0x74 &&
-                                          imageByteArray[6] == 0x79 && imageByteArray[7] == 0x70;
-
                         activity.runOnUiThread(() -> {
                             // Отрисовываем, только если карточка не успела уехать при скролле
                             if (u.uid.equals(holder.avatar.getTag())) {
-                                if (isVideo) {
-                                    // В поиске для видео-аватарок ставим иконку (плейер в списке убьет телефон)
-                                    holder.avatar.setImageResource(android.R.drawable.sym_def_app_icon); 
-                                } else {
-                                    Glide.with(activity).load(imageByteArray).circleCrop().into(holder.avatar);
-                                }
+                                Glide.with(activity).load(imageByteArray).circleCrop().into(holder.avatar);
                             }
                         });
                     } catch (Exception e) {}
