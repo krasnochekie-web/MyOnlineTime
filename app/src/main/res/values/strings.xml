@@ -8,6 +8,8 @@
     <string name="feed">Feed</string>
     <string name="find">Find</string>
     <string name="time">Time</string>
+	<string name="btn_sign_in_google">Sign in with Google</string>
+    <string name="settings_sign_out">Sign out</string>
 	<string name="title_search">Search</string>
 	<string name="saved_successfully">Saved successfully!</string>
 <string name="background_selected_success">Background selected successfully. Press save!</string>
