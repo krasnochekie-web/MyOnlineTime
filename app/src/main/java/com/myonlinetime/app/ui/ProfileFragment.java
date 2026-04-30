@@ -229,6 +229,23 @@ public class ProfileFragment extends Fragment {
                                 activity.updateGlobalBackground(true);
                             }
 
+                            // === СОХРАНЕНИЕ ДАТЫ РЕГИСТРАЦИИ В КЭШ ===
+                            if (isMe && user.createdAt != null) {
+                                try {
+                                    java.text.SimpleDateFormat serverFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
+                                    serverFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                                    java.text.SimpleDateFormat appFormat = new java.text.SimpleDateFormat("dd MMMM yyyy", new java.util.Locale("ru"));
+                                    
+                                    java.util.Date date = serverFormat.parse(user.createdAt);
+                                    String prettyDate = appFormat.format(date);
+                                    
+                                    activity.prefs.edit().putString("my_created_at", prettyDate).apply();
+                                } catch (Exception e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                            // ===========================================
+
                             if (isMe) {
                                 boolean cacheChanged = false;
                                 if (user.hiddenApps != null) {
