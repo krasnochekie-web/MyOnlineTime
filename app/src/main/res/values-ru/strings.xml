@@ -7,7 +7,9 @@
     <string name="feed">Лента</string>
     <string name="find">Поиск</string>
     <string name="time">Время</string>
-	<string name="notif_max_count">99+</string>
+	<string name="notif_max_count">99+</string>	
+	<string name="btn_sign_in_google">Войти в аккаунт</string>
+    <string name="settings_sign_out">Выйти из аккаунта</string>		  
 	<string name="title_search">Поиск</string>
 	<string name="saved_successfully">Успешно сохранено!</string>
 <string name="background_selected_success">Фон успешно выбран. Нажмите сохранить!</string>
