@@ -55,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
     private View bottomNav;
     public View mainRoot;
     public TextView headerTitle;
+    public String currentBgBase64 = null;
     public ImageView headerBackBtn;
     
     private ImageView iconFeed, iconSearch, iconUsage, iconProfile, iconSettings;
