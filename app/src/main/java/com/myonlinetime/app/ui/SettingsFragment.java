@@ -3,7 +3,6 @@ package com.myonlinetime.app.ui;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -22,8 +21,6 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 
-import java.io.File;
-
 public class SettingsFragment extends Fragment {
 
     private TextView themeAuto, themeLight, themeDark;
@@ -41,18 +38,16 @@ public class SettingsFragment extends Fragment {
             prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         }
 
-        // Инициализация текстов
         regDateTxt = view.findViewById(R.id.settings_reg_date_txt);
         accountIdTxt = view.findViewById(R.id.settings_account_id_txt);
         
-        // Загружаем данные пользователя (и управляем видимостью гостевого режима)
+        // Загружаем данные
         loadUserData(view);
 
         // Кнопки Аккаунта
         view.findViewById(R.id.btn_change_email).setOnClickListener(v -> { /* Пока пусто */ });
         view.findViewById(R.id.btn_delete_account).setOnClickListener(v -> { /* Пока пусто */ });
         
-        // Смена аккаунта
         View btnSwitch = view.findViewById(R.id.btn_switch_account);
         if (btnSwitch != null) {
             btnSwitch.setOnClickListener(v -> {
@@ -66,43 +61,44 @@ public class SettingsFragment extends Fragment {
             });
         }
         
-        // Умный вход / выход из аккаунта
-        view.findViewById(R.id.btn_sign_out).setOnClickListener(v -> {
-            if (activity != null && activity.mGoogleSignInClient != null) {
-                GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
-                
-                if (account != null) {
-                    // Авторизован -> Выходим и сбрасываем визуал
+        // Кнопка ВЫХОДА (видна только авторизованным)
+        View btnSignOut = view.findViewById(R.id.btn_sign_out);
+        if (btnSignOut != null) {
+            btnSignOut.setOnClickListener(v -> {
+                if (activity != null && activity.mGoogleSignInClient != null) {
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
                         activity.vpsToken = null; 
-                        loadUserData(view); // Мгновенно перерисовываем экран (сдвигаем вверх)
-                        Toast.makeText(getContext(), getString(R.string.toast_signed_out), Toast.LENGTH_SHORT).show();
+                        loadUserData(view); // Мгновенно перерисовываем на гостя
+                        Toast.makeText(getContext(), getString(R.string.settings_sign_out), Toast.LENGTH_SHORT).show();
                     });
-                } else {
-                    // НЕ авторизован -> Открываем окно входа
+                }
+            });
+        }
+
+        // Кнопка ВХОДА (видна только гостю)
+        View btnSignInGuest = view.findViewById(R.id.btn_sign_in_guest);
+        if (btnSignInGuest != null) {
+            btnSignInGuest.setOnClickListener(v -> {
+                if (activity != null && activity.mGoogleSignInClient != null) {
                     Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
                     activity.startActivityForResult(signInIntent, 9001); 
                 }
-            }
-        });
+            });
+        }
 
         // Оформление
         themeAuto = view.findViewById(R.id.theme_auto);
         themeLight = view.findViewById(R.id.theme_light);
         themeDark = view.findViewById(R.id.theme_dark);
-
         setupThemeButtons();
 
-        // Общие настройки
+        // Общие
         view.findViewById(R.id.btn_notifications).setOnClickListener(v -> {
             if (activity != null && activity.navigator != null) {
                 activity.navigator.openSubScreen(new NotificationsFragment());
             }
         });
-        
         view.findViewById(R.id.btn_saved).setOnClickListener(v -> { /* Пока пусто */ });
-        
-        // --- ОТКРЫВАЕМ НОВЫЙ ЭКРАН ОЧИСТКИ ---
         view.findViewById(R.id.btn_clear_cache).setOnClickListener(v -> {
             if (activity != null && activity.navigator != null) {
                 activity.navigator.openSubScreen(new ClearCacheFragment());
@@ -126,13 +122,17 @@ public class SettingsFragment extends Fragment {
 
         ImageView avatarView = view.findViewById(R.id.settings_avatar);
         TextView nicknameView = view.findViewById(R.id.settings_nickname);
-        View accountBlock = view.findViewById(R.id.settings_account_block); // Находим новый блок!
-        View signOutBtn = view.findViewById(R.id.btn_sign_out);
+        
+        View accountBlock = view.findViewById(R.id.settings_account_block);
+        View guestBlock = view.findViewById(R.id.settings_guest_login_block);
 
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         
         if (account != null) {
-            // === АВТОРИЗОВАН ===
+            // === ПОЛЬЗОВАТЕЛЬ АВТОРИЗОВАН ===
+            if (accountBlock != null) accountBlock.setVisibility(View.VISIBLE);
+            if (guestBlock != null) guestBlock.setVisibility(View.GONE);
+
             if (nicknameView != null) {
                 nicknameView.setVisibility(View.VISIBLE);
                 String savedName = activity.prefs.getString("my_nickname", account.getDisplayName());
@@ -165,46 +165,26 @@ public class SettingsFragment extends Fragment {
                             Glide.with(this).load(bytes).circleCrop().into(avatarView);
                         } catch (Exception e){}
                     }
+                } else if (account.getPhotoUrl() != null) {
+                    Glide.with(this).load(account.getPhotoUrl()).circleCrop().into(avatarView);
                 } else {
-                    if (account.getPhotoUrl() != null) {
-                        Glide.with(this).load(account.getPhotoUrl()).circleCrop().into(avatarView);
-                    } else {
-                        avatarView.setImageResource(android.R.drawable.sym_def_app_icon);
-                    }
+                    avatarView.setImageResource(android.R.drawable.sym_def_app_icon);
                 }
             }
-
-            // Показываем весь блок аккаунта (линию, заголовок и кнопки внутри)
-            if (accountBlock != null) accountBlock.setVisibility(View.VISIBLE);
-            
-            setDynamicButtonText(signOutBtn, R.string.btn_sign_out);
-
         } else {
-            // === ГОСТЬ ===
-            if (nicknameView != null) nicknameView.setVisibility(View.GONE);
+            // === ГОСТЕВОЙ РЕЖИМ ===
+            if (accountBlock != null) accountBlock.setVisibility(View.GONE);
+            if (guestBlock != null) guestBlock.setVisibility(View.VISIBLE);
+
+            if (nicknameView != null) {
+                nicknameView.setVisibility(View.VISIBLE);
+                nicknameView.setText(getString(R.string.guest_user_name));
+            }
             if (accountIdTxt != null) accountIdTxt.setVisibility(View.GONE);
             if (regDateTxt != null) regDateTxt.setVisibility(View.GONE);
-            if (avatarView != null) avatarView.setVisibility(View.GONE);
-            
-            // Скрываем ВЕСЬ блок аккаунта разом!
-            if (accountBlock != null) accountBlock.setVisibility(View.GONE);
-            
-            setDynamicButtonText(signOutBtn, R.string.btn_sign_in_google);
-        }
-    }
-
-    // Универсальный метод для смены текста на кнопке входа/выхода (независимо от того, как она сделана в XML)
-    private void setDynamicButtonText(View buttonView, int stringResId) {
-        if (buttonView == null) return;
-        if (buttonView instanceof android.widget.Button) {
-            ((android.widget.Button) buttonView).setText(stringResId);
-        } else if (buttonView instanceof ViewGroup) {
-            ViewGroup vg = (ViewGroup) buttonView;
-            for (int i = 0; i < vg.getChildCount(); i++) {
-                if (vg.getChildAt(i) instanceof TextView) {
-                    ((TextView) vg.getChildAt(i)).setText(stringResId);
-                    break;
-                }
+            if (avatarView != null) {
+                avatarView.setVisibility(View.VISIBLE);
+                avatarView.setImageResource(R.drawable.ic_profile_placeholder);
             }
         }
     }
