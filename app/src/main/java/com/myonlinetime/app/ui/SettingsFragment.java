@@ -45,11 +45,7 @@ public class SettingsFragment extends Fragment {
         regDateTxt = view.findViewById(R.id.settings_reg_date_txt);
         accountIdTxt = view.findViewById(R.id.settings_account_id_txt);
         
-        if (regDateTxt != null) {
-            regDateTxt.setText(getString(R.string.settings_reg_date, ""));
-        }
-        
-        // Загружаем данные пользователя
+        // Загружаем данные пользователя (и управляем видимостью гостевого режима)
         loadUserData(view);
 
         // Кнопки Аккаунта
@@ -57,17 +53,20 @@ public class SettingsFragment extends Fragment {
         view.findViewById(R.id.btn_delete_account).setOnClickListener(v -> { /* Пока пусто */ });
         
         // Смена аккаунта
-        view.findViewById(R.id.btn_switch_account).setOnClickListener(v -> {
-            if (activity != null && activity.mGoogleSignInClient != null) {
-                activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
-                    activity.vpsToken = null;
-                    Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
-                    activity.startActivityForResult(signInIntent, 9001); 
-                });
-            }
-        });
+        View btnSwitch = view.findViewById(R.id.btn_switch_account);
+        if (btnSwitch != null) {
+            btnSwitch.setOnClickListener(v -> {
+                if (activity != null && activity.mGoogleSignInClient != null) {
+                    activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
+                        activity.vpsToken = null;
+                        Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
+                        activity.startActivityForResult(signInIntent, 9001); 
+                    });
+                }
+            });
+        }
         
-        // Умный выход из аккаунта
+        // Умный вход / выход из аккаунта
         view.findViewById(R.id.btn_sign_out).setOnClickListener(v -> {
             if (activity != null && activity.mGoogleSignInClient != null) {
                 GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
@@ -76,7 +75,7 @@ public class SettingsFragment extends Fragment {
                     // Авторизован -> Выходим и сбрасываем визуал
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
                         activity.vpsToken = null; 
-                        loadUserData(view); 
+                        loadUserData(view); // Мгновенно перерисовываем экран (сдвигаем вверх)
                         Toast.makeText(getContext(), getString(R.string.toast_signed_out), Toast.LENGTH_SHORT).show();
                     });
                 } else {
@@ -127,39 +126,94 @@ public class SettingsFragment extends Fragment {
 
         ImageView avatarView = view.findViewById(R.id.settings_avatar);
         TextView nicknameView = view.findViewById(R.id.settings_nickname);
+        View btnChangeEmail = view.findViewById(R.id.btn_change_email);
+        View btnDeleteAccount = view.findViewById(R.id.btn_delete_account);
+        View btnSwitchAccount = view.findViewById(R.id.btn_switch_account);
+        View signOutBtn = view.findViewById(R.id.btn_sign_out);
 
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         
         if (account != null) {
+            // === АВТОРИЗОВАН: ПОКАЗЫВАЕМ БЛОК АККАУНТА ===
             if (nicknameView != null) {
-                nicknameView.setText(account.getDisplayName() != null ? account.getDisplayName() : getString(R.string.default_user_name));
+                nicknameView.setVisibility(View.VISIBLE);
+                // ЧИТАЕМ ИЗ ЕДИНОГО ИСТОЧНИКА ИСТИНЫ (КЭША)
+                String savedName = activity.prefs.getString("my_nickname", account.getDisplayName());
+                nicknameView.setText(savedName != null ? savedName : getString(R.string.default_user_name));
             }
             if (accountIdTxt != null) {
-                accountIdTxt.setText(getString(R.string.account_id_label, account.getId()));
                 accountIdTxt.setVisibility(View.VISIBLE);
+                accountIdTxt.setText(getString(R.string.account_id_label, account.getId()));
             }
-            if (avatarView != null) {
-                Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + account.getId());
-                if (cachedAvatar != null) {
-                    Glide.with(this).load(cachedAvatar).circleCrop().into(avatarView);
+            if (regDateTxt != null) {
+                regDateTxt.setVisibility(View.VISIBLE);
+                // Достаем дату из кэша (если есть)
+                String createdAt = activity.prefs.getString("my_created_at", "");
+                if (!createdAt.isEmpty()) {
+                    regDateTxt.setText(getString(R.string.settings_reg_date, createdAt));
                 } else {
-                    File file = new File(activity.getFilesDir(), "avatar_" + account.getId() + ".png");
-                    if (file.exists()) {
-                        Glide.with(this).load(file).circleCrop().into(avatarView);
-                    } else if (account.getPhotoUrl() != null) {
+                    regDateTxt.setText(getString(R.string.settings_reg_date, "..."));
+                }
+            }
+            
+            if (avatarView != null) {
+                avatarView.setVisibility(View.VISIBLE);
+                String savedAvatar = activity.prefs.getString("my_photo_base64", null);
+                
+                if (savedAvatar != null) {
+                    if (savedAvatar.startsWith("http")) {
+                        Glide.with(this).load(savedAvatar).circleCrop().into(avatarView);
+                    } else {
+                        try {
+                            byte[] bytes = android.util.Base64.decode(savedAvatar, android.util.Base64.DEFAULT);
+                            Glide.with(this).load(bytes).circleCrop().into(avatarView);
+                        } catch (Exception e){}
+                    }
+                } else {
+                    // Запасной вариант - фото из Google
+                    if (account.getPhotoUrl() != null) {
                         Glide.with(this).load(account.getPhotoUrl()).circleCrop().into(avatarView);
+                    } else {
+                        avatarView.setImageResource(android.R.drawable.sym_def_app_icon);
                     }
                 }
             }
+
+            // Показываем кнопки управления аккаунтом
+            if (btnChangeEmail != null) btnChangeEmail.setVisibility(View.VISIBLE);
+            if (btnDeleteAccount != null) btnDeleteAccount.setVisibility(View.VISIBLE);
+            if (btnSwitchAccount != null) btnSwitchAccount.setVisibility(View.VISIBLE);
+            
+            setDynamicButtonText(signOutBtn, R.string.btn_sign_out); // Текст "Выйти"
+
         } else {
-            // Гость: Сбрасываем данные
-            if (nicknameView != null) nicknameView.setText(getString(R.string.guest_user_name));
-            if (accountIdTxt != null) {
-                accountIdTxt.setText(""); 
-                accountIdTxt.setVisibility(View.GONE); 
-            }
-            if (avatarView != null) {
-                avatarView.setImageResource(R.drawable.ic_profile_placeholder); 
+            // === ГОСТЬ: ПОЛНОСТЬЮ СКРЫВАЕМ БЛОК АККАУНТА ===
+            if (nicknameView != null) nicknameView.setVisibility(View.GONE);
+            if (accountIdTxt != null) accountIdTxt.setVisibility(View.GONE);
+            if (regDateTxt != null) regDateTxt.setVisibility(View.GONE);
+            if (avatarView != null) avatarView.setVisibility(View.GONE);
+            
+            // Скрываем лишние кнопки (интерфейс сдвинется вверх)
+            if (btnChangeEmail != null) btnChangeEmail.setVisibility(View.GONE);
+            if (btnDeleteAccount != null) btnDeleteAccount.setVisibility(View.GONE);
+            if (btnSwitchAccount != null) btnSwitchAccount.setVisibility(View.GONE);
+            
+            setDynamicButtonText(signOutBtn, R.string.btn_sign_in_google); // Текст "Войти"
+        }
+    }
+
+    // Универсальный метод для смены текста на кнопке входа/выхода (независимо от того, как она сделана в XML)
+    private void setDynamicButtonText(View buttonView, int stringResId) {
+        if (buttonView == null) return;
+        if (buttonView instanceof android.widget.Button) {
+            ((android.widget.Button) buttonView).setText(stringResId);
+        } else if (buttonView instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) buttonView;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                if (vg.getChildAt(i) instanceof TextView) {
+                    ((TextView) vg.getChildAt(i)).setText(stringResId);
+                    break;
+                }
             }
         }
     }
@@ -193,13 +247,9 @@ public class SettingsFragment extends Fragment {
         }
     }
 
-    // ========================================================
-    // МЕТОД onResume ДЛЯ ВЫКЛЮЧЕНИЯ ФОНА
-    // ========================================================
     @Override
     public void onResume() {
         super.onResume();
-        // ДОБАВЛЕНА ПРОВЕРКА !isHidden()
         if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(false); 
         }
