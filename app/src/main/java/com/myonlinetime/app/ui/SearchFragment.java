@@ -2,6 +2,8 @@ package com.myonlinetime.app.ui;
 
 import androidx.fragment.app.Fragment;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
@@ -20,6 +22,7 @@ import com.myonlinetime.app.VpsApi;
 import com.myonlinetime.app.models.User;
 import com.myonlinetime.app.adapters.UserListAdapter;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class SearchFragment extends Fragment {
@@ -30,6 +33,10 @@ public class SearchFragment extends Fragment {
     
     // Переменная для отложенной задачи выключения фона
     private Runnable hideBgRunnable;
+
+    // Таймер для задержки запроса (защита от спама на сервер)
+    private Handler searchHandler = new Handler(Looper.getMainLooper());
+    private Runnable searchRunnable;
 
     public SearchFragment() {
         // Обязательный пустой конструктор
@@ -52,6 +59,9 @@ public class SearchFragment extends Fragment {
         resultsList.setLayoutManager(new LinearLayoutManager(activity));
         adapter = new UserListAdapter(activity);
         resultsList.setAdapter(adapter);
+        
+        // Убираем визуальный разрыв при скролле (эффект оттягивания)
+        resultsList.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
         // Восстановление поиска
         if (lastSearchQuery.length() > 0) {
@@ -65,7 +75,15 @@ public class SearchFragment extends Fragment {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
                 lastSearchQuery = s.toString();
-                performSearch(s.toString(), activity);
+                
+                // Отменяем предыдущий запланированный запрос, если пользователь продолжает печатать
+                if (searchRunnable != null) {
+                    searchHandler.removeCallbacks(searchRunnable);
+                }
+                
+                // Планируем новый запрос через 400 мс (Debounce)
+                searchRunnable = () -> performSearch(s.toString(), activity);
+                searchHandler.postDelayed(searchRunnable, 400);
             }
             @Override public void afterTextChanged(Editable s) {}
         });
@@ -83,10 +101,8 @@ public class SearchFragment extends Fragment {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.resetHeader();
             
-            // Плавное отключение: ждем 300 мс, пока пройдет анимация перехода
             if (hideBgRunnable == null) {
                 hideBgRunnable = () -> {
-                    // Проверяем, что фрагмент всё ещё открыт
                     if (isAdded() && !isHidden()) {
                         activity.updateGlobalBackground(false);
                     }
@@ -98,8 +114,6 @@ public class SearchFragment extends Fragment {
                 activity.updateGlobalBackground(false);
             }
         } else {
-            // Если мы быстро ушли с экрана поиска до окончания анимации, 
-            // отменяем команду на отключение фона, чтобы не сломать профиль
             if (hideBgRunnable != null && getView() != null) {
                 getView().removeCallbacks(hideBgRunnable);
             }
@@ -107,27 +121,37 @@ public class SearchFragment extends Fragment {
     }
 
     private void performSearch(final String query, final MainActivity activity) {
-        if(query.length() > 1) {
-            GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
-            if(acct != null) {
-                // ИСПРАВЛЕН ВЫЗОВ: Добавлен activity для работы с ресурсами внутри VpsApi
-                VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
-                    @Override
-                    public void onSuccess(String token) {
-                        activity.vpsToken = token;
-                        VpsApi.searchUsers(token, query, new VpsApi.SearchCallback() {
-                            @Override public void onFound(List<User> users) {
-                                if (!isAdded()) return; 
-                                adapter.setUsers(users);
-                            }
-                        });
-                    }
-                    @Override public void onError(String e) {}
-                });
+        if(query.trim().length() > 0) {
+            // Если токен сервера уже есть, не делаем лишний запрос авторизации!
+            if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
+                executeSearchApi(activity.vpsToken, query);
+            } else {
+                // Токена нет, запрашиваем новый
+                GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
+                if(acct != null) {
+                    VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
+                        @Override
+                        public void onSuccess(String token) {
+                            activity.vpsToken = token;
+                            executeSearchApi(token, query);
+                        }
+                        @Override public void onError(String e) {}
+                    });
+                }
             }
         } else {
-            adapter.setUsers(null);
+            // ИСПРАВЛЕНИЕ ВЫЛЕТА: очищаем список правильно, без null
+            adapter.setUsers(new ArrayList<>());
         }
+    }
+
+    private void executeSearchApi(String token, String query) {
+        VpsApi.searchUsers(token, query, new VpsApi.SearchCallback() {
+            @Override public void onFound(List<User> users) {
+                if (!isAdded()) return; 
+                adapter.setUsers(users);
+            }
+        });
     }
 
     // ========================================================
