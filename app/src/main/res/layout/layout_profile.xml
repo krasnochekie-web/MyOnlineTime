@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@android:color/transparent"> 
@@ -35,13 +36,31 @@
                     android:tint="@color/textWhiteStatic"
                     android:visibility="gone" />
 
-                <ImageView
-                    android:id="@+id/profile_avatar"
+                <!-- НОВЫЙ КОНТЕЙНЕР ДЛЯ АВАТАРКИ (ФОТО + ВИДЕО) -->
+                <FrameLayout
                     android:layout_width="90dp"
                     android:layout_height="90dp"
-                    android:layout_centerInParent="true"
-                    android:background="@drawable/bg_edit_circle"
-                    android:scaleType="centerCrop" />
+                    android:layout_centerInParent="true">
+
+                    <!-- Старая добрая картинка/GIF -->
+                    <ImageView
+                        android:id="@+id/profile_avatar"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_edit_circle"
+                        android:scaleType="centerCrop" />
+
+                    <!-- Новый видеоплеер для тяжелых MP4 аватарок -->
+                    <androidx.media3.ui.PlayerView
+                        android:id="@+id/profile_video_avatar"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:visibility="gone"
+                        app:use_controller="false"
+                        app:surface_type="texture_view"
+                        android:background="@drawable/bg_edit_circle"
+                        android:clipToOutline="true" />
+                </FrameLayout>
 
                 <ImageView
                     android:id="@+id/btn_edit_profile"
