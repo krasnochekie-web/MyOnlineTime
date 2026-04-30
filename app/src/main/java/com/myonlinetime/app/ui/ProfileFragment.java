@@ -105,9 +105,7 @@ public class ProfileFragment extends Fragment {
         // НАСТРОЙКА НАВИГАЦИИ И ШАПКИ
         activity.mainHeader.setVisibility(View.VISIBLE);
         if (!isMe) {
-            // Если чужой профиль - показываем стрелку и меняем заголовок
             activity.headerManager.showBackButton(activity.getString(R.string.title_search), v -> {
-                // Закрываем этот фрагмент и возвращаемся в поиск
                 if (getFragmentManager() != null) getFragmentManager().popBackStack();
             });
         } else {
@@ -120,7 +118,7 @@ public class ProfileFragment extends Fragment {
         final TextView aboutView = view.findViewById(R.id.profile_about);
         
         avatarView = view.findViewById(R.id.profile_avatar);
-        playerView = view.findViewById(R.id.profile_video_avatar); // Новый элемент для видео
+        playerView = view.findViewById(R.id.profile_video_avatar); 
         
         final View btnEdit = view.findViewById(R.id.btn_edit_profile);
         final Button btnFollow = view.findViewById(R.id.btn_follow);
@@ -165,7 +163,6 @@ public class ProfileFragment extends Fragment {
 
         loadLocalCacheAsync(() -> {
             if (isMe && isAdded()) {
-                // ИСПРАВЛЕНИЕ: Очищаем контейнер перед загрузкой, чтобы избежать дублей
                 if(appsContainerLocal != null) appsContainerLocal.removeAllViews();
                 StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
             }
@@ -177,7 +174,6 @@ public class ProfileFragment extends Fragment {
             aboutView.setText(myAbout);
             applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
-            // Обработка своей аватарки
             handleMediaLoading(activity, activity.prefs.getString("my_photo_base64", null), true, myUid);
 
             btnEdit.setVisibility(View.VISIBLE);
@@ -217,19 +213,16 @@ public class ProfileFragment extends Fragment {
                             }
                             applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
-                            // Обработка медиа (Фото/Видео)
                             if (user.photo != null && user.photo.length() > 10) {
                                 if (isMe) activity.prefs.edit().putString("my_photo_base64", user.photo).apply();
                                 handleMediaLoading(activity, user.photo, false, finalTargetUid);
                             }
 
-                            // ОБНОВЛЕНИЕ ФОНА (Глобальное состояние)
                             if (user.background != null && user.background.length() > 10) {
                                 activity.currentBgBase64 = user.background;
                                 activity.updateGlobalBackground(true);
                             }
 
-                            // === СОХРАНЕНИЕ ДАТЫ РЕГИСТРАЦИИ В КЭШ ===
                             if (isMe && user.createdAt != null) {
                                 try {
                                     java.text.SimpleDateFormat serverFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
@@ -244,7 +237,6 @@ public class ProfileFragment extends Fragment {
                                     e.printStackTrace();
                                 }
                             }
-                            // ===========================================
 
                             if (isMe) {
                                 boolean cacheChanged = false;
@@ -275,7 +267,6 @@ public class ProfileFragment extends Fragment {
                                     localDescriptions.clear();
                                     localDescriptions.putAll(user.appDescriptions);
                                 }
-                                // ИСПРАВЛЕНИЕ: Очистка внутри метода renderOtherUserStats
                                 renderOtherUserStats(user.topApps, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
                             }
 
@@ -287,7 +278,6 @@ public class ProfileFragment extends Fragment {
                 VpsApi.getCounts(activity.vpsToken, finalTargetUid, new VpsApi.Callback() {
                     @Override public void onSuccess(String result) {
                         if (!isAdded()) return; 
-                        // Парсим JSON ответ от обновленного сервера
                         try {
                             org.json.JSONObject json = new org.json.JSONObject(result);
                             followersCount.setText(String.valueOf(json.optInt("followers", 0)));
@@ -328,25 +318,38 @@ public class ProfileFragment extends Fragment {
             }
         };
 
+        // --- ИСПРАВЛЕНИЕ АВТОРИЗАЦИИ (ЗАЩИТА ОТ ПРОТУХШЕГО ТОКЕНА) ---
         if (activity.vpsToken != null) {
             fetchProfileData.run();
         } else {
-            VpsApi.authenticateWithGoogle(activity, account.getIdToken(), new VpsApi.LoginCallback() {
-                @Override
-                public void onSuccess(final String token) {
-                    activity.vpsToken = token;
-                    fetchProfileData.run();
-                }
-                @Override public void onError(String error) {}
-            });
+            if (activity.mGoogleSignInClient != null) {
+                activity.mGoogleSignInClient.silentSignIn().addOnSuccessListener(freshAccount -> {
+                    VpsApi.authenticateWithGoogle(activity, freshAccount.getIdToken(), new VpsApi.LoginCallback() {
+                        @Override
+                        public void onSuccess(final String token) {
+                            activity.vpsToken = token;
+                            fetchProfileData.run();
+                        }
+                        @Override public void onError(String error) {}
+                    });
+                }).addOnFailureListener(e -> {
+                    // Если токен совсем умер, авторизуемся по старинке
+                    VpsApi.authenticateWithGoogle(activity, account.getIdToken(), new VpsApi.LoginCallback() {
+                        @Override
+                        public void onSuccess(final String token) {
+                            activity.vpsToken = token;
+                            fetchProfileData.run();
+                        }
+                        @Override public void onError(String error) {}
+                    });
+                });
+            }
         }
+        // -------------------------------------------------------------
 
         return view;
     }
 
-    // =========================================================================
-    // ЛОГИКА ОТОБРАЖЕНИЯ МЕДИА (EXOPLAYER + GLIDE)
-    // =========================================================================
     private void handleMediaLoading(MainActivity activity, String base64Data, boolean useLocalFile, String uid) {
         if (base64Data == null || base64Data.isEmpty()) {
             if (useLocalFile) {
@@ -365,7 +368,6 @@ public class ProfileFragment extends Fragment {
             try {
                 byte[] mediaBytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
                 
-                // Проверяем "магические байты" для определения формата (MP4)
                 boolean isVideo = mediaBytes.length > 8 &&
                                   mediaBytes[4] == 0x66 && mediaBytes[5] == 0x74 &&
                                   mediaBytes[6] == 0x79 && mediaBytes[7] == 0x70; // 'ftyp'
@@ -374,19 +376,17 @@ public class ProfileFragment extends Fragment {
                     if (!isAdded()) return;
 
                     if (isVideo && playerView != null) {
-                        // Это ВИДЕО! Скрываем картинку, показываем плеер
                         avatarView.setVisibility(View.GONE);
                         playerView.setVisibility(View.VISIBLE);
 
                         if (exoPlayer == null) {
                             exoPlayer = new ExoPlayer.Builder(activity).build();
                             playerView.setPlayer(exoPlayer);
-                            playerView.setUseController(false); // Убираем кнопки паузы
-                            exoPlayer.setVolume(0f); // Без звука
-                            exoPlayer.setRepeatMode(Player.REPEAT_MODE_ONE); // Бесконечный цикл
+                            playerView.setUseController(false); 
+                            exoPlayer.setVolume(0f); 
+                            exoPlayer.setRepeatMode(Player.REPEAT_MODE_ONE); 
                         }
 
-                        // Сохраняем во временный файл (ExoPlayer лучше читает с диска)
                         try {
                             File tempVid = new File(activity.getCacheDir(), "temp_avatar.mp4");
                             FileOutputStream fos = new FileOutputStream(tempVid);
@@ -400,11 +400,8 @@ public class ProfileFragment extends Fragment {
                         } catch (Exception e) { e.printStackTrace(); }
 
                     } else {
-                        // Это КАРТИНКА или GIF! Скрываем плеер, показываем картинку
                         if (playerView != null) playerView.setVisibility(View.GONE);
                         avatarView.setVisibility(View.VISIBLE);
-                        
-                        // Glide сам поймет, GIF это или JPG
                         Glide.with(activity).load(mediaBytes).circleCrop().into(avatarView);
                     }
                 });
@@ -415,16 +412,11 @@ public class ProfileFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        // Обязательно освобождаем память плеера при уходе с экрана!
         if (exoPlayer != null) {
             exoPlayer.release();
             exoPlayer = null;
         }
     }
-
-    // =========================================================================
-    // ОСТАЛЬНОЙ КОД (ПАРСЕР, ЛОГИКА РАСКРЫТИЯ, ЛОКАЛЬНЫЙ КЭШ) ОСТАЛСЯ БЕЗ ИЗМЕНЕНИЙ
-    // =========================================================================
 
     private String formatDeletedAppName(String pkg) {
         try {
@@ -479,17 +471,16 @@ public class ProfileFragment extends Fragment {
         if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(isMe);
         }
-        // Воспроизводим видео, если вернулись
         if (exoPlayer != null) exoPlayer.play();
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        // Ставим на паузу видео, когда уходим
         if (exoPlayer != null) exoPlayer.pause();
     }
 
+    // --- ИСПРАВЛЕНИЕ: МГНОВЕННАЯ РЕАКТИВНОСТЬ ДАННЫХ ИЗ КЭША ---
     @Override
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
@@ -497,13 +488,24 @@ public class ProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!hidden) {
                 activity.mainHeader.setVisibility(View.VISIBLE);
-                // Восстанавливаем стрелочку назад, если это чужой профиль
                 if (!isMe) {
                     activity.headerManager.showBackButton(activity.getString(R.string.title_search), v -> {
                         if (getFragmentManager() != null) getFragmentManager().popBackStack();
                     });
                 } else {
                     activity.headerManager.resetHeader();
+                    
+                    // Обновляем UI моментально из кэша
+                    TextView nameView = getView() != null ? getView().findViewById(R.id.profile_name) : null;
+                    TextView aboutView = getView() != null ? getView().findViewById(R.id.profile_about) : null;
+                    GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
+                    
+                    if (nameView != null && aboutView != null && acct != null) {
+                        nameView.setText(activity.prefs.getString("my_nickname", acct.getDisplayName()));
+                        aboutView.setText(activity.prefs.getString("my_about", ""));
+                        String b64 = activity.prefs.getString("my_photo_base64", null);
+                        handleMediaLoading(activity, b64, true, acct.getId());
+                    }
                 }
                 activity.updateGlobalBackground(isMe);
                 if (exoPlayer != null) exoPlayer.play();
@@ -515,6 +517,7 @@ public class ProfileFragment extends Fragment {
             }
         }
     }
+    // -----------------------------------------------------------
 
     private void loadLocalCacheAsync(Runnable onLoaded) {
         Utils.backgroundExecutor.execute(() -> {
@@ -539,7 +542,6 @@ public class ProfileFragment extends Fragment {
     }
 
     private void renderOtherUserStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
-        // ИСПРАВЛЕНИЕ ДУБЛИРОВАНИЯ
         container.removeAllViews();
         if (topApps == null || topApps.isEmpty() || activity == null) return;
 
