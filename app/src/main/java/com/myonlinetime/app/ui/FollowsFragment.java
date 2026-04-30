@@ -112,25 +112,45 @@ public class FollowsFragment extends Fragment {
 
         // Загружаем счетчики
         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
-        if(acct != null) {
-            VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
-                @Override
-                public void onSuccess(String token) {
-                    VpsApi.getCounts(token, targetUid, new VpsApi.Callback() {
-                        @Override public void onSuccess(String result) {
-                            if (!isAdded()) return;
-                            if (result != null) {
-                                String[] parts = result.split(":");
-                                if (parts.length >= 2) {
-                                    countFollowers.setText(parts[0]);
-                                    countFollowing.setText(parts[1]);
-                                }
+        if(acct != null && activity.mGoogleSignInClient != null) {
+            // ИСПОЛЬЗУЕМ SILENT SIGN IN И JSON ПАРСЕР
+            activity.mGoogleSignInClient.silentSignIn().addOnSuccessListener(freshAccount -> {
+                VpsApi.authenticateWithGoogle(activity, freshAccount.getIdToken(), new VpsApi.LoginCallback() {
+                    @Override
+                    public void onSuccess(String token) {
+                        VpsApi.getCounts(token, targetUid, new VpsApi.Callback() {
+                            @Override public void onSuccess(String result) {
+                                if (!isAdded()) return;
+                                try {
+                                    org.json.JSONObject json = new org.json.JSONObject(result);
+                                    countFollowers.setText(String.valueOf(json.optInt("followers", 0)));
+                                    countFollowing.setText(String.valueOf(json.optInt("following", 0)));
+                                } catch (Exception e) {}
                             }
-                        }
-                        @Override public void onError(String e) {}
-                    });
-                }
-                @Override public void onError(String e) {}
+                            @Override public void onError(String e) {}
+                        });
+                    }
+                    @Override public void onError(String e) {}
+                });
+            }).addOnFailureListener(e -> {
+                // Фолбэк на случай если токен не обновился тихо
+                VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
+                    @Override
+                    public void onSuccess(String token) {
+                        VpsApi.getCounts(token, targetUid, new VpsApi.Callback() {
+                            @Override public void onSuccess(String result) {
+                                if (!isAdded()) return;
+                                try {
+                                    org.json.JSONObject json = new org.json.JSONObject(result);
+                                    countFollowers.setText(String.valueOf(json.optInt("followers", 0)));
+                                    countFollowing.setText(String.valueOf(json.optInt("following", 0)));
+                                } catch (Exception ex) {}
+                            }
+                            @Override public void onError(String ex) {}
+                        });
+                    }
+                    @Override public void onError(String ex) {}
+                });
             });
         }
 
@@ -156,7 +176,6 @@ public class FollowsFragment extends Fragment {
         if (activity == null) return;
 
         if (!hidden) {
-            // ИСПРАВЛЕНИЕ: Принудительно восстанавливаем шапку, опираясь на текущую страницу ViewPager
             boolean isFollowers = (viewPager == null || viewPager.getCurrentItem() == 0);
             setupHeader(activity, isFollowers);
             
