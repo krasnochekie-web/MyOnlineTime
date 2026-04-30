@@ -29,11 +29,15 @@ public class VpsApi {
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
-    private static class SaveUserPayload { String nickname, about, photo; long totalTime; Map<String, Long> topApps; }
+    // ДОБАВЛЕНО ПОЛЕ background
+    private static class SaveUserPayload { 
+        String nickname, about, photo, background; 
+        long totalTime; 
+        Map<String, Long> topApps; 
+    }
     private static class FollowPayload { String targetUid; boolean isFollowing; }
     private static class CheckFollowPayload { String targetUid; }
     
-    // НОВЫЕ ПЭЙЛОАДЫ ДЛЯ СКРЫТИЯ И ОПИСАНИЙ
     private static class AppVisibilityPayload { String pkgName; boolean isHidden; }
     private static class AppDescriptionPayload { String pkgName; String description; }
 
@@ -43,7 +47,6 @@ public class VpsApi {
     public interface BooleanCallback { void onResult(boolean result); }
     public interface LoginCallback { void onSuccess(String ourServerToken); void onError(String error); }
 
-    // ДОБАВЛЕН CONTEXT ДЛЯ ПОЛУЧЕНИЯ СТРОК ИЗ РЕСУРСОВ
     public static void authenticateWithGoogle(Context context, String googleIdToken, final LoginCallback callback) {
         String jsonBody = "{\"idToken\":\"" + googleIdToken + "\"}";
         RequestBody body = RequestBody.create(jsonBody, JSON);
@@ -89,7 +92,23 @@ public class VpsApi {
         enqueueCall(request, callback);
     }
 
-    // ДОБАВЛЕН CONTEXT ДЛЯ ПОЛУЧЕНИЯ СТРОК ИЗ РЕСУРСОВ
+    // НОВЫЙ МЕТОД: Специально для экрана редактирования профиля (с фоном)
+    public static void saveUserProfile(String ourServerToken, String nickname, String about, String photo, String background, final Callback callback) {
+        SaveUserPayload payload = new SaveUserPayload();
+        payload.nickname = nickname;
+        payload.about = about;
+        payload.photo = photo;
+        payload.background = background;
+        // Оставляем совместимость со старым форматом
+        payload.totalTime = 0;
+        payload.topApps = null;
+        
+        Request request = createAuthedRequest("save_user", ourServerToken)
+                .post(RequestBody.create(gson.toJson(payload), JSON))
+                .build();
+        enqueueCall(request, callback);
+    }
+
     public static void getUser(Context context, String ourServerToken, String uid, final UserCallback callback) {
         HttpUrl url = HttpUrl.parse(BASE_URL + "get_user").newBuilder().addQueryParameter("uid", uid).build();
         Request request = createAuthedRequest(url, ourServerToken).build();
@@ -201,7 +220,6 @@ public class VpsApi {
         });
     }
 
-    // --- НОВЫЙ МЕТОД: СКРЫТЬ/ПОКАЗАТЬ ПРИЛОЖЕНИЕ ---
     public static void setAppVisibility(String ourServerToken, String pkgName, boolean isHidden, final Callback callback) {
         AppVisibilityPayload payload = new AppVisibilityPayload();
         payload.pkgName = pkgName;
@@ -212,7 +230,6 @@ public class VpsApi {
         enqueueCall(request, callback);
     }
 
-    // --- НОВЫЙ МЕТОД: СОХРАНИТЬ ОПИСАНИЕ ПРИЛОЖЕНИЯ ---
     public static void setAppDescription(String ourServerToken, String pkgName, String description, final Callback callback) {
         AppDescriptionPayload payload = new AppDescriptionPayload();
         payload.pkgName = pkgName;
