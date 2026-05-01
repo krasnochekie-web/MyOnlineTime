@@ -55,7 +55,7 @@ public class MainActivity extends AppCompatActivity {
     private View bottomNav;
     public View mainRoot;
     public TextView headerTitle;
-    public String currentBgBase64 = null;
+    public String currentBgBase64 = null; // Теперь здесь хранится URL
     public ImageView headerBackBtn;
     
     private ImageView iconFeed, iconSearch, iconUsage, iconProfile, iconSettings;
@@ -75,7 +75,6 @@ public class MainActivity extends AppCompatActivity {
 
     private View permissionOverlay;
 
-    // Плеер остался ТОЛЬКО для фона
     private PlayerView playerView;
     private ExoPlayer exoPlayer;
     private ImageView globalImageView;
@@ -451,7 +450,11 @@ public class MainActivity extends AppCompatActivity {
         outState.putInt("SAVED_TAB", currentTab); 
     }
 
-    // --- ИСПРАВЛЕНИЕ: ЕДИНЫЙ МЕТОД ЗАГРУЗКИ АВАТАРКИ В МЕНЮ (КАРТИНКА/GIF) ---
+    // --- МЕТОД ДЛЯ МГНОВЕННОГО ОБНОВЛЕНИЯ АВАТАРКИ ---
+    public void updateAvatarInUI() {
+        runOnUiThread(this::loadUserAvatarToBottomNav);
+    }
+
     private void loadUserAvatarToBottomNav() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         if (account == null) {
@@ -471,6 +474,7 @@ public class MainActivity extends AppCompatActivity {
                 String savedAvatarBase64 = prefs.getString("my_photo_base64", null);
                 if (savedAvatarBase64 != null) {
                     iconProfile.setImageTintList(null);
+                    // Работает как с новыми ссылками, так и со старым Base64
                     if (savedAvatarBase64.startsWith("http")) {
                         Glide.with(this).load(savedAvatarBase64).circleCrop().into(iconProfile);
                     } else {
@@ -625,13 +629,10 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // --- ИСПРАВЛЕНИЕ: БОЛЬШЕ НИКАКОГО ВЫЛЕТА OOM ИЗ-ЗА БОЛЬШИХ АВАТАРОК ---
         if (requestCode == RC_PICK_IMAGE && resultCode == RESULT_OK && data != null) {
-            // Этот код больше не используется для выбора аватарок, он перенесен в EditProfileFragment.
-            // Но мы оставляем его пустым заглушкой, чтобы система не крашилась, если вызов все-таки придет сюда.
+            // Оставлено пустым, логика перенесена в EditProfileFragment
         }
 
-        // Выбор фона профиля (Settings)
         if (requestCode == 9003 && resultCode == RESULT_OK && data != null && data.getData() != null) {
             try {
                 android.net.Uri selectedFileUri = data.getData();
