@@ -8,6 +8,7 @@
     <string name="feed">Feed</string>
     <string name="find">Find</string>
     <string name="time">Time</string>
+	<string name="err_wait_cooldown">Please wait before changing this information.</string>
 	<string name="err_wait_before_change">You need to wait before changing the background!</string>
 	<string name="title_search">Search</string>
 	<string name="saved_successfully">Saved successfully!</string>
