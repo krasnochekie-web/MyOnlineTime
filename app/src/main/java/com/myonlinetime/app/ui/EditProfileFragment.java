@@ -31,7 +31,6 @@ import com.myonlinetime.app.VpsApi;
 import com.otaliastudios.transcoder.Transcoder;
 import com.otaliastudios.transcoder.TranscoderListener;
 import com.otaliastudios.transcoder.strategy.DefaultVideoStrategy;
-import com.otaliastudios.transcoder.strategy.size.AtMostResizer;
 
 import org.json.JSONObject;
 
@@ -78,7 +77,7 @@ public class EditProfileFragment extends Fragment {
         
         // 1. Если пользователь УЖЕ в бане
         if (now < penaltyEndTime) {
-            // Любая попытка (клик по фото/фону или сохранение) сбрасывает таймер наказания заново на 30 секунд
+            // Любая попытка сбрасывает таймер наказания заново на 30 секунд
             penaltyEndTime = now + 30000; 
             if (getActivity() != null) {
                 Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
@@ -112,7 +111,7 @@ public class EditProfileFragment extends Fragment {
             }
         }
         
-        return false; // Всё отлично, действие разрешено
+        return false; 
     }
 
     @Override
@@ -218,7 +217,7 @@ public class EditProfileFragment extends Fragment {
                  return;
              }
              
-             // Проверяем на спам
+             // Проверяем на спам (передаем true, если загружаются файлы, иначе false)
              if (isActionSpam(pendingPhotoFile != null || pendingBgFile != null)) {
                  return; 
              }
@@ -315,11 +314,10 @@ public class EditProfileFragment extends Fragment {
                     
                     File compressedFile = new File(activity.getCacheDir(), "compressed_bg_" + System.currentTimeMillis() + ".mp4");
                     
+                    // Используем правильный метод atMost(540)
                     Transcoder.into(compressedFile.getAbsolutePath())
                         .addDataSource(tempFile.getAbsolutePath())
-                        .setVideoTrackStrategy(DefaultVideoStrategy.builder()
-                            .addResizer(new AtMostResizer(720, 1280)) // Ограничиваем разрешение до 720p
-                            .build())
+                        .setVideoTrackStrategy(DefaultVideoStrategy.atMost(720).build()) 
                         .setListener(new TranscoderListener() {
                             @Override
                             public void onTranscodeProgress(double progress) {}
