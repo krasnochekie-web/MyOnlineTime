@@ -24,6 +24,7 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.*;
 
+import com.myonlinetime.app.models.User;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
@@ -110,9 +111,7 @@ public class MainActivity extends AppCompatActivity {
         }, false);
 
         Window window = getWindow();
-        window.getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE 
-                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
         window.setStatusBarColor(android.graphics.Color.TRANSPARENT);
 
         setContentView(R.layout.activity_main);
@@ -210,14 +209,7 @@ public class MainActivity extends AppCompatActivity {
         initGlobalBackground();
         updateGlobalBackground(true);
 
-        int tabToOpen = 0; 
-        if (appPrefs.contains("open_tab_after_login")) {
-            tabToOpen = appPrefs.getInt("open_tab_after_login", 0);
-            appPrefs.edit().remove("open_tab_after_login").apply();
-        } else if (savedInstanceState != null) {
-            tabToOpen = savedInstanceState.getInt("SAVED_TAB", 0);
-        }
-
+        int tabToOpen = savedInstanceState != null ? savedInstanceState.getInt("SAVED_TAB", 0) : 0;
         updateNavState(tabToOpen);
         if (tabToOpen == 4) {
             GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
@@ -266,6 +258,38 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception ignored) { }
         });
     } 
+
+    // === ИДЕАЛЬНАЯ ГОРЯЧАЯ ПЕРЕЗАГРУЗКА БЕЗ МОРГАНИЯ ЭКРАНА ===
+    public void clearAllFragments() {
+        FragmentManager fm = getSupportFragmentManager();
+        fm.popBackStackImmediate(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
+        androidx.fragment.app.FragmentTransaction ft = fm.beginTransaction();
+        for (Fragment f : fm.getFragments()) {
+            if (f != null) {
+                ft.remove(f);
+            }
+        }
+        ft.commitAllowingStateLoss();
+        fm.executePendingTransactions();
+        
+        // Пересоздаем навигатор с нуля, убивая все его внутренние старые кэши
+        navigator = new com.myonlinetime.app.utils.AppNavigator(this, R.id.fragment_container);
+    }
+
+    public void performSignOut() {
+        if (mGoogleSignInClient != null) {
+            mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
+                resetAccountState();
+                clearAllFragments(); 
+                
+                updateNavState(0);
+                navigator.switchScreen(0, null);
+                loadUserAvatarToBottomNav();
+                enforceLoginOverlays();
+                Toast.makeText(this, getString(R.string.settings_sign_out), Toast.LENGTH_SHORT).show();
+            });
+        }
+    }
 
     public void resetAccountState() {
         vpsToken = null;
@@ -689,7 +713,6 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(this::loadUserAvatarToBottomNav);
     }
 
-    // === ИСПРАВЛЕНИЕ: МГНОВЕННАЯ ЗАГРУЗКА БЕЗ ТОРМОЗОВ ===
     private void loadUserAvatarToBottomNav() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         if (account == null) {
@@ -703,7 +726,6 @@ public class MainActivity extends AppCompatActivity {
         if (iconProfile != null) {
             String uid = account.getId();
             
-            // 1. ОПТИМИСТИЧНЫЙ UI с правильным кэшированием (Без skipMemoryCache)
             String customAvatarPath = prefs.getString("custom_avatar_path_" + uid, null);
             if (customAvatarPath != null) {
                 File localFile = new File(customAvatarPath);
@@ -711,14 +733,13 @@ public class MainActivity extends AppCompatActivity {
                     iconProfile.setImageTintList(null); 
                     Glide.with(this)
                          .load(localFile)
-                         .signature(new ObjectKey(localFile.lastModified())) // Магия Glide!
+                         .signature(new ObjectKey(localFile.lastModified())) 
                          .circleCrop()
                          .into(iconProfile);
                     return;
                 }
             }
 
-            // 2. Старый кэш в памяти
             Bitmap cachedAvatar = mMemoryCache.get("avatar_" + uid);
             if (cachedAvatar != null) {
                 iconProfile.setImageTintList(null); 
@@ -726,7 +747,6 @@ public class MainActivity extends AppCompatActivity {
                 return;
             } 
             
-            // 3. СЕРВЕР ИЛИ ЗАГЛУШКА
             String savedUrl = prefs.getString("my_photo_base64", null);
             if (savedUrl != null) {
                 iconProfile.setImageTintList(null);
@@ -857,7 +877,9 @@ public class MainActivity extends AppCompatActivity {
             try {
                 final GoogleSignInAccount acct = task.getResult(ApiException.class);
                 
+                // === 100% БЕСШОВНЫЙ ВХОД (БЕЗ ПЕРЕЗАГРУЗКИ ACTIVITY) ===
                 resetAccountState();
+                clearAllFragments(); 
                 
                 VpsApi.authenticateWithGoogle(MainActivity.this, acct.getIdToken(), new VpsApi.LoginCallback() {
                     @Override
@@ -865,7 +887,6 @@ public class MainActivity extends AppCompatActivity {
                         vpsToken = ourServerToken;
                         StatsHelper.syncUserProfile(MainActivity.this);
 
-                        // МГНОВЕННО ОБНОВЛЯЕМ НАВИГАТОР (Без моргания экранов!)
                         updateNavState(4);
                         navigator.switchScreen(4, acct.getId());
                         loadUserAvatarToBottomNav();
