@@ -199,6 +199,7 @@ public class ProfileFragment extends Fragment {
                             }
                             applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
+                            // Этот блок теперь идеально обрабатывает и старый Base64, и новые URL-ссылки
                             if (user.photo != null && user.photo.length() > 10) {
                                 if (isMe) activity.prefs.edit().putString("my_photo_base64", user.photo).apply();
                                 handleMediaLoading(activity, user.photo, false, finalTargetUid);
@@ -342,6 +343,7 @@ public class ProfileFragment extends Fragment {
             return;
         }
 
+        // Этот блок спасает нас! Он перехватывает новые ссылки с сервера.
         if (base64Data.startsWith("http")) {
             Glide.with(activity).load(base64Data).circleCrop().into(avatarView);
             return;
@@ -739,6 +741,7 @@ public class ProfileFragment extends Fragment {
             localDescriptions.put(pkgName, newDesc);
             prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
 
+            // === ИСПРАВЛЕНИЕ: МГНОВЕННАЯ ПЕРЕРИСОВКА ОПИСАНИЯ ===
             if (descView != null) {
                 if (!newDesc.isEmpty()) {
                     descView.setText(newDesc);
@@ -747,6 +750,18 @@ public class ProfileFragment extends Fragment {
                     descView.setVisibility(View.GONE);
                 }
             }
+
+            // Жестко заставляем контейнер перерисоваться
+            View rootView = getView();
+            if (rootView != null) {
+                LinearLayout container = rootView.findViewById(R.id.profile_apps_container);
+                TextView weekTime = rootView.findViewById(R.id.profile_week_time);
+                if (container != null && weekTime != null) {
+                    container.removeAllViews();
+                    StatsHelper.loadStatsToProfile(activity, weekTime, container);
+                }
+            }
+
             dialog.dismiss();
             
             if (activity.vpsToken != null) {
