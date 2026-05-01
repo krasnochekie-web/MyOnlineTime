@@ -24,6 +24,7 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.*;
 
+import com.myonlinetime.app.models.User;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
@@ -109,9 +110,7 @@ public class MainActivity extends AppCompatActivity {
         }, false);
 
         Window window = getWindow();
-        window.getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE 
-                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
         window.setStatusBarColor(android.graphics.Color.TRANSPARENT);
 
         setContentView(R.layout.activity_main);
@@ -209,14 +208,7 @@ public class MainActivity extends AppCompatActivity {
         initGlobalBackground();
         updateGlobalBackground(true);
 
-        int tabToOpen = 0; 
-        if (appPrefs.contains("open_tab_after_login")) {
-            tabToOpen = appPrefs.getInt("open_tab_after_login", 0);
-            appPrefs.edit().remove("open_tab_after_login").apply();
-        } else if (savedInstanceState != null) {
-            tabToOpen = savedInstanceState.getInt("SAVED_TAB", 0);
-        }
-
+        int tabToOpen = savedInstanceState != null ? savedInstanceState.getInt("SAVED_TAB", 0) : 0;
         updateNavState(tabToOpen);
         if (tabToOpen == 4) {
             GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
@@ -284,6 +276,12 @@ public class MainActivity extends AppCompatActivity {
         }
         if (playerView != null) {
             playerView.setVisibility(View.INVISIBLE);
+        }
+
+        // === МГНОВЕННЫЙ ВИЗУАЛЬНЫЙ СБРОС АВАТАРКИ В МЕНЮ ===
+        if (iconProfile != null) {
+            iconProfile.setImageTintList(androidx.core.content.ContextCompat.getColorStateList(this, R.color.nav_icon_selector));
+            iconProfile.setImageResource(R.drawable.ic_nav_profile);
         }
 
         if (prefs != null) {
@@ -851,6 +849,7 @@ public class MainActivity extends AppCompatActivity {
             try {
                 final GoogleSignInAccount acct = task.getResult(ApiException.class);
                 
+                // === ЖЕСТКИЙ СБРОС И БЕСШОВНОЕ ОБНОВЛЕНИЕ IN-PLACE ===
                 resetAccountState();
                 
                 VpsApi.authenticateWithGoogle(MainActivity.this, acct.getIdToken(), new VpsApi.LoginCallback() {
@@ -859,13 +858,15 @@ public class MainActivity extends AppCompatActivity {
                         vpsToken = ourServerToken;
                         StatsHelper.syncUserProfile(MainActivity.this);
 
-                        getSharedPreferences("AppPrefs", MODE_PRIVATE).edit().putInt("open_tab_after_login", 4).apply();
-
-                        // ИДЕАЛЬНЫЙ БЕСШОВНЫЙ ПЕРЕЗАПУСК
-                        Intent intent = new Intent(MainActivity.this, MainActivity.class);
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                        startActivity(intent);
-                        overridePendingTransition(0, 0); 
+                        // Бесшовный переход без перезагрузки активности
+                        updateNavState(4);
+                        navigator.switchScreen(4, acct.getId());
+                        loadUserAvatarToBottomNav();
+                        enforceLoginOverlays();
+                        
+                        // Рассылаем сигнал, чтобы профиль мгновенно подхватил чистые данные
+                        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(MainActivity.this)
+                            .sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
                     }
                     @Override
                     public void onError(String error) {
