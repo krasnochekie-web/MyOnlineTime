@@ -469,6 +469,17 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        // --- АНТИ-МЕРЦАНИЕ (ANTI-FLICKER) ---
+        // Если мы сейчас смотрим видео/картинку из сети, а в фоне она же скачалась в локальный кэш
+        // Мы игнорируем обновление! Плеер доиграет сетевой файл без обрыва, а в следующий запуск 
+        // приложения подхватит уже локальный.
+        if (currentBgPath != null && currentBgPath.startsWith("http") && path != null && !path.startsWith("http")) {
+            String syncedUrl = prefs.getString("synced_bg_url_" + uid, "");
+            if (currentBgPath.equals(syncedUrl) || currentBgPath.equals(currentBgBase64)) {
+                return; // Выходим, не прерывая плеер
+            }
+        }
+
         currentBgPath = path;
 
         if (isVideo) {
@@ -638,6 +649,7 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(this::loadUserAvatarToBottomNav);
     }
 
+    // === ИДЕАЛЬНОЕ ОБНОВЛЕНИЕ АВАТАРКИ (БЕЗ ЗАВИСАНИЯ КЭША GLIDE) ===
     private void loadUserAvatarToBottomNav() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         if (account == null) {
@@ -649,32 +661,53 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (iconProfile != null) {
-            Bitmap cachedAvatar = mMemoryCache.get("avatar_" + account.getId());
-            if (cachedAvatar != null) {
+            String uid = account.getId();
+            File localFile = new File(getFilesDir(), "avatar_" + uid + ".png");
+            String savedUrl = prefs.getString("my_photo_base64", null);
+            String syncedUrl = prefs.getString("synced_photo_url_" + uid, "");
+
+            // 1. Приоритет серверу: если пришла новая ссылка (с другого устройства), скачиваем её!
+            if (savedUrl != null && savedUrl.startsWith("http") && !savedUrl.equals(syncedUrl)) {
+                iconProfile.setImageTintList(null);
+                Glide.with(this).load(savedUrl).circleCrop().into(iconProfile);
+                
+                Utils.backgroundExecutor.execute(() -> {
+                    try {
+                        java.io.InputStream is = new java.net.URL(savedUrl).openStream();
+                        java.io.FileOutputStream fos = new java.io.FileOutputStream(localFile);
+                        byte[] buffer = new byte[8192];
+                        int len;
+                        while ((len = is.read(buffer)) != -1) fos.write(buffer, 0, len);
+                        fos.flush(); fos.close(); is.close();
+                        
+                        runOnUiThread(() -> prefs.edit().putString("synced_photo_url_" + uid, savedUrl).apply());
+                    } catch(Exception e){}
+                });
+                return;
+            }
+
+            // 2. Локальный кэш: ПРИНУДИТЕЛЬНО без кэша памяти, чтобы обновления применялись сразу
+            if (localFile.exists()) {
                 iconProfile.setImageTintList(null); 
-                Glide.with(this).load(cachedAvatar).circleCrop().into(iconProfile);
-            } else {
-                String savedAvatarBase64 = prefs.getString("my_photo_base64", null);
-                if (savedAvatarBase64 != null) {
-                    iconProfile.setImageTintList(null);
-                    if (savedAvatarBase64.startsWith("http")) {
-                        Glide.with(this).load(savedAvatarBase64).circleCrop().into(iconProfile);
-                    } else {
-                        try {
-                            byte[] bytes = android.util.Base64.decode(savedAvatarBase64, android.util.Base64.DEFAULT);
-                            Glide.with(this).load(bytes).circleCrop().into(iconProfile);
-                        } catch (Exception e) {}
-                    }
+                Glide.with(this)
+                     .load(localFile)
+                     .skipMemoryCache(true) // <- Вот эта строка заставляет Glide перечитать картинку
+                     .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE) // <- И эта тоже
+                     .circleCrop()
+                     .into(iconProfile);
+            } else if (savedUrl != null) {
+                iconProfile.setImageTintList(null);
+                if (savedUrl.startsWith("http")) {
+                    Glide.with(this).load(savedUrl).circleCrop().into(iconProfile);
                 } else {
-                    File file = new File(getFilesDir(), "avatar_" + account.getId() + ".png");
-                    if (file.exists()) {
-                        iconProfile.setImageTintList(null); 
-                        Glide.with(this).load(file).circleCrop().into(iconProfile);
-                    } else {
-                        iconProfile.setImageTintList(androidx.core.content.ContextCompat.getColorStateList(this, R.color.nav_icon_selector));
-                        iconProfile.setImageResource(R.drawable.ic_nav_profile); 
-                    }
+                    try {
+                        byte[] bytes = android.util.Base64.decode(savedUrl, android.util.Base64.DEFAULT);
+                        Glide.with(this).load(bytes).circleCrop().into(iconProfile);
+                    } catch (Exception e) {}
                 }
+            } else {
+                iconProfile.setImageTintList(androidx.core.content.ContextCompat.getColorStateList(this, R.color.nav_icon_selector));
+                iconProfile.setImageResource(R.drawable.ic_nav_profile); 
             }
         }
     }
