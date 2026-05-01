@@ -312,9 +312,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void updateGlobalBackground(boolean show) {
-        String path = prefs.getString("custom_bg_path", null);
-        boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
-
         if (hideBgRunnable == null) {
             hideBgRunnable = () -> {
                 if (playerView != null) playerView.setVisibility(View.INVISIBLE);
@@ -323,7 +320,7 @@ public class MainActivity extends AppCompatActivity {
             };
         }
 
-        if (!show || path == null) {
+        if (!show) {
             bgHandler.removeCallbacks(hideBgRunnable);
             bgHandler.postDelayed(hideBgRunnable, 200);
             return;
@@ -331,7 +328,27 @@ public class MainActivity extends AppCompatActivity {
 
         bgHandler.removeCallbacks(hideBgRunnable);
 
+        // УМНАЯ ЛОГИКА ВЫБОРА ФОНА:
+        // Если мы на вкладке профиля (currentTab == 4) и там есть свой фон — показываем его.
+        // Во всех остальных случаях — показываем глобальный фон из настроек.
+        String path = null;
+        boolean isVideo = false;
+
+        if (currentTab == 4 && currentBgBase64 != null && !currentBgBase64.isEmpty() && !currentBgBase64.equals("null")) {
+            path = currentBgBase64;
+            isVideo = path.toLowerCase().endsWith(".mp4") || path.toLowerCase().endsWith(".mov");
+        } else {
+            path = prefs.getString("custom_bg_path", null);
+            isVideo = prefs.getBoolean("custom_bg_is_video", false);
+        }
+
+        if (path == null || path.isEmpty()) {
+            bgHandler.postDelayed(hideBgRunnable, 200);
+            return;
+        }
+
         if (path.equals(currentBgPath)) {
+            // Фон уже запущен, просто возвращаем видимость
             if (isVideo) {
                 if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
                 if (playerView != null) playerView.setVisibility(View.VISIBLE);
@@ -341,30 +358,38 @@ public class MainActivity extends AppCompatActivity {
                 if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
                 if (globalImageView != null) {
                     globalImageView.setVisibility(View.VISIBLE);
-                    File file = new File(path);
-                    Glide.with(this).load(file).centerCrop().into(globalImageView);
                 }
             }
             return;
         }
 
         currentBgPath = path;
-        File file = new File(path);
-        if (!file.exists()) return;
 
         if (isVideo) {
             if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
             if (playerView != null) playerView.setVisibility(View.VISIBLE);
-            MediaItem mediaItem = MediaItem.fromUri(Uri.fromFile(file));
-            exoPlayer.setMediaItem(mediaItem);
-            exoPlayer.prepare();
-            exoPlayer.play();
+            
+            // ExoPlayer отлично читает как локальные пути, так и http(s) ссылки
+            MediaItem mediaItem = path.startsWith("http") ? 
+                    MediaItem.fromUri(Uri.parse(path)) : 
+                    MediaItem.fromUri(Uri.fromFile(new File(path)));
+                    
+            if (exoPlayer != null) {
+                exoPlayer.setMediaItem(mediaItem);
+                exoPlayer.prepare();
+                exoPlayer.play();
+            }
         } else {
             if (playerView != null) playerView.setVisibility(View.INVISIBLE);
             if (exoPlayer != null) exoPlayer.pause();
             if (globalImageView != null) {
                 globalImageView.setVisibility(View.VISIBLE);
-                Glide.with(this).load(file).centerCrop().into(globalImageView);
+                // Glide сам разберется, это локальный файл или веб-ссылка
+                if (path.startsWith("http")) {
+                    Glide.with(this).load(path).centerCrop().into(globalImageView);
+                } else {
+                    Glide.with(this).load(new File(path)).centerCrop().into(globalImageView);
+                }
             }
         }
     }   
