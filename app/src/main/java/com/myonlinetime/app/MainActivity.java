@@ -14,7 +14,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Looper;
@@ -261,15 +260,46 @@ public class MainActivity extends AppCompatActivity {
         });
     } 
 
+    // === ЖЕСТКИЙ ПРОТОКОЛ АМНЭЗИИ (ИСПРАВЛЕННЫЙ) ===
+    // Вычищает ВСЕ данные прошлого аккаунта, чтобы не было смешивания фонов и аватарок
     public void resetAccountState() {
         vpsToken = null;
         currentBgBase64 = null;
         currentBgPath = null;
         previewBgPath = null;
+        
         if (mMemoryCache != null) mMemoryCache.evictAll();
-        if (exoPlayer != null) exoPlayer.stop();
-        if (globalImageView != null) globalImageView.setImageDrawable(null);
-        prefs = getSharedPreferences("UserProfile", MODE_PRIVATE); 
+        
+        if (exoPlayer != null) {
+            exoPlayer.stop();
+            exoPlayer.clearMediaItems();
+        }
+        if (globalImageView != null) {
+            globalImageView.setImageDrawable(null);
+            globalImageView.setVisibility(View.INVISIBLE);
+        }
+        if (playerView != null) {
+            playerView.setVisibility(View.INVISIBLE);
+        }
+
+        // 1. ЖЕСТКАЯ ОЧИСТКА SharedPreferences (Именно здесь прятались призраки!)
+        if (prefs != null) {
+            prefs.edit().clear().apply();
+        }
+
+        // 2. УДАЛЕНИЕ ВСЕХ ФАЙЛОВ КЭША СО СТАРОГО АККАУНТА (Фоны, аватарки)
+        try {
+            File dir = getFilesDir();
+            File[] files = dir.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    String name = f.getName();
+                    if (name.startsWith("my_bg_") || name.startsWith("avatar_") || name.startsWith("custom_")) {
+                        f.delete();
+                    }
+                }
+            }
+        } catch (Exception e) { e.printStackTrace(); }
     }
 
     public void syncHeaderState() {
@@ -667,6 +697,7 @@ public class MainActivity extends AppCompatActivity {
         if (iconProfile != null) {
             String uid = account.getId();
             
+            // 1. ОПТИМИСТИЧНЫЙ UI (Локальный кэш)
             String customAvatarPath = prefs.getString("custom_avatar_path_" + uid, null);
             if (customAvatarPath != null) {
                 File localFile = new File(customAvatarPath);
@@ -682,6 +713,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
+            // 2. Старый кэш в памяти
             Bitmap cachedAvatar = mMemoryCache.get("avatar_" + uid);
             if (cachedAvatar != null) {
                 iconProfile.setImageTintList(null); 
@@ -689,6 +721,7 @@ public class MainActivity extends AppCompatActivity {
                 return;
             } 
             
+            // 3. СЕРВЕР ИЛИ ЗАГЛУШКА
             String savedUrl = prefs.getString("my_photo_base64", null);
             if (savedUrl != null) {
                 iconProfile.setImageTintList(null);
@@ -701,7 +734,6 @@ public class MainActivity extends AppCompatActivity {
                     } catch (Exception e) {}
                 }
             } else {
-                // БЕЗ ГУГЛОВСКОГО ФОЛЛБЭКА: просто ставим стандартную пустую заглушку
                 iconProfile.setImageTintList(androidx.core.content.ContextCompat.getColorStateList(this, R.color.nav_icon_selector));
                 iconProfile.setImageResource(R.drawable.ic_nav_profile); 
             }
@@ -820,6 +852,7 @@ public class MainActivity extends AppCompatActivity {
             try {
                 final GoogleSignInAccount acct = task.getResult(ApiException.class);
                 
+                // ВАЖНО: Сбрасываем старый кэш при успешном входе нового аккаунта
                 resetAccountState();
                 
                 VpsApi.authenticateWithGoogle(MainActivity.this, acct.getIdToken(), new VpsApi.LoginCallback() {
