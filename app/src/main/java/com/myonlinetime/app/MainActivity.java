@@ -24,7 +24,6 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.*;
 
-import com.myonlinetime.app.models.User;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
@@ -209,7 +208,11 @@ public class MainActivity extends AppCompatActivity {
         initGlobalBackground();
         updateGlobalBackground(true);
 
-        int tabToOpen = savedInstanceState != null ? savedInstanceState.getInt("SAVED_TAB", 0) : 0;
+        int tabToOpen = 0; 
+        if (savedInstanceState != null) {
+            tabToOpen = savedInstanceState.getInt("SAVED_TAB", 0);
+        }
+
         updateNavState(tabToOpen);
         if (tabToOpen == 4) {
             GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
@@ -259,7 +262,6 @@ public class MainActivity extends AppCompatActivity {
         });
     } 
 
-    // === ИДЕАЛЬНАЯ ГОРЯЧАЯ ПЕРЕЗАГРУЗКА БЕЗ МОРГАНИЯ ЭКРАНА ===
     public void clearAllFragments() {
         FragmentManager fm = getSupportFragmentManager();
         fm.popBackStackImmediate(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
@@ -272,7 +274,6 @@ public class MainActivity extends AppCompatActivity {
         ft.commitAllowingStateLoss();
         fm.executePendingTransactions();
         
-        // Пересоздаем навигатор с нуля, убивая все его внутренние старые кэши
         navigator = new com.myonlinetime.app.utils.AppNavigator(this, R.id.fragment_container);
     }
 
@@ -282,8 +283,9 @@ public class MainActivity extends AppCompatActivity {
                 resetAccountState();
                 clearAllFragments(); 
                 
-                updateNavState(0);
-                navigator.switchScreen(0, null);
+                // ИСПРАВЛЕНИЕ 1: Остаемся в настройках (Индекс 5), а не переходим в Ленту (Индекс 0)
+                updateNavState(5);
+                navigator.switchScreen(5, null);
                 loadUserAvatarToBottomNav();
                 enforceLoginOverlays();
                 Toast.makeText(this, getString(R.string.settings_sign_out), Toast.LENGTH_SHORT).show();
@@ -877,7 +879,6 @@ public class MainActivity extends AppCompatActivity {
             try {
                 final GoogleSignInAccount acct = task.getResult(ApiException.class);
                 
-                // === 100% БЕСШОВНЫЙ ВХОД (БЕЗ ПЕРЕЗАГРУЗКИ ACTIVITY) ===
                 resetAccountState();
                 clearAllFragments(); 
                 
@@ -887,13 +888,16 @@ public class MainActivity extends AppCompatActivity {
                         vpsToken = ourServerToken;
                         StatsHelper.syncUserProfile(MainActivity.this);
 
-                        updateNavState(4);
-                        navigator.switchScreen(4, acct.getId());
-                        loadUserAvatarToBottomNav();
-                        enforceLoginOverlays();
-                        
-                        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(MainActivity.this)
-                            .sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
+                        // Бесшовный переход (Без мерцаний и морганий)
+                        runOnUiThread(() -> {
+                            updateNavState(4);
+                            navigator.switchScreen(4, acct.getId());
+                            loadUserAvatarToBottomNav();
+                            enforceLoginOverlays();
+                            
+                            androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(MainActivity.this)
+                                .sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
+                        });
                     }
                     @Override
                     public void onError(String error) {
