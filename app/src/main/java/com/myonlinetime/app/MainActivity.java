@@ -14,6 +14,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Looper;
@@ -211,13 +212,23 @@ public class MainActivity extends AppCompatActivity {
         initGlobalBackground();
         updateGlobalBackground(true);
 
+        // === ИДЕАЛЬНОЕ УПРАВЛЕНИЕ СОСТОЯНИЕМ (ЧТЕНИЕ КОМАНД ПЕРЕЗАПУСКА) ===
         int tabToOpen = 0; 
-        if (savedInstanceState != null) {
+        if (appPrefs.contains("open_tab_after_login")) {
+            // Если мы только что программно перезапустились после входа
+            tabToOpen = appPrefs.getInt("open_tab_after_login", 0);
+            appPrefs.edit().remove("open_tab_after_login").apply();
+        } else if (savedInstanceState != null) {
             tabToOpen = savedInstanceState.getInt("SAVED_TAB", 0);
         }
 
         updateNavState(tabToOpen);
-        navigator.switchScreen(tabToOpen, null);
+        if (tabToOpen == 4) {
+            GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
+            navigator.switchScreen(4, acct != null ? acct.getId() : "");
+        } else {
+            navigator.switchScreen(tabToOpen, null);
+        }
         syncHeaderState();
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -260,8 +271,6 @@ public class MainActivity extends AppCompatActivity {
         });
     } 
 
-    // === ЖЕСТКИЙ ПРОТОКОЛ АМНЭЗИИ (ИСПРАВЛЕННЫЙ) ===
-    // Вычищает ВСЕ данные прошлого аккаунта, чтобы не было смешивания фонов и аватарок
     public void resetAccountState() {
         vpsToken = null;
         currentBgBase64 = null;
@@ -282,12 +291,10 @@ public class MainActivity extends AppCompatActivity {
             playerView.setVisibility(View.INVISIBLE);
         }
 
-        // 1. ЖЕСТКАЯ ОЧИСТКА SharedPreferences (Именно здесь прятались призраки!)
         if (prefs != null) {
             prefs.edit().clear().apply();
         }
 
-        // 2. УДАЛЕНИЕ ВСЕХ ФАЙЛОВ КЭША СО СТАРОГО АККАУНТА (Фоны, аватарки)
         try {
             File dir = getFilesDir();
             File[] files = dir.listFiles();
@@ -697,7 +704,6 @@ public class MainActivity extends AppCompatActivity {
         if (iconProfile != null) {
             String uid = account.getId();
             
-            // 1. ОПТИМИСТИЧНЫЙ UI (Локальный кэш)
             String customAvatarPath = prefs.getString("custom_avatar_path_" + uid, null);
             if (customAvatarPath != null) {
                 File localFile = new File(customAvatarPath);
@@ -713,7 +719,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // 2. Старый кэш в памяти
             Bitmap cachedAvatar = mMemoryCache.get("avatar_" + uid);
             if (cachedAvatar != null) {
                 iconProfile.setImageTintList(null); 
@@ -721,7 +726,6 @@ public class MainActivity extends AppCompatActivity {
                 return;
             } 
             
-            // 3. СЕРВЕР ИЛИ ЗАГЛУШКА
             String savedUrl = prefs.getString("my_photo_base64", null);
             if (savedUrl != null) {
                 iconProfile.setImageTintList(null);
@@ -852,19 +856,24 @@ public class MainActivity extends AppCompatActivity {
             try {
                 final GoogleSignInAccount acct = task.getResult(ApiException.class);
                 
-                // ВАЖНО: Сбрасываем старый кэш при успешном входе нового аккаунта
+                // === ЖЕСТКИЙ СБРОС И ПРОГРАММНЫЙ ПЕРЕЗАПУСК ===
                 resetAccountState();
                 
                 VpsApi.authenticateWithGoogle(MainActivity.this, acct.getIdToken(), new VpsApi.LoginCallback() {
                     @Override
                     public void onSuccess(String ourServerToken) {
                         vpsToken = ourServerToken;
-                        loadUserAvatarToBottomNav(); 
-                        updateNavState(4);
                         StatsHelper.syncUserProfile(MainActivity.this);
-                        navigator.switchScreen(4, acct.getId()); 
-                        
-                        enforceLoginOverlays();
+
+                        // Указываем, что после перезапуска нужно открыть профиль
+                        getSharedPreferences("AppPrefs", MODE_PRIVATE).edit().putInt("open_tab_after_login", 4).apply();
+
+                        // МГНОВЕННЫЙ ПРОГРАММНЫЙ ПЕРЕЗАПУСК АКТИВИТИ
+                        Intent intent = new Intent(MainActivity.this, MainActivity.class);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                        startActivity(intent);
+                        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+                        finish();
                     }
                     @Override
                     public void onError(String error) {
