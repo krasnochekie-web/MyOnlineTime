@@ -26,6 +26,9 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 
+import com.arthenica.ffmpegkit.FFmpegKit;
+import com.arthenica.ffmpegkit.ReturnCode;
+
 import org.json.JSONObject;
 
 import java.io.File;
@@ -36,10 +39,13 @@ public class EditProfileFragment extends Fragment {
 
     private File pendingPhotoFile = null;
     private File pendingBgFile = null;
+    
+    private boolean isCompressing = false; 
 
-    // --- ПЕРЕМЕННЫЕ ЗАЩИТЫ ОТ СПАМА ---
-    private static int saveSpamCount = 0;
-    private static long lastSaveTime = 0;
+    // === ПЕРЕМЕННЫЕ ЗАЩИТЫ ОТ СПАМА (RATE LIMITING) ===
+    private static long penaltyEndTime = 0;
+    private static final java.util.LinkedList<Long> textAttemptTimes = new java.util.LinkedList<>();
+    private static final java.util.LinkedList<Long> mediaAttemptTimes = new java.util.LinkedList<>();
 
     private final ActivityResultLauncher<String[]> photoPicker = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(),
@@ -61,6 +67,49 @@ public class EditProfileFragment extends Fragment {
     }
 
     public EditProfileFragment() {}
+
+    // === ЕДИНЫЙ МЕТОД ЗАЩИТЫ ===
+    private boolean isActionSpam(boolean isMedia) {
+        long now = System.currentTimeMillis();
+        
+        // 1. Если пользователь УЖЕ в бане
+        if (now < penaltyEndTime) {
+            // Любая попытка (клик по фото/фону или сохранение) сбрасывает таймер наказания заново на 30 секунд
+            penaltyEndTime = now + 30000; 
+            if (getActivity() != null) {
+                Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
+            }
+            return true; // Блокируем действие
+        }
+
+        // 2. Если пользователь не в бане, фиксируем попытку
+        if (isMedia) {
+            mediaAttemptTimes.add(now);
+            // Удаляем старые клики (старше 10 секунд)
+            while (!mediaAttemptTimes.isEmpty() && now - mediaAttemptTimes.getFirst() > 10000) {
+                mediaAttemptTimes.removeFirst();
+            }
+            // Лимит для медиа: > 5 кликов за 10 секунд
+            if (mediaAttemptTimes.size() > 5) {
+                penaltyEndTime = now + 30000;
+                if (getActivity() != null) Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
+                return true;
+            }
+        } else {
+            textAttemptTimes.add(now);
+            while (!textAttemptTimes.isEmpty() && now - textAttemptTimes.getFirst() > 10000) {
+                textAttemptTimes.removeFirst();
+            }
+            // Лимит для текста: > 10 сохранений за 10 секунд
+            if (textAttemptTimes.size() > 10) {
+                penaltyEndTime = now + 30000;
+                if (getActivity() != null) Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
+                return true;
+            }
+        }
+        
+        return false; // Всё отлично, действие разрешено
+    }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -135,37 +184,40 @@ public class EditProfileFragment extends Fragment {
         String[] photoMimeTypes = new String[]{"image/*"};
         String[] backgroundMimeTypes = new String[]{"image/*", "video/*"};
         
-        View.OnClickListener photoClickListener = v -> photoPicker.launch(photoMimeTypes);
+        View.OnClickListener photoClickListener = v -> {
+            if (isActionSpam(true)) return; // Блокируем выбор фото, если флуд
+            photoPicker.launch(photoMimeTypes);
+        };
         if (btnChangePhoto != null) btnChangePhoto.setOnClickListener(photoClickListener);
         if (avatarPreview != null) avatarPreview.setOnClickListener(photoClickListener);
 
         if (btnChangeBackground != null) {
-            btnChangeBackground.setOnClickListener(v -> bgPicker.launch(backgroundMimeTypes));
+            btnChangeBackground.setOnClickListener(v -> {
+                if (isActionSpam(true)) return; // Блокируем выбор фона, если флуд
+                bgPicker.launch(backgroundMimeTypes);
+            });
         }
 
         btnSave.setOnClickListener(v -> { 
+             if (isCompressing) {
+                 Toast.makeText(activity, "Дождитесь окончания сжатия видео!", Toast.LENGTH_SHORT).show();
+                 return;
+             }
+             
              final String n = inputName.getText().toString().trim();
              final String a = inputAbout.getText().toString().trim();
 
-             // === УМНОЕ ЗАКРЫТИЕ БЕЗ ЗАПРОСА ===
+             // Если ничего не изменилось — выходим сразу (не засчитывается как спам)
              if (n.equals(initialName) && a.equals(initialAbout) && pendingPhotoFile == null && pendingBgFile == null) {
-                 activity.clearPreviewBackground(); // Убираем превью
+                 activity.clearPreviewBackground(); 
                  activity.navigator.closeSubScreen();
                  return;
              }
              
-             // === ЗАЩИТА ОТ СПАМА (RATE LIMITING) ===
-             long now = System.currentTimeMillis();
-             if (now - lastSaveTime < 3000) { // 3 секунды перерыв
-                 saveSpamCount++;
-                 if (saveSpamCount >= 5) {
-                     Toast.makeText(activity, R.string.err_wait_before_change, Toast.LENGTH_SHORT).show();
-                     return; // Блокируем вызов
-                 }
-             } else {
-                 saveSpamCount = 1; // Сбрасываем счетчик, если прошло достаточно времени
+             // Проверяем на спам (передаем true, если загружаются файлы, иначе false - только текст)
+             if (isActionSpam(pendingPhotoFile != null || pendingBgFile != null)) {
+                 return; 
              }
-             lastSaveTime = now;
              
              btnSave.setEnabled(false); 
              
@@ -196,7 +248,6 @@ public class EditProfileFragment extends Fragment {
 
                              Toast.makeText(activity, R.string.saved_successfully, Toast.LENGTH_SHORT).show();
                              
-                             // Закрепляем превью как реальный фон
                              activity.clearPreviewBackground(); 
                              
                              if (activity instanceof MainActivity) {
@@ -251,14 +302,42 @@ public class EditProfileFragment extends Fragment {
                 fos.close();
                 is.close();
 
-                // === ИСПРАВЛЕНИЕ: Точная проверка размера в байтах! ===
                 long maxBytes = maxMb * 1024L * 1024L;
+                
+                if (isVideoBg) {
+                    isCompressing = true;
+                    activity.runOnUiThread(() -> Toast.makeText(activity, "Сжатие видео... Пожалуйста, подождите.", Toast.LENGTH_LONG).show());
+                    
+                    File compressedFile = new File(activity.getCacheDir(), "compressed_bg_" + System.currentTimeMillis() + ".mp4");
+                    
+                    String cmd = String.format("-y -i \"%s\" -vf scale=720:-2 -vcodec libx264 -crf 28 -preset superfast \"%s\"", 
+                            tempFile.getAbsolutePath(), compressedFile.getAbsolutePath());
+                            
+                    FFmpegKit.executeAsync(cmd, session -> {
+                        isCompressing = false;
+                        if (ReturnCode.isSuccess(session.getReturnCode())) {
+                            tempFile.delete(); 
+                            
+                            if (compressedFile.length() > maxBytes) {
+                                compressedFile.delete();
+                                activity.runOnUiThread(() -> Toast.makeText(activity, activity.getString(R.string.err_file_size_limit) + " " + maxMb + " MB", Toast.LENGTH_LONG).show());
+                            } else {
+                                activity.runOnUiThread(() -> {
+                                    pendingBgFile = compressedFile;
+                                    Toast.makeText(activity, "Видео успешно подготовлено!", Toast.LENGTH_SHORT).show();
+                                    activity.previewBackground(compressedFile.getAbsolutePath(), true);
+                                });
+                            }
+                        } else {
+                            activity.runOnUiThread(() -> Toast.makeText(activity, "Ошибка при сжатии видео", Toast.LENGTH_SHORT).show());
+                        }
+                    });
+                    return; 
+                }
+
                 if (tempFile.length() > maxBytes) {
                     tempFile.delete(); 
-                    activity.runOnUiThread(() -> {
-                        String errMsg = activity.getString(R.string.err_file_size_limit) + " " + maxMb + " MB";
-                        Toast.makeText(activity, errMsg, Toast.LENGTH_LONG).show();
-                    });
+                    activity.runOnUiThread(() -> Toast.makeText(activity, activity.getString(R.string.err_file_size_limit) + " " + maxMb + " MB", Toast.LENGTH_LONG).show());
                     return;
                 }
 
@@ -266,14 +345,11 @@ public class EditProfileFragment extends Fragment {
                     if (isPhoto) {
                         pendingPhotoFile = tempFile;
                         ImageView avatarPreview = getView() != null ? getView().findViewById(R.id.edit_avatar_preview) : null;
-                        if (avatarPreview != null) {
-                            Glide.with(this).load(tempFile).circleCrop().into(avatarPreview);
-                        }
+                        if (avatarPreview != null) Glide.with(this).load(tempFile).circleCrop().into(avatarPreview);
                     } else {
                         pendingBgFile = tempFile;
                         Toast.makeText(activity, R.string.background_selected_success, Toast.LENGTH_SHORT).show();
-                        // === ЗАПУСКАЕМ ПРЕДПРОСМОТР ФОНА ===
-                        activity.previewBackground(tempFile.getAbsolutePath(), isVideoBg);
+                        activity.previewBackground(tempFile.getAbsolutePath(), false);
                     }
                 });
 
@@ -300,7 +376,6 @@ public class EditProfileFragment extends Fragment {
         super.onDestroyView();
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
-            // Очищаем предпросмотр, если вышли, не сохранив настройки
             activity.clearPreviewBackground();
             if (!activity.navigator.hasSubScreen()) {
                 activity.headerManager.resetHeader();
