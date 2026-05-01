@@ -203,7 +203,7 @@ public class EditProfileFragment extends Fragment {
 
         btnSave.setOnClickListener(v -> { 
              if (isCompressing) {
-                 Toast.makeText(activity, "Дождитесь окончания сжатия видео!", Toast.LENGTH_SHORT).show();
+                 Toast.makeText(activity, R.string.err_wait_compressing, Toast.LENGTH_SHORT).show();
                  return;
              }
              
@@ -310,14 +310,13 @@ public class EditProfileFragment extends Fragment {
                 // === АППАРАТНОЕ СЖАТИЕ ЧЕРЕЗ TRANSCODER ===
                 if (isVideoBg) {
                     isCompressing = true;
-                    activity.runOnUiThread(() -> Toast.makeText(activity, "Сжатие видео... Пожалуйста, подождите.", Toast.LENGTH_LONG).show());
+                    activity.runOnUiThread(() -> Toast.makeText(activity, R.string.toast_compressing_video, Toast.LENGTH_LONG).show());
                     
                     File compressedFile = new File(activity.getCacheDir(), "compressed_bg_" + System.currentTimeMillis() + ".mp4");
                     
-                    // Используем правильный метод atMost(540)
                     Transcoder.into(compressedFile.getAbsolutePath())
                         .addDataSource(tempFile.getAbsolutePath())
-                        .setVideoTrackStrategy(DefaultVideoStrategy.atMost(720).build()) 
+                        .setVideoTrackStrategy(DefaultVideoStrategy.atMost(540).build()) 
                         .setListener(new TranscoderListener() {
                             @Override
                             public void onTranscodeProgress(double progress) {}
@@ -333,7 +332,7 @@ public class EditProfileFragment extends Fragment {
                                 } else {
                                     activity.runOnUiThread(() -> {
                                         pendingBgFile = compressedFile;
-                                        Toast.makeText(activity, "Видео успешно подготовлено!", Toast.LENGTH_SHORT).show();
+                                        Toast.makeText(activity, R.string.toast_video_ready, Toast.LENGTH_SHORT).show();
                                         activity.previewBackground(compressedFile.getAbsolutePath(), true);
                                     });
                                 }
@@ -347,7 +346,7 @@ public class EditProfileFragment extends Fragment {
                             @Override
                             public void onTranscodeFailed(@NonNull Throwable exception) {
                                 isCompressing = false;
-                                activity.runOnUiThread(() -> Toast.makeText(activity, "Ошибка при сжатии видео", Toast.LENGTH_SHORT).show());
+                                activity.runOnUiThread(() -> Toast.makeText(activity, R.string.err_video_compress, Toast.LENGTH_SHORT).show());
                             }
                         }).transcode();
                     return; 
