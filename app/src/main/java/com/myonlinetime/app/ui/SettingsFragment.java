@@ -79,12 +79,12 @@ public class SettingsFragment extends Fragment {
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
                         activity.resetAccountState(); 
                         
-                        // Мгновенный бесшовный перезапуск в гостевой режим
-                        activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putInt("open_tab_after_login", 5).apply(); 
-                        Intent intent = new Intent(activity, MainActivity.class);
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                        activity.startActivity(intent);
-                        activity.overridePendingTransition(0, 0); 
+                        // Бесшовный выход без перезапуска приложения
+                        activity.updateAvatarInUI();
+                        activity.navigator.switchScreen(0, null);
+                        
+                        loadUserData(view); 
+                        Toast.makeText(getContext(), getString(R.string.settings_sign_out), Toast.LENGTH_SHORT).show();
                     });
                 }
             });
