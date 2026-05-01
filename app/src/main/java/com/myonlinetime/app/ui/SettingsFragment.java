@@ -15,12 +15,15 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.fragment.app.Fragment;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.bumptech.glide.Glide;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
+
+import java.io.File;
 
 public class SettingsFragment extends Fragment {
 
@@ -30,6 +33,17 @@ public class SettingsFragment extends Fragment {
 
     private static final String PREFS_NAME = "AppPrefs";
     private static final String KEY_THEME = "selected_theme";
+
+    // === ПРИЕМНИК СИГНАЛА ОБНОВЛЕНИЯ ===
+    private final android.content.BroadcastReceiver profileUpdateReceiver = new android.content.BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            // Если мы получили сигнал об обновлении профиля — мгновенно перерисовываем шапку настроек
+            if (getView() != null && isAdded()) {
+                loadUserData(getView());
+            }
+        }
+    };
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -94,7 +108,8 @@ public class SettingsFragment extends Fragment {
         // Общие
         view.findViewById(R.id.btn_notifications).setOnClickListener(v -> {
             if (activity != null && activity.navigator != null) {
-                activity.navigator.openSubScreen(new NotificationsHistoryFragment());
+                // ИСПРАВЛЕНИЕ: Теперь открывает настройки уведомлений, а не историю!
+                activity.navigator.openSubScreen(new NotificationsFragment());
             }
         });
         view.findViewById(R.id.btn_clear_cache).setOnClickListener(v -> {
@@ -145,8 +160,27 @@ public class SettingsFragment extends Fragment {
                 regDateTxt.setText(getString(R.string.settings_reg_date, createdAt.isEmpty() ? "..." : createdAt));
             }
             
+            // === ИДЕАЛЬНОЕ ОБНОВЛЕНИЕ АВАТАРКИ В НАСТРОЙКАХ ===
             if (avatarView != null) {
-                Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + account.getId());
+                String uid = account.getId();
+                
+                // 1. Проверяем свежайший локальный файл из Оптимистичного UI
+                String customAvatarPath = activity.prefs.getString("custom_avatar_path_" + uid, null);
+                if (customAvatarPath != null) {
+                    File localFile = new File(customAvatarPath);
+                    if (localFile.exists()) {
+                        Glide.with(this)
+                             .load(localFile)
+                             .skipMemoryCache(true) // Обходим кэш
+                             .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
+                             .circleCrop()
+                             .into(avatarView);
+                        return; // Если файл есть, дальше не идем!
+                    }
+                }
+
+                // 2. Фоллбэк: старый кэш или сервер
+                Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + uid);
                 if (cachedAvatar != null) {
                     Glide.with(this).load(cachedAvatar).circleCrop().into(avatarView);
                 } else {
@@ -202,6 +236,18 @@ public class SettingsFragment extends Fragment {
         if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(false); 
         }
+        
+        // Подключаем слушатель обновлений!
+        LocalBroadcastManager.getInstance(requireContext())
+            .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_PROFILE_UPDATED"));
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        // Отключаем слушатель
+        LocalBroadcastManager.getInstance(requireContext())
+            .unregisterReceiver(profileUpdateReceiver);
     }
 
     @Override
