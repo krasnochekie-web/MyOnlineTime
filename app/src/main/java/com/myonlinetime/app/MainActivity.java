@@ -14,6 +14,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Looper;
@@ -24,6 +25,7 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.*;
 
+import com.myonlinetime.app.models.User;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
@@ -259,6 +261,17 @@ public class MainActivity extends AppCompatActivity {
         });
     } 
 
+    public void resetAccountState() {
+        vpsToken = null;
+        currentBgBase64 = null;
+        currentBgPath = null;
+        previewBgPath = null;
+        if (mMemoryCache != null) mMemoryCache.evictAll();
+        if (exoPlayer != null) exoPlayer.stop();
+        if (globalImageView != null) globalImageView.setImageDrawable(null);
+        prefs = getSharedPreferences("UserProfile", MODE_PRIVATE); 
+    }
+
     public void syncHeaderState() {
         getSupportFragmentManager().executePendingTransactions();
         if (navigator != null && navigator.hasSubScreen()) {
@@ -461,11 +474,10 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // --- АНТИ-МЕРЦАНИЕ (ANTI-FLICKER) ---
         if (currentBgPath != null && currentBgPath.startsWith("http") && path != null && !path.startsWith("http")) {
             String syncedUrl = prefs.getString("synced_bg_url_" + uid, "");
             if (currentBgPath.equals(syncedUrl) || currentBgPath.equals(currentBgBase64)) {
-                return; // Выходим, не прерывая плеер
+                return; 
             }
         }
 
@@ -642,7 +654,6 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(this::loadUserAvatarToBottomNav);
     }
 
-    // === ИДЕАЛЬНОЕ ОБНОВЛЕНИЕ АВАТАРКИ (БЕЗ ЗАВИСАНИЯ КЭША GLIDE) ===
     private void loadUserAvatarToBottomNav() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         if (account == null) {
@@ -656,7 +667,6 @@ public class MainActivity extends AppCompatActivity {
         if (iconProfile != null) {
             String uid = account.getId();
             
-            // 1. Сначала ищем свежайший локальный файл, созданный Оптимистичным UI
             String customAvatarPath = prefs.getString("custom_avatar_path_" + uid, null);
             if (customAvatarPath != null) {
                 File localFile = new File(customAvatarPath);
@@ -664,7 +674,7 @@ public class MainActivity extends AppCompatActivity {
                     iconProfile.setImageTintList(null); 
                     Glide.with(this)
                          .load(localFile)
-                         .skipMemoryCache(true) // Обязательно: заставляем Glide перечитать файл
+                         .skipMemoryCache(true) 
                          .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
                          .circleCrop()
                          .into(iconProfile);
@@ -672,7 +682,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // 2. Если свежего локального нет, пытаемся взять старый кэш из памяти
             Bitmap cachedAvatar = mMemoryCache.get("avatar_" + uid);
             if (cachedAvatar != null) {
                 iconProfile.setImageTintList(null); 
@@ -680,7 +689,6 @@ public class MainActivity extends AppCompatActivity {
                 return;
             } 
             
-            // 3. Иначе грузим из сети (с сервера)
             String savedUrl = prefs.getString("my_photo_base64", null);
             if (savedUrl != null) {
                 iconProfile.setImageTintList(null);
@@ -693,6 +701,7 @@ public class MainActivity extends AppCompatActivity {
                     } catch (Exception e) {}
                 }
             } else {
+                // БЕЗ ГУГЛОВСКОГО ФОЛЛБЭКА: просто ставим стандартную пустую заглушку
                 iconProfile.setImageTintList(androidx.core.content.ContextCompat.getColorStateList(this, R.color.nav_icon_selector));
                 iconProfile.setImageResource(R.drawable.ic_nav_profile); 
             }
@@ -810,6 +819,9 @@ public class MainActivity extends AppCompatActivity {
             Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
             try {
                 final GoogleSignInAccount acct = task.getResult(ApiException.class);
+                
+                resetAccountState();
+                
                 VpsApi.authenticateWithGoogle(MainActivity.this, acct.getIdToken(), new VpsApi.LoginCallback() {
                     @Override
                     public void onSuccess(String ourServerToken) {
