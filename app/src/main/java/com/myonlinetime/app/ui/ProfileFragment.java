@@ -27,6 +27,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.signature.ObjectKey;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.gson.Gson;
@@ -76,7 +77,7 @@ public class ProfileFragment extends Fragment {
                     LinearLayout appsContainerLocal = getView().findViewById(R.id.profile_apps_container);
                     ImageView btnExpand = getView().findViewById(R.id.btn_expand_apps);
                     ImageView btnCollapse = getView().findViewById(R.id.btn_collapse_apps);
-                    applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+                    StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
                 }
 
                 if (acct != null) {
@@ -160,13 +161,13 @@ public class ProfileFragment extends Fragment {
         btnExpand.setOnClickListener(v -> {
             btnExpand.setVisibility(View.GONE);
             btnCollapse.setVisibility(View.VISIBLE);
-            applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+            StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
         });
 
         btnCollapse.setOnClickListener(v -> {
             btnCollapse.setVisibility(View.GONE);
             btnExpand.setVisibility(View.VISIBLE);
-            applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+            StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
         });
 
         followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(finalTargetUid, true)));
@@ -181,7 +182,7 @@ public class ProfileFragment extends Fragment {
             nameView.setText(savedName);
             String myAbout = activity.prefs.getString("my_about", "");
             aboutView.setText(myAbout);
-            applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+            StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
             handleMediaLoading(activity, activity.prefs.getString("my_photo_base64", null), true, myUid);
 
@@ -218,7 +219,7 @@ public class ProfileFragment extends Fragment {
                         } else {
                             aboutView.setText("");
                         }
-                        applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+                        StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
                         if (user.photo != null && user.photo.length() > 10) {
                             if (isMe) activity.prefs.edit().putString("my_photo_base64", user.photo).apply();
@@ -366,7 +367,7 @@ public class ProfileFragment extends Fragment {
                 if (localCustomFile.exists()) {
                     Glide.with(activity)
                          .load(localCustomFile)
-                         .signature(new com.bumptech.glide.signature.ObjectKey(localCustomFile.lastModified()))
+                         .signature(new ObjectKey(localCustomFile.lastModified()))
                          .circleCrop()
                          .error(R.drawable.bg_edit_circle)
                          .into(avatarView);
@@ -413,43 +414,6 @@ public class ProfileFragment extends Fragment {
         }
     }
 
-    private void applyCollapseLogic(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
-        if (container == null || aboutView == null || btnExpand == null || btnCollapse == null) return;
-        
-        boolean isEmptyDesc = aboutView.getText().toString().trim().isEmpty();
-        aboutView.setVisibility(isEmptyDesc ? View.GONE : View.VISIBLE);
-        
-        if (aboutView.getParent() instanceof ViewGroup) {
-            ViewGroup parent = (ViewGroup) aboutView.getParent();
-            if (parent.getBackground() != null || parent.getChildCount() == 1) {
-                parent.setVisibility(isEmptyDesc ? View.GONE : View.VISIBLE);
-            }
-        }
-        
-        int limit = isEmptyDesc ? 3 : 2;
-        int count = container.getChildCount();
-        
-        if (count <= limit) {
-            btnExpand.setVisibility(View.GONE);
-            btnCollapse.setVisibility(View.GONE);
-            for (int i = 0; i < count; i++) {
-                container.getChildAt(i).setVisibility(View.VISIBLE);
-            }
-        } else {
-            if (btnCollapse.getVisibility() == View.VISIBLE) {
-                btnExpand.setVisibility(View.GONE);
-                for (int i = 0; i < count; i++) {
-                    container.getChildAt(i).setVisibility(View.VISIBLE);
-                }
-            } else {
-                btnExpand.setVisibility(View.VISIBLE);
-                for (int i = 0; i < count; i++) {
-                    container.getChildAt(i).setVisibility(i < limit ? View.VISIBLE : View.GONE);
-                }
-            }
-        }
-    }
-
     @Override
     public void onResume() {
         super.onResume();
@@ -493,13 +457,13 @@ public class ProfileFragment extends Fragment {
                         nameView.setText(currentName);
                         aboutView.setText(activity.prefs.getString("my_about", ""));
                         
-                        // === ИСПРАВЛЕНИЕ: ЖЕСТКИЙ ТРИГГЕР СЕТИ ДЛЯ НОВОГО АККАУНТА ===
+                        // === ЖЕСТКАЯ ЗАЩИТА ОТ ПУСТОГО ЭКРАНА (ПРИ ЗАХОДЕ С НОВОГО АККАУНТА) ===
                         if (currentName.equals("...") && fetchProfileDataRunnable != null) {
                             fetchProfileDataRunnable.run();
                         }
 
                         LinearLayout appsContainerLocal = getView().findViewById(R.id.profile_apps_container);
-                        applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+                        StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
                         
                         String b64 = activity.prefs.getString("my_photo_base64", null);
                         handleMediaLoading(activity, b64, true, acct.getId());
@@ -614,16 +578,9 @@ public class ProfileFragment extends Fragment {
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
 
-                int collapsedLimit = aboutView.getText().toString().trim().isEmpty() ? 3 : 2;
-                int currentLimit = 0;
-                
                 for (AppUiData data : preloadedData) {
                     View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, container, false);
                     
-                    if (btnCollapse.getVisibility() != View.VISIBLE && currentLimit >= collapsedLimit) {
-                        view.setVisibility(View.GONE);
-                    }
-
                     ImageView iconView = view.findViewById(R.id.app_icon);
                     TextView nameView = view.findViewById(R.id.app_name);
                     TextView timeView = view.findViewById(R.id.app_time);
@@ -659,10 +616,9 @@ public class ProfileFragment extends Fragment {
                     }
                     
                     container.addView(view);
-                    currentLimit++;
                 }
 
-                if (currentLimit == 0 && !topApps.isEmpty()) {
+                if (preloadedData.isEmpty() && !topApps.isEmpty()) {
                     String hiddenText = activity.getString(R.string.hidden_time_placeholder) + "  "; 
                     SpannableString ss = new SpannableString(hiddenText);
                     
@@ -685,7 +641,7 @@ public class ProfileFragment extends Fragment {
                     weekTimeText.setOnClickListener(null); 
                 }
 
-                applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
+                StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
             });
         });
     }
