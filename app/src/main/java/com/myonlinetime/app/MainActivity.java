@@ -82,6 +82,7 @@ public class MainActivity extends AppCompatActivity {
     
     private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable hideBgRunnable;
+    private boolean isSyncingBg = false; // Флаг от двойного скачивания
 
     private final SharedPreferences.OnSharedPreferenceChangeListener notifListener = (sharedPrefs, key) -> {
         if ("notif_history_array".equals(key)) {
@@ -311,6 +312,7 @@ public class MainActivity extends AppCompatActivity {
         exoPlayer.setVolume(0f);
     }
 
+    // --- УМНАЯ ОТРИСОВКА ФОНА ---
     public void updateGlobalBackground(boolean show) {
         if (hideBgRunnable == null) {
             hideBgRunnable = () -> {
@@ -328,18 +330,30 @@ public class MainActivity extends AppCompatActivity {
 
         bgHandler.removeCallbacks(hideBgRunnable);
 
-        // УМНАЯ ЛОГИКА ВЫБОРА ФОНА:
-        // Если мы на вкладке профиля (currentTab == 4) и там есть свой фон — показываем его.
-        // Во всех остальных случаях — показываем глобальный фон из настроек.
+        // 1. АВТО-КЭШИРОВАНИЕ ФОНА ПОЛЬЗОВАТЕЛЯ
+        String myBgUrl = prefs.getString("my_bg_base64", null);
+        if (myBgUrl != null && myBgUrl.startsWith("http")) {
+            syncMyBackground(myBgUrl);
+        }
+
+        // 2. ВЫБОР ИСТОЧНИКА ДЛЯ ФОНА
         String path = null;
         boolean isVideo = false;
 
         if (currentTab == 4 && currentBgBase64 != null && !currentBgBase64.isEmpty() && !currentBgBase64.equals("null")) {
+            // Если мы смотрим чей-то профиль (или свой) — показываем его фон напрямую из сети
             path = currentBgBase64;
             isVideo = path.toLowerCase().endsWith(".mp4") || path.toLowerCase().endsWith(".mov");
         } else {
+            // Если мы в настройках или ленте — показываем наш ГЛОБАЛЬНЫЙ локальный фон
             path = prefs.getString("custom_bg_path", null);
             isVideo = prefs.getBoolean("custom_bg_is_video", false);
+            
+            // Заглушка: если файл еще скачивается, временно стримим из интернета
+            if ((path == null || !new File(path).exists()) && myBgUrl != null && myBgUrl.startsWith("http")) {
+                path = myBgUrl;
+                isVideo = path.toLowerCase().endsWith(".mp4") || path.toLowerCase().endsWith(".mov");
+            }
         }
 
         if (path == null || path.isEmpty()) {
@@ -347,8 +361,8 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        // Если фон не поменялся — просто возвращаем видимость
         if (path.equals(currentBgPath)) {
-            // Фон уже запущен, просто возвращаем видимость
             if (isVideo) {
                 if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
                 if (playerView != null) playerView.setVisibility(View.VISIBLE);
@@ -356,9 +370,7 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 if (playerView != null) playerView.setVisibility(View.INVISIBLE);
                 if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
-                if (globalImageView != null) {
-                    globalImageView.setVisibility(View.VISIBLE);
-                }
+                if (globalImageView != null) globalImageView.setVisibility(View.VISIBLE);
             }
             return;
         }
@@ -394,6 +406,67 @@ public class MainActivity extends AppCompatActivity {
         }
     }   
     
+    // --- ЗАГРУЗЧИК ФОНА В КЭШ ДЛЯ КАЖДОГО АККАУНТА ---
+    public void syncMyBackground(String bgUrl) {
+        if (bgUrl == null || bgUrl.isEmpty() || bgUrl.equals("null") || isSyncingBg) return;
+        
+        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+        if (account == null) return;
+        
+        String uid = account.getId();
+        String cachedUrl = prefs.getString("synced_bg_url_" + uid, "");
+        boolean isVideo = bgUrl.toLowerCase().endsWith(".mp4") || bgUrl.toLowerCase().endsWith(".mov");
+        String ext = isVideo ? ".mp4" : ".jpg";
+        
+        // У каждого аккаунта будет свой собственный файл фона!
+        File localFile = new File(getFilesDir(), "my_bg_" + uid + ext);
+
+        if (bgUrl.equals(cachedUrl) && localFile.exists()) {
+            String currentCustom = prefs.getString("custom_bg_path", "");
+            // Если файл есть, просто убеждаемся, что приложение использует именно его
+            if (!localFile.getAbsolutePath().equals(currentCustom)) {
+                prefs.edit()
+                     .putString("custom_bg_path", localFile.getAbsolutePath())
+                     .putBoolean("custom_bg_is_video", isVideo)
+                     .apply();
+                updateGlobalBackground(true);
+            }
+            return;
+        }
+
+        // Если файла нет или ссылка новая — скачиваем!
+        isSyncingBg = true;
+        Utils.backgroundExecutor.execute(() -> {
+            try {
+                java.net.URL url = new java.net.URL(bgUrl);
+                java.io.InputStream is = url.openStream();
+                java.io.FileOutputStream fos = new java.io.FileOutputStream(localFile);
+                byte[] buffer = new byte[8192];
+                int len;
+                while ((len = is.read(buffer)) != -1) {
+                    fos.write(buffer, 0, len);
+                }
+                fos.flush();
+                fos.close();
+                is.close();
+
+                runOnUiThread(() -> {
+                    isSyncingBg = false;
+                    prefs.edit()
+                         .putString("synced_bg_url_" + uid, bgUrl)
+                         .putString("custom_bg_path", localFile.getAbsolutePath())
+                         .putBoolean("custom_bg_is_video", isVideo)
+                         .apply();
+                         
+                    updateGlobalBackground(true);
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                isSyncingBg = false;
+            }
+        });
+    }
+
     @Override
     protected void onPause() {
         super.onPause();
@@ -408,6 +481,7 @@ public class MainActivity extends AppCompatActivity {
         loadUserAvatarToBottomNav(); 
         updateNotificationBadge(); 
         
+        // Восстанавливаем фон при возврате в приложение
         String path = prefs.getString("custom_bg_path", null);
         if (path != null) {
             boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
