@@ -58,6 +58,7 @@ public class ProfileFragment extends Fragment {
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
+    private Runnable fetchProfileDataRunnable;
 
     private final android.content.BroadcastReceiver profileUpdateReceiver = new android.content.BroadcastReceiver() {
         @Override
@@ -133,7 +134,6 @@ public class ProfileFragment extends Fragment {
 
         final TextView nameView = view.findViewById(R.id.profile_name);
         final TextView aboutView = view.findViewById(R.id.profile_about);
-        
         avatarView = view.findViewById(R.id.profile_avatar);
         
         final View btnEdit = view.findViewById(R.id.btn_edit_profile);
@@ -151,20 +151,8 @@ public class ProfileFragment extends Fragment {
         final ImageView btnCollapse = view.findViewById(R.id.btn_collapse_apps);
         final LinearLayout appsContainerLocal = view.findViewById(R.id.profile_apps_container);
 
-        if (appsContainerLocal != null) {
-            appsContainerLocal.setLayoutTransition(null); 
-            appsContainerLocal.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
-                @Override
-                public void onChildViewAdded(View parent, View child) {
-                    appsContainerLocal.post(() -> applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse));
-                }
-                @Override public void onChildViewRemoved(View parent, View child) {}
-            });
-        }
-
         loadMyStatsRunnable = () -> {
             if (isAdded() && appsContainerLocal != null && weekTimeText != null) {
-                appsContainerLocal.removeAllViews();
                 StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
             }
         };
@@ -189,7 +177,6 @@ public class ProfileFragment extends Fragment {
         });
 
         if (isMe) {
-            // Вместо гугловского имени ставим "..." по умолчанию
             String savedName = activity.prefs.getString("my_nickname", "...");
             nameView.setText(savedName);
             String myAbout = activity.prefs.getString("my_about", "");
@@ -212,144 +199,131 @@ public class ProfileFragment extends Fragment {
             btnFollow.setVisibility(View.INVISIBLE);
         }
 
-        final Runnable fetchProfileData = new Runnable() {
-            @Override
-            public void run() {
-                VpsApi.getUser(activity, activity.vpsToken, finalTargetUid, new VpsApi.UserCallback() {
-                    @Override
-                    public void onLoaded(User user) {
-                        if (!isAdded()) return;
-                        if (user != null) {
-                            if (user.nickname != null) {
-                                nameView.setText(user.nickname);
-                                if (isMe) activity.prefs.edit().putString("my_nickname", user.nickname).apply();
-                            } else {
-                                nameView.setText(isMe ? "..." : activity.getString(R.string.no_name));
-                            }
+        fetchProfileDataRunnable = () -> {
+            VpsApi.getUser(activity, activity.vpsToken, finalTargetUid, new VpsApi.UserCallback() {
+                @Override
+                public void onLoaded(User user) {
+                    if (!isAdded()) return;
+                    if (user != null) {
+                        if (user.nickname != null) {
+                            nameView.setText(user.nickname);
+                            if (isMe) activity.prefs.edit().putString("my_nickname", user.nickname).apply();
+                        } else {
+                            nameView.setText(isMe ? "..." : activity.getString(R.string.no_name));
+                        }
 
-                            if (user.about != null) {
-                                aboutView.setText(user.about);
-                                if (isMe) activity.prefs.edit().putString("my_about", user.about).apply();
-                            } else {
-                                aboutView.setText("");
-                            }
-                            applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+                        if (user.about != null) {
+                            aboutView.setText(user.about);
+                            if (isMe) activity.prefs.edit().putString("my_about", user.about).apply();
+                        } else {
+                            aboutView.setText("");
+                        }
+                        applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
-                            if (user.photo != null && user.photo.length() > 10) {
-                                if (isMe) activity.prefs.edit().putString("my_photo_base64", user.photo).apply();
-                                handleMediaLoading(activity, user.photo, false, finalTargetUid);
-                            }
+                        if (user.photo != null && user.photo.length() > 10) {
+                            if (isMe) activity.prefs.edit().putString("my_photo_base64", user.photo).apply();
+                            handleMediaLoading(activity, user.photo, false, finalTargetUid);
+                        }
 
-                            // ПРАВИЛЬНАЯ ЗАГРУЗКА ФОНА В ФОНОВОМ РЕЖИМЕ
-                            if (user.background != null && user.background.length() > 10) {
-                                if (isMe) {
-                                    activity.prefs.edit().putString("my_bg_base64", user.background).apply();
-                                    activity.syncMyBackground(user.background);
-                                }
-                            }
-
-                            if (isMe && user.createdAt != null) {
-                                try {
-                                    java.text.SimpleDateFormat serverFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
-                                    serverFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
-                                    java.text.SimpleDateFormat appFormat = new java.text.SimpleDateFormat("dd MMMM yyyy", new java.util.Locale("ru"));
-                                    
-                                    java.util.Date date = serverFormat.parse(user.createdAt);
-                                    String prettyDate = appFormat.format(date);
-                                    
-                                    activity.prefs.edit().putString("my_created_at", prettyDate).apply();
-                                } catch (Exception e) {
-                                    e.printStackTrace();
-                                }
-                            }
-
+                        if (user.background != null && user.background.length() > 10) {
                             if (isMe) {
-                                boolean cacheChanged = false;
-                                
-                                if (user.hiddenApps != null) {
-                                    Set<String> newHidden = new HashSet<>(user.hiddenApps);
-                                    if (!localHiddenApps.equals(newHidden)) {
-                                        localHiddenApps.clear();
-                                        localHiddenApps.addAll(newHidden);
-                                        prefs.edit().putStringSet("hidden_apps", localHiddenApps).apply();
-                                        cacheChanged = true;
-                                    }
-                                }
-                                
-                                if (user.appDescriptions != null) {
-                                    if (!localDescriptions.equals(user.appDescriptions)) {
-                                        localDescriptions.clear();
-                                        localDescriptions.putAll(user.appDescriptions);
-                                        prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
-                                        cacheChanged = true;
-                                    }
-                                }
-                                
-                                if (cacheChanged) requestLoadMyStats();
+                                activity.prefs.edit().putString("my_bg_base64", user.background).apply();
+                                activity.syncMyBackground(user.background);
                             }
+                        }
 
-                            if (!isMe) {
-                                if (user.hiddenApps != null) {
+                        if (isMe && user.createdAt != null) {
+                            try {
+                                java.text.SimpleDateFormat serverFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
+                                serverFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                                java.text.SimpleDateFormat appFormat = new java.text.SimpleDateFormat("dd MMMM yyyy", new java.util.Locale("ru"));
+                                java.util.Date date = serverFormat.parse(user.createdAt);
+                                activity.prefs.edit().putString("my_created_at", appFormat.format(date)).apply();
+                            } catch (Exception e) {}
+                        }
+
+                        if (isMe) {
+                            boolean cacheChanged = false;
+                            if (user.hiddenApps != null) {
+                                Set<String> newHidden = new HashSet<>(user.hiddenApps);
+                                if (!localHiddenApps.equals(newHidden)) {
                                     localHiddenApps.clear();
-                                    localHiddenApps.addAll(user.hiddenApps);
+                                    localHiddenApps.addAll(newHidden);
+                                    prefs.edit().putStringSet("hidden_apps", localHiddenApps).apply();
+                                    cacheChanged = true;
                                 }
-                                if (user.appDescriptions != null) {
+                            }
+                            if (user.appDescriptions != null) {
+                                if (!localDescriptions.equals(user.appDescriptions)) {
                                     localDescriptions.clear();
                                     localDescriptions.putAll(user.appDescriptions);
+                                    prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
+                                    cacheChanged = true;
                                 }
-                                renderOtherUserStats(user.topApps, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
                             }
+                            if (cacheChanged) requestLoadMyStats();
+                        }
 
-                        } else if (!isMe) nameView.setText(activity.getString(R.string.new_user));
-                    }
-                    @Override public void onError(String e) {}
-                });
-
-                VpsApi.getCounts(activity.vpsToken, finalTargetUid, new VpsApi.Callback() {
-                    @Override public void onSuccess(String result) {
-                        if (!isAdded()) return; 
-                        try {
-                            org.json.JSONObject json = new org.json.JSONObject(result);
-                            followersCount.setText(String.valueOf(json.optInt("followers", 0)));
-                            followingCount.setText(String.valueOf(json.optInt("following", 0)));
-                        } catch (Exception e) {}
-                    }
-                    @Override public void onError(String error) {}
-                });
-
-                if (!isMe) {
-                    VpsApi.checkIsFollowing(activity.vpsToken, finalTargetUid, new VpsApi.BooleanCallback() {
-                         @Override public void onResult(final boolean isFollowing) {
-                             if (!isAdded()) return;
-                             updateFollowButton(btnFollow, isFollowing);
-                             btnFollow.setVisibility(View.VISIBLE);
-                             btnFollow.setOnClickListener(new View.OnClickListener() {
-                                 boolean currentStatus = isFollowing;
-                                 public void onClick(View v) {
-                                     currentStatus = !currentStatus;
-                                     updateFollowButton(btnFollow, currentStatus);
-                                     try {
-                                         int count = Integer.parseInt(followersCount.getText().toString());
-                                         count = currentStatus ? count + 1 : count - 1;
-                                         if (count < 0) count = 0;
-                                         followersCount.setText(String.valueOf(count));
-                                     } catch (Exception e) {}
-                                     VpsApi.setFollow(activity.vpsToken, finalTargetUid, currentStatus, new VpsApi.Callback() {
-                                         @Override public void onSuccess(String s) {}
-                                         @Override public void onError(String err) {
-                                             if (isAdded()) Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
-                                         }
-                                     });
-                                 }
-                             });
-                         }
-                    });
+                        if (!isMe) {
+                            if (user.hiddenApps != null) {
+                                localHiddenApps.clear();
+                                localHiddenApps.addAll(user.hiddenApps);
+                            }
+                            if (user.appDescriptions != null) {
+                                localDescriptions.clear();
+                                localDescriptions.putAll(user.appDescriptions);
+                            }
+                            renderOtherUserStats(user.topApps, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
+                        }
+                    } else if (!isMe) nameView.setText(activity.getString(R.string.new_user));
                 }
+                @Override public void onError(String e) {}
+            });
+
+            VpsApi.getCounts(activity.vpsToken, finalTargetUid, new VpsApi.Callback() {
+                @Override public void onSuccess(String result) {
+                    if (!isAdded()) return; 
+                    try {
+                        org.json.JSONObject json = new org.json.JSONObject(result);
+                        followersCount.setText(String.valueOf(json.optInt("followers", 0)));
+                        followingCount.setText(String.valueOf(json.optInt("following", 0)));
+                    } catch (Exception e) {}
+                }
+                @Override public void onError(String error) {}
+            });
+
+            if (!isMe) {
+                VpsApi.checkIsFollowing(activity.vpsToken, finalTargetUid, new VpsApi.BooleanCallback() {
+                     @Override public void onResult(final boolean isFollowing) {
+                         if (!isAdded()) return;
+                         updateFollowButton(btnFollow, isFollowing);
+                         btnFollow.setVisibility(View.VISIBLE);
+                         btnFollow.setOnClickListener(new View.OnClickListener() {
+                             boolean currentStatus = isFollowing;
+                             public void onClick(View v) {
+                                 currentStatus = !currentStatus;
+                                 updateFollowButton(btnFollow, currentStatus);
+                                 try {
+                                     int count = Integer.parseInt(followersCount.getText().toString());
+                                     count = currentStatus ? count + 1 : count - 1;
+                                     if (count < 0) count = 0;
+                                     followersCount.setText(String.valueOf(count));
+                                 } catch (Exception e) {}
+                                 VpsApi.setFollow(activity.vpsToken, finalTargetUid, currentStatus, new VpsApi.Callback() {
+                                     @Override public void onSuccess(String s) {}
+                                     @Override public void onError(String err) {
+                                         if (isAdded()) Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
+                                     }
+                                 });
+                             }
+                         });
+                     }
+                });
             }
         };
 
         if (activity.vpsToken != null) {
-            fetchProfileData.run();
+            fetchProfileDataRunnable.run();
         } else {
             if (activity.mGoogleSignInClient != null) {
                 activity.mGoogleSignInClient.silentSignIn().addOnSuccessListener(freshAccount -> {
@@ -357,7 +331,7 @@ public class ProfileFragment extends Fragment {
                         @Override
                         public void onSuccess(final String token) {
                             activity.vpsToken = token;
-                            fetchProfileData.run();
+                            fetchProfileDataRunnable.run();
                         }
                         @Override public void onError(String error) {}
                     });
@@ -366,7 +340,7 @@ public class ProfileFragment extends Fragment {
                         @Override
                         public void onSuccess(final String token) {
                             activity.vpsToken = token;
-                            fetchProfileData.run();
+                            fetchProfileDataRunnable.run();
                         }
                         @Override public void onError(String error) {}
                     });
@@ -392,8 +366,7 @@ public class ProfileFragment extends Fragment {
                 if (localCustomFile.exists()) {
                     Glide.with(activity)
                          .load(localCustomFile)
-                         .skipMemoryCache(true)
-                         .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
+                         .signature(new com.bumptech.glide.signature.ObjectKey(localCustomFile.lastModified()))
                          .circleCrop()
                          .error(R.drawable.bg_edit_circle)
                          .into(avatarView);
@@ -516,13 +489,18 @@ public class ProfileFragment extends Fragment {
                     GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
                     
                     if (nameView != null && aboutView != null && acct != null) {
-                        nameView.setText(activity.prefs.getString("my_nickname", "..."));
-                        
+                        String currentName = activity.prefs.getString("my_nickname", "...");
+                        nameView.setText(currentName);
                         aboutView.setText(activity.prefs.getString("my_about", ""));
+                        
+                        // === ИСПРАВЛЕНИЕ: ЖЕСТКИЙ ТРИГГЕР СЕТИ ДЛЯ НОВОГО АККАУНТА ===
+                        if (currentName.equals("...") && fetchProfileDataRunnable != null) {
+                            fetchProfileDataRunnable.run();
+                        }
+
                         LinearLayout appsContainerLocal = getView().findViewById(R.id.profile_apps_container);
                         applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
                         
-                        // ИСПРАВЛЕНО: Передаем корректную ссылку, чтобы аватар не моргал
                         String b64 = activity.prefs.getString("my_photo_base64", null);
                         handleMediaLoading(activity, b64, true, acct.getId());
                     }
@@ -559,7 +537,10 @@ public class ProfileFragment extends Fragment {
     }
 
     private void renderOtherUserStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
-        container.removeAllViews();
+        if (container != null) {
+            container.setLayoutTransition(null);
+            container.removeAllViews();
+        }
         if (topApps == null || topApps.isEmpty() || activity == null) return;
 
         final long[] totalVisibleTime = {0};
