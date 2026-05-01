@@ -194,8 +194,9 @@ public class SettingsFragment extends Fragment {
                                 Glide.with(this).load(bytes).circleCrop().into(avatarView);
                             } catch (Exception e){}
                         }
-                    } else if (account.getPhotoUrl() != null) {
-                        Glide.with(this).load(account.getPhotoUrl()).circleCrop().into(avatarView);
+                    } else {
+                        // БЕЗ ГУГЛОВСКОГО ФОЛЛБЭКА: просто ставим стандартную заглушку
+                        Glide.with(this).load(R.drawable.bg_edit_circle).circleCrop().into(avatarView);
                     }
                 }
             }
