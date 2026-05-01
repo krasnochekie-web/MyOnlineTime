@@ -56,7 +56,6 @@ public class ProfileFragment extends Fragment {
     private boolean isMe = false;
     private ImageView avatarView;
 
-    // === ДОБАВЛЕНО: Предохранитель от двойного мерцания списка ===
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
 
@@ -136,7 +135,6 @@ public class ProfileFragment extends Fragment {
             });
         }
 
-        // === ДОБАВЛЕНО: Настройка предохранителя ===
         loadMyStatsRunnable = () -> {
             if (isAdded() && appsContainerLocal != null && weekTimeText != null) {
                 appsContainerLocal.removeAllViews();
@@ -160,7 +158,6 @@ public class ProfileFragment extends Fragment {
         followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(finalTargetUid, false)));
 
         loadLocalCacheAsync(() -> {
-            // === ИСПРАВЛЕНИЕ: Используем безопасный вызов вместо прямого ===
             if (isMe && isAdded()) requestLoadMyStats();
         });
 
@@ -209,7 +206,6 @@ public class ProfileFragment extends Fragment {
                             }
                             applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
-                            // Этот блок теперь идеально обрабатывает и старый Base64, и новые URL-ссылки
                             if (user.photo != null && user.photo.length() > 10) {
                                 if (isMe) activity.prefs.edit().putString("my_photo_base64", user.photo).apply();
                                 handleMediaLoading(activity, user.photo, false, finalTargetUid);
@@ -249,7 +245,6 @@ public class ProfileFragment extends Fragment {
                                     prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
                                     cacheChanged = true;
                                 }
-                                // === ИСПРАВЛЕНИЕ: Используем безопасный вызов ===
                                 if (cacheChanged) requestLoadMyStats();
                             }
 
@@ -342,10 +337,9 @@ public class ProfileFragment extends Fragment {
         return view;
     }
 
-    // === ДОБАВЛЕНО: Безопасный вызов отрисовки статистики (предотвращает двойное мерцание) ===
     private void requestLoadMyStats() {
         uiHandler.removeCallbacks(loadMyStatsRunnable);
-        uiHandler.postDelayed(loadMyStatsRunnable, 150); // Ждем 150мс, отсекая дубли
+        uiHandler.postDelayed(loadMyStatsRunnable, 150);
     }
 
     private void handleMediaLoading(MainActivity activity, String base64Data, boolean useLocalFile, String uid) {
@@ -357,7 +351,6 @@ public class ProfileFragment extends Fragment {
             return;
         }
 
-        // Этот блок спасает нас! Он перехватывает новые ссылки с сервера.
         if (base64Data.startsWith("http")) {
             Glide.with(activity).load(base64Data).circleCrop().into(avatarView);
             return;
@@ -453,11 +446,10 @@ public class ProfileFragment extends Fragment {
                     if (nameView != null && aboutView != null && acct != null) {
                         nameView.setText(activity.prefs.getString("my_nickname", acct.getDisplayName()));
                         
-                        // ИСПРАВЛЕНИЕ: Обновляем описание, применяем логику скрытия и перезагружаем список
+                        // ИСПРАВЛЕНИЕ: Обновляем текст и просто применяем логику скрытия/показа БЕЗ перерисовки всего списка
                         aboutView.setText(activity.prefs.getString("my_about", ""));
                         LinearLayout appsContainerLocal = getView().findViewById(R.id.profile_apps_container);
                         applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
-                        requestLoadMyStats();
                         
                         String b64 = activity.prefs.getString("my_photo_base64", null);
                         handleMediaLoading(activity, b64, true, acct.getId());
@@ -495,7 +487,6 @@ public class ProfileFragment extends Fragment {
     }
 
     private void renderOtherUserStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
-        // ИСПРАВЛЕНИЕ: Очищаем контейнер ДО фоновой загрузки, чтобы не было дублей
         container.removeAllViews();
         if (topApps == null || topApps.isEmpty() || activity == null) return;
 
@@ -764,7 +755,6 @@ public class ProfileFragment extends Fragment {
             localDescriptions.put(pkgName, newDesc);
             prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
 
-            // ИСПРАВЛЕНИЕ: МГНОВЕННАЯ ПЕРЕРИСОВКА ОПИСАНИЯ
             if (descView != null) {
                 if (!newDesc.isEmpty()) {
                     descView.setText(newDesc);
@@ -774,7 +764,6 @@ public class ProfileFragment extends Fragment {
                 }
             }
 
-            // === ИСПРАВЛЕНИЕ: Безопасный вызов отрисовки статистики с пересчетом ===
             requestLoadMyStats();
 
             dialog.dismiss();
