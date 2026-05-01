@@ -79,15 +79,12 @@ public class SettingsFragment extends Fragment {
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
                         activity.resetAccountState(); 
                         
-                        // Мгновенно перезапускаем приложение в гостевой режим
+                        // Мгновенный бесшовный перезапуск в гостевой режим
                         activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putInt("open_tab_after_login", 5).apply(); 
                         Intent intent = new Intent(activity, MainActivity.class);
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                         activity.startActivity(intent);
-                        activity.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
-                        activity.finish();
-                        
-                        Toast.makeText(getContext(), getString(R.string.settings_sign_out), Toast.LENGTH_SHORT).show();
+                        activity.overridePendingTransition(0, 0); 
                     });
                 }
             });
@@ -148,7 +145,7 @@ public class SettingsFragment extends Fragment {
             TextView nicknameView = view.findViewById(R.id.settings_nickname);
 
             if (nicknameView != null) {
-                String savedName = activity.prefs.getString("my_nickname", account.getDisplayName());
+                String savedName = activity.prefs.getString("my_nickname", "...");
                 nicknameView.setText(savedName);
             }
             if (accountIdTxt != null) {
@@ -166,12 +163,7 @@ public class SettingsFragment extends Fragment {
                 if (customAvatarPath != null) {
                     File localFile = new File(customAvatarPath);
                     if (localFile.exists()) {
-                        Glide.with(this)
-                             .load(localFile)
-                             .skipMemoryCache(true)
-                             .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
-                             .circleCrop()
-                             .into(avatarView);
+                        Glide.with(this).load(localFile).skipMemoryCache(true).diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE).circleCrop().into(avatarView);
                         return; 
                     }
                 }
@@ -231,15 +223,13 @@ public class SettingsFragment extends Fragment {
         if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(false); 
         }
-        LocalBroadcastManager.getInstance(requireContext())
-            .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_PROFILE_UPDATED"));
+        LocalBroadcastManager.getInstance(requireContext()).registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_PROFILE_UPDATED"));
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        LocalBroadcastManager.getInstance(requireContext())
-            .unregisterReceiver(profileUpdateReceiver);
+        LocalBroadcastManager.getInstance(requireContext()).unregisterReceiver(profileUpdateReceiver);
     }
 
     @Override
