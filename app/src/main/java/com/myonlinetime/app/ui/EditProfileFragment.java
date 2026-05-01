@@ -25,14 +25,17 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 
-import java.io.ByteArrayOutputStream;
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 
 public class EditProfileFragment extends Fragment {
 
-    // Временные хранилища для новых медиафайлов
-    private String pendingPhotoBase64 = null;
-    private String pendingBgBase64 = null;
+    // ПРОЩАЙ BASE64! Теперь мы храним ссылки на реальные временные файлы
+    private File pendingPhotoFile = null;
+    private File pendingBgFile = null;
 
     // Современные лончеры для системного выбора файлов
     private final ActivityResultLauncher<String[]> photoPicker = registerForActivityResult(
@@ -95,12 +98,14 @@ public class EditProfileFragment extends Fragment {
             });
         }
 
+        // Загрузка текущей аватарки
         Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + acct.getId());
         if (cachedAvatar != null && avatarPreview != null) {
             Glide.with(activity).load(cachedAvatar).circleCrop().into(avatarPreview);
         } else {
             String savedAvatar = activity.prefs.getString("my_photo_base64", null);
             if (savedAvatar != null && avatarPreview != null) {
+                // Если это уже новая URL-ссылка, либо старый кусок Base64 (для обратной совместимости)
                 if (savedAvatar.startsWith("http")) {
                     Glide.with(activity).load(savedAvatar).circleCrop().into(avatarPreview);
                 } else {
@@ -112,11 +117,7 @@ public class EditProfileFragment extends Fragment {
             }
         }
 
-        // --- ИСПРАВЛЕНИЕ: ЖЕСТКОЕ ОГРАНИЧЕНИЕ ТИПОВ ФАЙЛОВ ---
-        // Для аватарки разрешаем ТОЛЬКО картинки (убрали video/*)
         String[] photoMimeTypes = new String[]{"image/*"};
-        
-        // Для фона разрешаем и картинки, и видео (ведь ExoPlayer в фоне мы оставили)
         String[] backgroundMimeTypes = new String[]{"image/*", "video/*"};
         
         View.OnClickListener photoClickListener = v -> photoPicker.launch(photoMimeTypes);
@@ -126,7 +127,6 @@ public class EditProfileFragment extends Fragment {
         if (btnChangeBackground != null) {
             btnChangeBackground.setOnClickListener(v -> bgPicker.launch(backgroundMimeTypes));
         }
-        // --------------------------------------------------------
 
         btnSave.setOnClickListener(v -> { 
              final String n = inputName.getText().toString().trim();
@@ -140,27 +140,47 @@ public class EditProfileFragment extends Fragment {
                          @Override public void onSuccess(String token) {
                              activity.vpsToken = token;
                              
-                             VpsApi.saveUserProfile(activity.vpsToken, n, a, pendingPhotoBase64, pendingBgBase64, new VpsApi.Callback() {
+                             // ОТПРАВЛЯЕМ ФАЙЛЫ, А НЕ ТЕКСТ!
+                             VpsApi.saveUserProfile(activity.vpsToken, n, a, pendingPhotoFile, pendingBgFile, new VpsApi.Callback() {
                                  @Override public void onSuccess(String result) {
                                      if (!isAdded()) return;
-                                     
-                                     activity.prefs.edit()
-                                             .putString("my_nickname", n)
-                                             .putString("my_about", a)
-                                             .apply();
-                                             
-                                     if (pendingPhotoBase64 != null) {
-                                         activity.prefs.edit().putString("my_photo_base64", pendingPhotoBase64).apply();
-                                     }
-                                     if (pendingBgBase64 != null) {
-                                         activity.prefs.edit().putString("my_bg_base64", pendingBgBase64).apply();
-                                         activity.currentBgBase64 = pendingBgBase64; 
-                                     }
+                                     try {
+                                         // Сервер прислал нам JSON со ссылками. Распакуем его!
+                                         JSONObject json = new JSONObject(result);
+                                         String newPhotoUrl = json.optString("photoUrl", null);
+                                         String newBgUrl = json.optString("backgroundUrl", null);
 
-                                     Toast.makeText(activity, R.string.saved_successfully, Toast.LENGTH_SHORT).show();
-                                     activity.updateGlobalBackground(true);
-                                     
-                                     activity.navigator.closeSubScreen();
+                                         activity.prefs.edit()
+                                                 .putString("my_nickname", n)
+                                                 .putString("my_about", a)
+                                                 .apply();
+                                                 
+                                         // Сохраняем КРАСИВЫЕ ССЫЛКИ вместо адского Base64
+                                         if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null")) {
+                                             activity.prefs.edit().putString("my_photo_base64", newPhotoUrl).apply();
+                                         }
+                                         if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null")) {
+                                             activity.prefs.edit().putString("my_bg_base64", newBgUrl).apply();
+                                             activity.currentBgBase64 = newBgUrl; 
+                                         }
+
+                                         // Удаляем временные файлы за ненадобностью
+                                         if (pendingPhotoFile != null && pendingPhotoFile.exists()) pendingPhotoFile.delete();
+                                         if (pendingBgFile != null && pendingBgFile.exists()) pendingBgFile.delete();
+
+                                         Toast.makeText(activity, R.string.saved_successfully, Toast.LENGTH_SHORT).show();
+                                         activity.updateGlobalBackground(true);
+                                         
+                                         // МАГИЯ! Мгновенно обновляем аватарку в нижнем меню
+                                         if (activity instanceof MainActivity) {
+                                             ((MainActivity) activity).updateAvatarInUI();
+                                         }
+                                         
+                                         activity.navigator.closeSubScreen();
+                                     } catch (Exception e) {
+                                         Toast.makeText(activity, "Ошибка обработки ответа сервера", Toast.LENGTH_SHORT).show();
+                                         btnSave.setEnabled(true);
+                                     }
                                  }
                                  @Override public void onError(String error) { 
                                      if (isAdded()) {
@@ -200,17 +220,24 @@ public class EditProfileFragment extends Fragment {
                 InputStream is = activity.getContentResolver().openInputStream(uri);
                 if (is == null) return;
 
-                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                // Создаем временный файл в кэше приложения (никакого выжирания ОЗУ)
+                String prefix = isPhoto ? "temp_avatar_" : "temp_bg_";
+                String extension = isPhoto ? ".jpg" : ".tmp"; // Для фона точное расширение определит сервер
+                File tempFile = new File(activity.getCacheDir(), prefix + System.currentTimeMillis() + extension);
+                
+                FileOutputStream fos = new FileOutputStream(tempFile);
+                byte[] buffer = new byte[8192]; // Читаем маленькими кусками
                 int nRead;
-                byte[] data = new byte[16384];
-                while ((nRead = is.read(data, 0, data.length)) != -1) {
-                    buffer.write(data, 0, nRead);
+                while ((nRead = is.read(buffer)) != -1) {
+                    fos.write(buffer, 0, nRead);
                 }
-                byte[] fileBytes = buffer.toByteArray();
+                fos.flush();
+                fos.close();
                 is.close();
 
-                long fileSizeInMB = fileBytes.length / (1024 * 1024);
+                long fileSizeInMB = tempFile.length() / (1024 * 1024);
                 if (fileSizeInMB >= maxMb) {
+                    tempFile.delete(); // Файл слишком большой - убиваем
                     activity.runOnUiThread(() -> {
                         String errMsg = activity.getString(R.string.err_file_size_limit) + " " + maxMb + " MB";
                         Toast.makeText(activity, errMsg, Toast.LENGTH_LONG).show();
@@ -218,17 +245,16 @@ public class EditProfileFragment extends Fragment {
                     return;
                 }
 
-                String base64 = android.util.Base64.encodeToString(fileBytes, android.util.Base64.DEFAULT);
-
                 activity.runOnUiThread(() -> {
                     if (isPhoto) {
-                        pendingPhotoBase64 = base64;
+                        pendingPhotoFile = tempFile;
                         ImageView avatarPreview = getView() != null ? getView().findViewById(R.id.edit_avatar_preview) : null;
                         if (avatarPreview != null) {
-                            Glide.with(this).load(fileBytes).circleCrop().into(avatarPreview);
+                            // Glide отлично умеет читать напрямую из файла!
+                            Glide.with(this).load(tempFile).circleCrop().into(avatarPreview);
                         }
                     } else {
-                        pendingBgBase64 = base64;
+                        pendingBgFile = tempFile;
                         Toast.makeText(activity, R.string.background_selected_success, Toast.LENGTH_SHORT).show();
                     }
                 });
