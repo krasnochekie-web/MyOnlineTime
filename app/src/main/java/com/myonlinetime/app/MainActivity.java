@@ -24,7 +24,6 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.*;
 
-import com.myonlinetime.app.models.User;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
@@ -32,6 +31,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.tasks.Task;
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.signature.ObjectKey;
 
 import java.io.File;
 import org.json.JSONArray;
@@ -110,7 +110,9 @@ public class MainActivity extends AppCompatActivity {
         }, false);
 
         Window window = getWindow();
-        window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        window.getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE 
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
         window.setStatusBarColor(android.graphics.Color.TRANSPARENT);
 
         setContentView(R.layout.activity_main);
@@ -208,7 +210,14 @@ public class MainActivity extends AppCompatActivity {
         initGlobalBackground();
         updateGlobalBackground(true);
 
-        int tabToOpen = savedInstanceState != null ? savedInstanceState.getInt("SAVED_TAB", 0) : 0;
+        int tabToOpen = 0; 
+        if (appPrefs.contains("open_tab_after_login")) {
+            tabToOpen = appPrefs.getInt("open_tab_after_login", 0);
+            appPrefs.edit().remove("open_tab_after_login").apply();
+        } else if (savedInstanceState != null) {
+            tabToOpen = savedInstanceState.getInt("SAVED_TAB", 0);
+        }
+
         updateNavState(tabToOpen);
         if (tabToOpen == 4) {
             GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
@@ -278,7 +287,6 @@ public class MainActivity extends AppCompatActivity {
             playerView.setVisibility(View.INVISIBLE);
         }
 
-        // === МГНОВЕННЫЙ ВИЗУАЛЬНЫЙ СБРОС АВАТАРКИ В МЕНЮ ===
         if (iconProfile != null) {
             iconProfile.setImageTintList(androidx.core.content.ContextCompat.getColorStateList(this, R.color.nav_icon_selector));
             iconProfile.setImageResource(R.drawable.ic_nav_profile);
@@ -548,13 +556,10 @@ public class MainActivity extends AppCompatActivity {
         
         String uid = account.getId();
         String cachedUrl = prefs.getString("synced_bg_url_" + uid, "");
+        String currentCustom = prefs.getString("custom_bg_path_" + uid, "");
         
-        if (bgUrl.equals(cachedUrl)) {
-            String currentCustom = prefs.getString("custom_bg_path_" + uid, "");
-            File checkFile = new File(currentCustom);
-            if (checkFile.exists()) {
-                return; 
-            }
+        if (bgUrl.equals(cachedUrl) && new File(currentCustom).exists()) {
+            return; 
         }
 
         isSyncingBg = true;
@@ -684,6 +689,7 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(this::loadUserAvatarToBottomNav);
     }
 
+    // === ИСПРАВЛЕНИЕ: МГНОВЕННАЯ ЗАГРУЗКА БЕЗ ТОРМОЗОВ ===
     private void loadUserAvatarToBottomNav() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         if (account == null) {
@@ -697,6 +703,7 @@ public class MainActivity extends AppCompatActivity {
         if (iconProfile != null) {
             String uid = account.getId();
             
+            // 1. ОПТИМИСТИЧНЫЙ UI с правильным кэшированием (Без skipMemoryCache)
             String customAvatarPath = prefs.getString("custom_avatar_path_" + uid, null);
             if (customAvatarPath != null) {
                 File localFile = new File(customAvatarPath);
@@ -704,14 +711,14 @@ public class MainActivity extends AppCompatActivity {
                     iconProfile.setImageTintList(null); 
                     Glide.with(this)
                          .load(localFile)
-                         .skipMemoryCache(true) 
-                         .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
+                         .signature(new ObjectKey(localFile.lastModified())) // Магия Glide!
                          .circleCrop()
                          .into(iconProfile);
                     return;
                 }
             }
 
+            // 2. Старый кэш в памяти
             Bitmap cachedAvatar = mMemoryCache.get("avatar_" + uid);
             if (cachedAvatar != null) {
                 iconProfile.setImageTintList(null); 
@@ -719,6 +726,7 @@ public class MainActivity extends AppCompatActivity {
                 return;
             } 
             
+            // 3. СЕРВЕР ИЛИ ЗАГЛУШКА
             String savedUrl = prefs.getString("my_photo_base64", null);
             if (savedUrl != null) {
                 iconProfile.setImageTintList(null);
@@ -849,7 +857,6 @@ public class MainActivity extends AppCompatActivity {
             try {
                 final GoogleSignInAccount acct = task.getResult(ApiException.class);
                 
-                // === ЖЕСТКИЙ СБРОС И БЕСШОВНОЕ ОБНОВЛЕНИЕ IN-PLACE ===
                 resetAccountState();
                 
                 VpsApi.authenticateWithGoogle(MainActivity.this, acct.getIdToken(), new VpsApi.LoginCallback() {
@@ -858,13 +865,12 @@ public class MainActivity extends AppCompatActivity {
                         vpsToken = ourServerToken;
                         StatsHelper.syncUserProfile(MainActivity.this);
 
-                        // Бесшовный переход без перезагрузки активности
+                        // МГНОВЕННО ОБНОВЛЯЕМ НАВИГАТОР (Без моргания экранов!)
                         updateNavState(4);
                         navigator.switchScreen(4, acct.getId());
                         loadUserAvatarToBottomNav();
                         enforceLoginOverlays();
                         
-                        // Рассылаем сигнал, чтобы профиль мгновенно подхватил чистые данные
                         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(MainActivity.this)
                             .sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
                     }
