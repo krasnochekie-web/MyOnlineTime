@@ -63,12 +63,10 @@ public class UsageMath {
         
         for (Map.Entry<String, Long> entry : safeData.entrySet()) {
             String pkg = entry.getKey();
-            
             if (!isValidApp(context, pkg, currentInstalledApps, launcherPkg)) continue;
             
             long safeTime = entry.getValue();
             long sysTime = systemData.containsKey(pkg) ? systemData.get(pkg) : 0L;
-            
             systemData.put(pkg, Math.max(safeTime, sysTime));
         }
         
@@ -118,7 +116,7 @@ public class UsageMath {
         return results;
     }
 
-    // === ИСПРАВЛЕННЫЙ МЕТОД: БОЛЬШЕ НЕТ ЗАДВОЕНИЙ ===
+    // === ИСПРАВЛЕНИЕ: ТОЧНАЯ АГРЕГАЦИЯ БЕЗ УДВОЕНИЯ ВРЕМЕНИ ===
     public static Map<String, Long> getFilteredStats(Context context, int interval, long start, long end) {
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
@@ -127,7 +125,6 @@ public class UsageMath {
         Set<String> currentInstalledApps = getInstalledApps(context);
         String launcherPkg = getDefaultLauncher(context);
 
-        // Используем встроенный агрегатор Android, он сам схлопывает пересекающиеся бакеты
         Map<String, UsageStats> stats = usm.queryAndAggregateUsageStats(start, end);
         if (stats != null) {
             for (Map.Entry<String, UsageStats> entry : stats.entrySet()) {
@@ -141,18 +138,7 @@ public class UsageMath {
             }
         }
         
-        Map<String, Long> safeData = getSafeDataForInterval(context, start, end);
-        for (Map.Entry<String, Long> entry : safeData.entrySet()) {
-            String pkg = entry.getKey();
-            
-            if (!isValidApp(context, pkg, currentInstalledApps, launcherPkg)) continue;
-            
-            long safeTime = entry.getValue();
-            long sysTime = results.containsKey(pkg) ? results.get(pkg) : 0L;
-            results.put(pkg, Math.max(safeTime, sysTime));
-        }
-        
-        return results;
+        return results; // БЕЗ суммирования с safeData, так как системный агрегатор уже всё посчитал правильно!
     }
 
     private static String getDayKey(long timestamp) {
@@ -165,11 +151,8 @@ public class UsageMath {
         try {
             SharedPreferences sp = context.getSharedPreferences(PREF_SAFE_CACHE, Context.MODE_PRIVATE);
             String key = getDayKey(dayStart);
-            
             JSONObject json = new JSONObject();
-            for (Map.Entry<String, Long> entry : data.entrySet()) {
-                json.put(entry.getKey(), entry.getValue());
-            }
+            for (Map.Entry<String, Long> entry : data.entrySet()) json.put(entry.getKey(), entry.getValue());
             sp.edit().putString(key, json.toString()).apply();
         } catch (Exception ignored) {}
     }
@@ -188,28 +171,6 @@ public class UsageMath {
             }
         } catch (Exception ignored) {}
         return map;
-    }
-
-    private static Map<String, Long> getSafeDataForInterval(Context context, long start, long end) {
-        Map<String, Long> aggregatedSafe = new HashMap<>();
-        Calendar cal = Calendar.getInstance();
-        cal.setTimeInMillis(start);
-        cal.set(Calendar.HOUR_OF_DAY, 0);
-        cal.set(Calendar.MINUTE, 0);
-        cal.set(Calendar.SECOND, 0);
-        cal.set(Calendar.MILLISECOND, 0);
-        
-        long endLimit = end;
-        while (cal.getTimeInMillis() <= endLimit) {
-            Map<String, Long> dayData = loadFromSafeCache(context, cal.getTimeInMillis());
-            for (Map.Entry<String, Long> entry : dayData.entrySet()) {
-                String pkg = entry.getKey();
-                long current = aggregatedSafe.containsKey(pkg) ? aggregatedSafe.get(pkg) : 0L;
-                aggregatedSafe.put(pkg, current + entry.getValue());
-            }
-            cal.add(Calendar.DAY_OF_YEAR, 1);
-        }
-        return aggregatedSafe;
     }
 
     public static long sumMap(Map<String, Long> map) {
@@ -244,7 +205,6 @@ public class UsageMath {
 
     private static boolean isValidApp(Context context, String pkg, Set<String> installedApps, String launcherPkg) {
         if (pkg == null) return false;
-        
         String lowerPkg = pkg.toLowerCase();
 
         boolean isSystemTrash = pkg.equals("android") || 
@@ -275,7 +235,6 @@ public class UsageMath {
                 
                 if (isSystemApp || isUpdatedSystemApp) return false; 
             } catch (Exception ignored) {}
-
             return true; 
         }
     }
