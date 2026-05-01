@@ -9,6 +9,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -48,6 +49,44 @@ public class StatsHelper {
             return name.substring(0, 1).toUpperCase() + name.substring(1); 
         } catch (Exception e) {
             return pkg;
+        }
+    }
+
+    // === ГЛОБАЛЬНАЯ ЛОГИКА СВОРАЧИВАНИЯ (Исправлено для 2 и 3 приложений) ===
+    public static void applyCollapseLogic(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
+        if (container == null || aboutView == null || btnExpand == null || btnCollapse == null) return;
+        
+        boolean isEmptyDesc = aboutView.getText().toString().trim().isEmpty() || aboutView.getText().toString().equals("...");
+        aboutView.setVisibility(isEmptyDesc ? View.GONE : View.VISIBLE);
+        
+        if (aboutView.getParent() instanceof ViewGroup) {
+            ViewGroup parent = (ViewGroup) aboutView.getParent();
+            if (parent.getBackground() != null || parent.getChildCount() == 1) {
+                parent.setVisibility(isEmptyDesc ? View.GONE : View.VISIBLE);
+            }
+        }
+        
+        int limit = isEmptyDesc ? 3 : 2;
+        int count = container.getChildCount();
+        
+        if (count <= limit) {
+            btnExpand.setVisibility(View.GONE);
+            btnCollapse.setVisibility(View.GONE);
+            for (int i = 0; i < count; i++) {
+                container.getChildAt(i).setVisibility(View.VISIBLE);
+            }
+        } else {
+            if (btnCollapse.getVisibility() == View.VISIBLE) {
+                btnExpand.setVisibility(View.GONE);
+                for (int i = 0; i < count; i++) {
+                    container.getChildAt(i).setVisibility(View.VISIBLE);
+                }
+            } else {
+                btnExpand.setVisibility(View.VISIBLE);
+                for (int i = 0; i < count; i++) {
+                    container.getChildAt(i).setVisibility(i < limit ? View.VISIBLE : View.GONE);
+                }
+            }
         }
     }
 
@@ -168,7 +207,7 @@ public class StatsHelper {
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (activity.isDestroyed() || activity.isFinishing() || appsContainer == null) return;
 
-                // === ИСПРАВЛЕНИЕ ДУБЛИКАТОВ: Удаляем старые View строго перед добавлением новых ===
+                // === ИСПРАВЛЕНИЕ ДУБЛИКАТОВ ===
                 appsContainer.setLayoutTransition(null);
                 appsContainer.removeAllViews(); 
 
@@ -183,13 +222,8 @@ public class StatsHelper {
                     weekTimeText.setText(timeStr);
                 }
                 
-                int uiLimit = 0;
                 for (AppData data : preloadedData) {
                     View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, appsContainer, false);
-                    
-                    if (uiLimit >= 2) {
-                        view.setVisibility(View.GONE);
-                    }
                     
                     ImageView iconView = view.findViewById(R.id.app_icon);
                     TextView nameView = view.findViewById(R.id.app_name);
@@ -224,14 +258,15 @@ public class StatsHelper {
                             }
                         }
                     }
-                    uiLimit++;
                 }
                 
-                View btnExpand = ((View)appsContainer.getParent()).findViewById(R.id.btn_expand_apps);
-                if (btnExpand != null) {
-                    btnExpand.setVisibility(uiLimit > 2 ? View.VISIBLE : View.GONE);
-                }
+                // === ПРИМЕНЕНИЕ ГЛОБАЛЬНОЙ ЛОГИКИ СВОРАЧИВАНИЯ ===
+                TextView aboutView = activity.findViewById(R.id.profile_about);
+                ImageView btnExpand = activity.findViewById(R.id.btn_expand_apps);
+                ImageView btnCollapse = activity.findViewById(R.id.btn_collapse_apps);
+                applyCollapseLogic(aboutView, appsContainer, btnExpand, btnCollapse);
             });
         });
     }
-}
+                                         }
+                                                          
