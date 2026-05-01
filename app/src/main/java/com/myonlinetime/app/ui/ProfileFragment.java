@@ -69,7 +69,7 @@ public class ProfileFragment extends Fragment {
                 
                 GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
                 if (acct != null && nameView != null && aboutView != null) {
-                    nameView.setText(activity.prefs.getString("my_nickname", acct.getDisplayName()));
+                    nameView.setText(activity.prefs.getString("my_nickname", "..."));
                     aboutView.setText(activity.prefs.getString("my_about", ""));
                     
                     LinearLayout appsContainerLocal = getView().findViewById(R.id.profile_apps_container);
@@ -79,7 +79,8 @@ public class ProfileFragment extends Fragment {
                 }
 
                 if (acct != null) {
-                    handleMediaLoading(activity, null, true, acct.getId());
+                    String b64 = activity.prefs.getString("my_photo_base64", null);
+                    handleMediaLoading(activity, b64, true, acct.getId());
                 }
             }
         }
@@ -188,7 +189,9 @@ public class ProfileFragment extends Fragment {
         });
 
         if (isMe) {
-            nameView.setText(activity.prefs.getString("my_nickname", account.getDisplayName()));
+            // Вместо гугловского имени ставим "..." по умолчанию
+            String savedName = activity.prefs.getString("my_nickname", "...");
+            nameView.setText(savedName);
             String myAbout = activity.prefs.getString("my_about", "");
             aboutView.setText(myAbout);
             applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
@@ -199,7 +202,7 @@ public class ProfileFragment extends Fragment {
             btnFollow.setVisibility(View.GONE);
 
             btnEdit.setOnClickListener(v -> activity.navigator.openSubScreen(EditProfileFragment.newInstance(
-                    nameView.getText().toString(),
+                    nameView.getText().toString().equals("...") ? "" : nameView.getText().toString(),
                     aboutView.getText().toString()
             )));
 
@@ -221,7 +224,7 @@ public class ProfileFragment extends Fragment {
                                 nameView.setText(user.nickname);
                                 if (isMe) activity.prefs.edit().putString("my_nickname", user.nickname).apply();
                             } else {
-                                nameView.setText(isMe ? account.getDisplayName() : activity.getString(R.string.no_name));
+                                nameView.setText(isMe ? "..." : activity.getString(R.string.no_name));
                             }
 
                             if (user.about != null) {
@@ -237,9 +240,12 @@ public class ProfileFragment extends Fragment {
                                 handleMediaLoading(activity, user.photo, false, finalTargetUid);
                             }
 
+                            // ПРАВИЛЬНАЯ ЗАГРУЗКА ФОНА В ФОНОВОМ РЕЖИМЕ
                             if (user.background != null && user.background.length() > 10) {
-                                activity.currentBgBase64 = user.background;
-                                activity.updateGlobalBackground(true);
+                                if (isMe) {
+                                    activity.prefs.edit().putString("my_bg_base64", user.background).apply();
+                                    activity.syncMyBackground(user.background);
+                                }
                             }
 
                             if (isMe && user.createdAt != null) {
@@ -402,7 +408,6 @@ public class ProfileFragment extends Fragment {
             }
         }
 
-        // БЕЗ ГУГЛОВСКОГО ФОЛЛБЭКА: просто ставим стандартную заглушку
         if (base64Data == null || base64Data.isEmpty()) {
             Glide.with(activity).load(R.drawable.bg_edit_circle).circleCrop().into(avatarView);
             return;
@@ -511,13 +516,15 @@ public class ProfileFragment extends Fragment {
                     GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
                     
                     if (nameView != null && aboutView != null && acct != null) {
-                        nameView.setText(activity.prefs.getString("my_nickname", acct.getDisplayName()));
+                        nameView.setText(activity.prefs.getString("my_nickname", "..."));
                         
                         aboutView.setText(activity.prefs.getString("my_about", ""));
                         LinearLayout appsContainerLocal = getView().findViewById(R.id.profile_apps_container);
                         applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
                         
-                        handleMediaLoading(activity, null, true, acct.getId());
+                        // ИСПРАВЛЕНО: Передаем корректную ссылку, чтобы аватар не моргал
+                        String b64 = activity.prefs.getString("my_photo_base64", null);
+                        handleMediaLoading(activity, b64, true, acct.getId());
                     }
                 }
                 activity.updateGlobalBackground(isMe);
