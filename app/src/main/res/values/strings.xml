@@ -7,6 +7,10 @@
 	<string name="settings_clear_storage">Clear data</string>
     <string name="feed">Feed</string>
     <string name="find">Find</string>
+	<string name="toast_compressing_video">Compressing video… Please wait.</string>
+<string name="toast_video_ready">Video successfully prepared!</string>
+<string name="err_video_compress">Error compressing video</string>
+<string name="err_wait_compressing">Please wait for the video to finish compressing!</string>
     <string name="time">Time</string>
 	<string name="err_wait_cooldown">Please wait before changing this information.</string>
 	<string name="err_wait_before_change">You need to wait before changing the background!</string>
