@@ -2,6 +2,7 @@ package com.myonlinetime.app.ui;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import android.graphics.Bitmap;
 import android.net.Uri;
@@ -26,8 +27,11 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 
-import com.arthenica.ffmpegkit.FFmpegKit;
-import com.arthenica.ffmpegkit.ReturnCode;
+// --- ИМПОРТЫ ДЛЯ АППАРАТНОГО СЖАТИЯ ВИДЕО ---
+import com.otaliastudios.transcoder.Transcoder;
+import com.otaliastudios.transcoder.TranscoderListener;
+import com.otaliastudios.transcoder.strategy.DefaultVideoStrategy;
+import com.otaliastudios.transcoder.strategy.size.AtMostResizer;
 
 import org.json.JSONObject;
 
@@ -185,7 +189,7 @@ public class EditProfileFragment extends Fragment {
         String[] backgroundMimeTypes = new String[]{"image/*", "video/*"};
         
         View.OnClickListener photoClickListener = v -> {
-            if (isActionSpam(true)) return; // Блокируем выбор фото, если флуд
+            if (isActionSpam(true)) return; 
             photoPicker.launch(photoMimeTypes);
         };
         if (btnChangePhoto != null) btnChangePhoto.setOnClickListener(photoClickListener);
@@ -193,7 +197,7 @@ public class EditProfileFragment extends Fragment {
 
         if (btnChangeBackground != null) {
             btnChangeBackground.setOnClickListener(v -> {
-                if (isActionSpam(true)) return; // Блокируем выбор фона, если флуд
+                if (isActionSpam(true)) return; 
                 bgPicker.launch(backgroundMimeTypes);
             });
         }
@@ -207,14 +211,14 @@ public class EditProfileFragment extends Fragment {
              final String n = inputName.getText().toString().trim();
              final String a = inputAbout.getText().toString().trim();
 
-             // Если ничего не изменилось — выходим сразу (не засчитывается как спам)
+             // Если ничего не изменилось — выходим сразу
              if (n.equals(initialName) && a.equals(initialAbout) && pendingPhotoFile == null && pendingBgFile == null) {
                  activity.clearPreviewBackground(); 
                  activity.navigator.closeSubScreen();
                  return;
              }
              
-             // Проверяем на спам (передаем true, если загружаются файлы, иначе false - только текст)
+             // Проверяем на спам
              if (isActionSpam(pendingPhotoFile != null || pendingBgFile != null)) {
                  return; 
              }
@@ -304,34 +308,50 @@ public class EditProfileFragment extends Fragment {
 
                 long maxBytes = maxMb * 1024L * 1024L;
                 
+                // === АППАРАТНОЕ СЖАТИЕ ЧЕРЕЗ TRANSCODER ===
                 if (isVideoBg) {
                     isCompressing = true;
                     activity.runOnUiThread(() -> Toast.makeText(activity, "Сжатие видео... Пожалуйста, подождите.", Toast.LENGTH_LONG).show());
                     
                     File compressedFile = new File(activity.getCacheDir(), "compressed_bg_" + System.currentTimeMillis() + ".mp4");
                     
-                    String cmd = String.format("-y -i \"%s\" -vf scale=720:-2 -vcodec libx264 -crf 28 -preset superfast \"%s\"", 
-                            tempFile.getAbsolutePath(), compressedFile.getAbsolutePath());
-                            
-                    FFmpegKit.executeAsync(cmd, session -> {
-                        isCompressing = false;
-                        if (ReturnCode.isSuccess(session.getReturnCode())) {
-                            tempFile.delete(); 
-                            
-                            if (compressedFile.length() > maxBytes) {
-                                compressedFile.delete();
-                                activity.runOnUiThread(() -> Toast.makeText(activity, activity.getString(R.string.err_file_size_limit) + " " + maxMb + " MB", Toast.LENGTH_LONG).show());
-                            } else {
-                                activity.runOnUiThread(() -> {
-                                    pendingBgFile = compressedFile;
-                                    Toast.makeText(activity, "Видео успешно подготовлено!", Toast.LENGTH_SHORT).show();
-                                    activity.previewBackground(compressedFile.getAbsolutePath(), true);
-                                });
+                    Transcoder.into(compressedFile.getAbsolutePath())
+                        .addDataSource(tempFile.getAbsolutePath())
+                        .setVideoTrackStrategy(DefaultVideoStrategy.builder()
+                            .addResizer(new AtMostResizer(720, 1280)) // Ограничиваем разрешение до 720p
+                            .build())
+                        .setListener(new TranscoderListener() {
+                            @Override
+                            public void onTranscodeProgress(double progress) {}
+
+                            @Override
+                            public void onTranscodeCompleted(int successCode) {
+                                isCompressing = false;
+                                tempFile.delete(); // Удаляем исходник
+                                
+                                if (compressedFile.length() > maxBytes) {
+                                    compressedFile.delete();
+                                    activity.runOnUiThread(() -> Toast.makeText(activity, activity.getString(R.string.err_file_size_limit) + " " + maxMb + " MB", Toast.LENGTH_LONG).show());
+                                } else {
+                                    activity.runOnUiThread(() -> {
+                                        pendingBgFile = compressedFile;
+                                        Toast.makeText(activity, "Видео успешно подготовлено!", Toast.LENGTH_SHORT).show();
+                                        activity.previewBackground(compressedFile.getAbsolutePath(), true);
+                                    });
+                                }
                             }
-                        } else {
-                            activity.runOnUiThread(() -> Toast.makeText(activity, "Ошибка при сжатии видео", Toast.LENGTH_SHORT).show());
-                        }
-                    });
+
+                            @Override
+                            public void onTranscodeCanceled() {
+                                isCompressing = false;
+                            }
+
+                            @Override
+                            public void onTranscodeFailed(@NonNull Throwable exception) {
+                                isCompressing = false;
+                                activity.runOnUiThread(() -> Toast.makeText(activity, "Ошибка при сжатии видео", Toast.LENGTH_SHORT).show());
+                            }
+                        }).transcode();
                     return; 
                 }
 
