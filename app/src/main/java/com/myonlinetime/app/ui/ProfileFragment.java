@@ -56,6 +56,7 @@ public class ProfileFragment extends Fragment {
     private boolean isMe = false;
     private ImageView avatarView;
 
+    // Предохранитель от двойного мерцания
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
 
@@ -233,18 +234,28 @@ public class ProfileFragment extends Fragment {
 
                             if (isMe) {
                                 boolean cacheChanged = false;
+                                
+                                // === ИСПРАВЛЕНИЕ: Обновляем кэш и интерфейс ТОЛЬКО если данные реально отличаются ===
                                 if (user.hiddenApps != null) {
-                                    localHiddenApps.clear();
-                                    localHiddenApps.addAll(user.hiddenApps);
-                                    prefs.edit().putStringSet("hidden_apps", localHiddenApps).apply();
-                                    cacheChanged = true;
+                                    Set<String> newHidden = new HashSet<>(user.hiddenApps);
+                                    if (!localHiddenApps.equals(newHidden)) {
+                                        localHiddenApps.clear();
+                                        localHiddenApps.addAll(newHidden);
+                                        prefs.edit().putStringSet("hidden_apps", localHiddenApps).apply();
+                                        cacheChanged = true;
+                                    }
                                 }
+                                
                                 if (user.appDescriptions != null) {
-                                    localDescriptions.clear();
-                                    localDescriptions.putAll(user.appDescriptions);
-                                    prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
-                                    cacheChanged = true;
+                                    if (!localDescriptions.equals(user.appDescriptions)) {
+                                        localDescriptions.clear();
+                                        localDescriptions.putAll(user.appDescriptions);
+                                        prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
+                                        cacheChanged = true;
+                                    }
                                 }
+                                
+                                // Теперь второй раз перерисует только если ты изменил настройки на другом устройстве!
                                 if (cacheChanged) requestLoadMyStats();
                             }
 
@@ -446,7 +457,6 @@ public class ProfileFragment extends Fragment {
                     if (nameView != null && aboutView != null && acct != null) {
                         nameView.setText(activity.prefs.getString("my_nickname", acct.getDisplayName()));
                         
-                        // ИСПРАВЛЕНИЕ: Обновляем текст и просто применяем логику скрытия/показа БЕЗ перерисовки всего списка
                         aboutView.setText(activity.prefs.getString("my_about", ""));
                         LinearLayout appsContainerLocal = getView().findViewById(R.id.profile_apps_container);
                         applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
