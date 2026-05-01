@@ -14,7 +14,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Looper;
@@ -25,7 +24,6 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.*;
 
-import com.myonlinetime.app.models.User;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
@@ -34,12 +32,7 @@ import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.tasks.Task;
 import com.bumptech.glide.Glide;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import android.util.Base64;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 import androidx.media3.common.MediaItem;
@@ -67,7 +60,6 @@ public class MainActivity extends AppCompatActivity {
 
     public GoogleSignInClient mGoogleSignInClient;
     private static final int RC_SIGN_IN = 9001;
-    private static final int RC_PICK_IMAGE = 9002;
     
     public SharedPreferences prefs;
     public LruCache<String, Bitmap> mMemoryCache;
@@ -470,9 +462,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // --- АНТИ-МЕРЦАНИЕ (ANTI-FLICKER) ---
-        // Если мы сейчас смотрим видео/картинку из сети, а в фоне она же скачалась в локальный кэш
-        // Мы игнорируем обновление! Плеер доиграет сетевой файл без обрыва, а в следующий запуск 
-        // приложения подхватит уже локальный.
         if (currentBgPath != null && currentBgPath.startsWith("http") && path != null && !path.startsWith("http")) {
             String syncedUrl = prefs.getString("synced_bg_url_" + uid, "");
             if (currentBgPath.equals(syncedUrl) || currentBgPath.equals(currentBgBase64)) {
@@ -548,8 +537,12 @@ public class MainActivity extends AppCompatActivity {
                 java.io.FileOutputStream fos = new java.io.FileOutputStream(localFile);
                 byte[] buffer = new byte[8192];
                 int len;
-                while ((len = is.read(buffer)) != -1) fos.write(buffer, 0, len);
-                fos.flush(); fos.close(); is.close();
+                while ((len = is.read(buffer)) != -1) {
+                    fos.write(buffer, 0, len);
+                }
+                fos.flush();
+                fos.close();
+                is.close();
 
                 runOnUiThread(() -> {
                     isSyncingBg = false;
@@ -662,40 +655,34 @@ public class MainActivity extends AppCompatActivity {
 
         if (iconProfile != null) {
             String uid = account.getId();
-            File localFile = new File(getFilesDir(), "avatar_" + uid + ".png");
-            String savedUrl = prefs.getString("my_photo_base64", null);
-            String syncedUrl = prefs.getString("synced_photo_url_" + uid, "");
-
-            // 1. Приоритет серверу: если пришла новая ссылка (с другого устройства), скачиваем её!
-            if (savedUrl != null && savedUrl.startsWith("http") && !savedUrl.equals(syncedUrl)) {
-                iconProfile.setImageTintList(null);
-                Glide.with(this).load(savedUrl).circleCrop().into(iconProfile);
-                
-                Utils.backgroundExecutor.execute(() -> {
-                    try {
-                        java.io.InputStream is = new java.net.URL(savedUrl).openStream();
-                        java.io.FileOutputStream fos = new java.io.FileOutputStream(localFile);
-                        byte[] buffer = new byte[8192];
-                        int len;
-                        while ((len = is.read(buffer)) != -1) fos.write(buffer, 0, len);
-                        fos.flush(); fos.close(); is.close();
-                        
-                        runOnUiThread(() -> prefs.edit().putString("synced_photo_url_" + uid, savedUrl).apply());
-                    } catch(Exception e){}
-                });
-                return;
+            
+            // 1. Сначала ищем свежайший локальный файл, созданный Оптимистичным UI
+            String customAvatarPath = prefs.getString("custom_avatar_path_" + uid, null);
+            if (customAvatarPath != null) {
+                File localFile = new File(customAvatarPath);
+                if (localFile.exists()) {
+                    iconProfile.setImageTintList(null); 
+                    Glide.with(this)
+                         .load(localFile)
+                         .skipMemoryCache(true) // Обязательно: заставляем Glide перечитать файл
+                         .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
+                         .circleCrop()
+                         .into(iconProfile);
+                    return;
+                }
             }
 
-            // 2. Локальный кэш: ПРИНУДИТЕЛЬНО без кэша памяти, чтобы обновления применялись сразу
-            if (localFile.exists()) {
+            // 2. Если свежего локального нет, пытаемся взять старый кэш из памяти
+            Bitmap cachedAvatar = mMemoryCache.get("avatar_" + uid);
+            if (cachedAvatar != null) {
                 iconProfile.setImageTintList(null); 
-                Glide.with(this)
-                     .load(localFile)
-                     .skipMemoryCache(true) // <- Вот эта строка заставляет Glide перечитать картинку
-                     .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE) // <- И эта тоже
-                     .circleCrop()
-                     .into(iconProfile);
-            } else if (savedUrl != null) {
+                Glide.with(this).load(cachedAvatar).circleCrop().into(iconProfile);
+                return;
+            } 
+            
+            // 3. Иначе грузим из сети (с сервера)
+            String savedUrl = prefs.getString("my_photo_base64", null);
+            if (savedUrl != null) {
                 iconProfile.setImageTintList(null);
                 if (savedUrl.startsWith("http")) {
                     Glide.with(this).load(savedUrl).circleCrop().into(iconProfile);
