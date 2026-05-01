@@ -34,11 +34,9 @@ public class SettingsFragment extends Fragment {
     private static final String PREFS_NAME = "AppPrefs";
     private static final String KEY_THEME = "selected_theme";
 
-    // === ПРИЕМНИК СИГНАЛА ОБНОВЛЕНИЯ ===
     private final android.content.BroadcastReceiver profileUpdateReceiver = new android.content.BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            // Если мы получили сигнал об обновлении профиля — мгновенно перерисовываем шапку настроек
             if (getView() != null && isAdded()) {
                 loadUserData(getView());
             }
@@ -58,7 +56,6 @@ public class SettingsFragment extends Fragment {
         
         loadUserData(view);
 
-        // Кнопки Аккаунта (для авторизованных)
         view.findViewById(R.id.btn_change_email).setOnClickListener(v -> { /* Пока пусто */ });
         view.findViewById(R.id.btn_delete_account).setOnClickListener(v -> { /* Пока пусто */ });
         
@@ -67,7 +64,7 @@ public class SettingsFragment extends Fragment {
             btnSwitch.setOnClickListener(v -> {
                 if (activity != null && activity.mGoogleSignInClient != null) {
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
-                        activity.vpsToken = null;
+                        activity.resetAccountState(); 
                         Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
                         activity.startActivityForResult(signInIntent, 9001); 
                     });
@@ -80,15 +77,22 @@ public class SettingsFragment extends Fragment {
             btnSignOut.setOnClickListener(v -> {
                 if (activity != null && activity.mGoogleSignInClient != null) {
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
-                        activity.vpsToken = null; 
-                        loadUserData(view); // Мгновенно переключаем интерфейс на гостя
+                        activity.resetAccountState(); 
+                        
+                        // Мгновенно перезапускаем приложение в гостевой режим
+                        activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit().putInt("open_tab_after_login", 5).apply(); 
+                        Intent intent = new Intent(activity, MainActivity.class);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                        activity.startActivity(intent);
+                        activity.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+                        activity.finish();
+                        
                         Toast.makeText(getContext(), getString(R.string.settings_sign_out), Toast.LENGTH_SHORT).show();
                     });
                 }
             });
         }
 
-        // Кнопка Входа (для гостей)
         View btnSignInGuest = view.findViewById(R.id.btn_sign_in_guest);
         if (btnSignInGuest != null) {
             btnSignInGuest.setOnClickListener(v -> {
@@ -99,16 +103,13 @@ public class SettingsFragment extends Fragment {
             });
         }
 
-        // Оформление
         themeAuto = view.findViewById(R.id.theme_auto);
         themeLight = view.findViewById(R.id.theme_light);
         themeDark = view.findViewById(R.id.theme_dark);
         setupThemeButtons();
 
-        // Общие
         view.findViewById(R.id.btn_notifications).setOnClickListener(v -> {
             if (activity != null && activity.navigator != null) {
-                // ИСПРАВЛЕНИЕ: Теперь открывает настройки уведомлений, а не историю!
                 activity.navigator.openSubScreen(new NotificationsFragment());
             }
         });
@@ -118,7 +119,6 @@ public class SettingsFragment extends Fragment {
             }
         });
 
-        // Прочее
         View.OnClickListener openSiteListener = v -> {
             Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(getString(R.string.url_map)));
             startActivity(browserIntent);
@@ -140,7 +140,6 @@ public class SettingsFragment extends Fragment {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         
         if (account != null) {
-            // АВТОРИЗОВАН: Показываем данные, скрываем кнопку входа
             if (userHeaderBlock != null) userHeaderBlock.setVisibility(View.VISIBLE);
             if (accountBlock != null) accountBlock.setVisibility(View.VISIBLE);
             if (guestBlock != null) guestBlock.setVisibility(View.GONE);
@@ -160,26 +159,23 @@ public class SettingsFragment extends Fragment {
                 regDateTxt.setText(getString(R.string.settings_reg_date, createdAt.isEmpty() ? "..." : createdAt));
             }
             
-            // === ИДЕАЛЬНОЕ ОБНОВЛЕНИЕ АВАТАРКИ В НАСТРОЙКАХ ===
             if (avatarView != null) {
                 String uid = account.getId();
                 
-                // 1. Проверяем свежайший локальный файл из Оптимистичного UI
                 String customAvatarPath = activity.prefs.getString("custom_avatar_path_" + uid, null);
                 if (customAvatarPath != null) {
                     File localFile = new File(customAvatarPath);
                     if (localFile.exists()) {
                         Glide.with(this)
                              .load(localFile)
-                             .skipMemoryCache(true) // Обходим кэш
+                             .skipMemoryCache(true)
                              .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
                              .circleCrop()
                              .into(avatarView);
-                        return; // Если файл есть, дальше не идем!
+                        return; 
                     }
                 }
 
-                // 2. Фоллбэк: старый кэш или сервер
                 Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + uid);
                 if (cachedAvatar != null) {
                     Glide.with(this).load(cachedAvatar).circleCrop().into(avatarView);
@@ -195,13 +191,11 @@ public class SettingsFragment extends Fragment {
                             } catch (Exception e){}
                         }
                     } else {
-                        // БЕЗ ГУГЛОВСКОГО ФОЛЛБЭКА: просто ставим стандартную заглушку
                         Glide.with(this).load(R.drawable.bg_edit_circle).circleCrop().into(avatarView);
                     }
                 }
             }
         } else {
-            // ГОСТЬ: Скрываем шапку и старые настройки, показываем аккуратную кнопку входа
             if (userHeaderBlock != null) userHeaderBlock.setVisibility(View.GONE);
             if (accountBlock != null) accountBlock.setVisibility(View.GONE);
             if (guestBlock != null) guestBlock.setVisibility(View.VISIBLE);
@@ -237,8 +231,6 @@ public class SettingsFragment extends Fragment {
         if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(false); 
         }
-        
-        // Подключаем слушатель обновлений!
         LocalBroadcastManager.getInstance(requireContext())
             .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_PROFILE_UPDATED"));
     }
@@ -246,7 +238,6 @@ public class SettingsFragment extends Fragment {
     @Override
     public void onPause() {
         super.onPause();
-        // Отключаем слушатель
         LocalBroadcastManager.getInstance(requireContext())
             .unregisterReceiver(profileUpdateReceiver);
     }
