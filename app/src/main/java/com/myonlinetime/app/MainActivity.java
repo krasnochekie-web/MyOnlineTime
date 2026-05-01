@@ -14,7 +14,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Looper;
@@ -25,7 +24,6 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.*;
 
-import com.myonlinetime.app.models.User;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
@@ -36,7 +34,6 @@ import com.bumptech.glide.Glide;
 
 import java.io.File;
 import org.json.JSONArray;
-import org.json.JSONObject;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -212,10 +209,8 @@ public class MainActivity extends AppCompatActivity {
         initGlobalBackground();
         updateGlobalBackground(true);
 
-        // === ИДЕАЛЬНОЕ УПРАВЛЕНИЕ СОСТОЯНИЕМ (ЧТЕНИЕ КОМАНД ПЕРЕЗАПУСКА) ===
         int tabToOpen = 0; 
         if (appPrefs.contains("open_tab_after_login")) {
-            // Если мы только что программно перезапустились после входа
             tabToOpen = appPrefs.getInt("open_tab_after_login", 0);
             appPrefs.edit().remove("open_tab_after_login").apply();
         } else if (savedInstanceState != null) {
@@ -856,7 +851,6 @@ public class MainActivity extends AppCompatActivity {
             try {
                 final GoogleSignInAccount acct = task.getResult(ApiException.class);
                 
-                // === ЖЕСТКИЙ СБРОС И ПРОГРАММНЫЙ ПЕРЕЗАПУСК ===
                 resetAccountState();
                 
                 VpsApi.authenticateWithGoogle(MainActivity.this, acct.getIdToken(), new VpsApi.LoginCallback() {
@@ -865,15 +859,13 @@ public class MainActivity extends AppCompatActivity {
                         vpsToken = ourServerToken;
                         StatsHelper.syncUserProfile(MainActivity.this);
 
-                        // Указываем, что после перезапуска нужно открыть профиль
                         getSharedPreferences("AppPrefs", MODE_PRIVATE).edit().putInt("open_tab_after_login", 4).apply();
 
-                        // МГНОВЕННЫЙ ПРОГРАММНЫЙ ПЕРЕЗАПУСК АКТИВИТИ
+                        // ИДЕАЛЬНЫЙ БЕСШОВНЫЙ ПЕРЕЗАПУСК
                         Intent intent = new Intent(MainActivity.this, MainActivity.class);
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                         startActivity(intent);
-                        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
-                        finish();
+                        overridePendingTransition(0, 0); 
                     }
                     @Override
                     public void onError(String error) {
