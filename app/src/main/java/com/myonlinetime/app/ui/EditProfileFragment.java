@@ -35,8 +35,8 @@ import com.otaliastudios.transcoder.strategy.DefaultVideoStrategy;
 import org.json.JSONObject;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 
@@ -242,13 +242,28 @@ public class EditProfileFragment extends Fragment {
              try {
                  if (pendingBgFile != null) {
                      boolean isVideo = pendingBgFile.getName().endsWith(".mp4");
-                     File permBg = new File(activity.getFilesDir(), "my_bg_" + uid + (isVideo ? ".mp4" : ".jpg"));
+                     boolean isGif = pendingBgFile.getName().endsWith(".gif");
+                     String ext = isVideo ? ".mp4" : (isGif ? ".gif" : ".jpg");
+                     
+                     // Строго удаляем все старые файлы фона для этого пользователя (Очистка памяти!)
+                     File dir = activity.getFilesDir();
+                     File[] files = dir.listFiles();
+                     if (files != null) {
+                         for (File f : files) {
+                             if (f.getName().startsWith("my_bg_" + uid)) f.delete();
+                         }
+                     }
+
+                     // Сохраняем с уникальным Timestamp (Разрушает любой старый кэш!)
+                     File permBg = new File(activity.getFilesDir(), "my_bg_" + uid + "_" + System.currentTimeMillis() + ext);
                      copyFile(pendingBgFile, permBg);
                      
                      activity.prefs.edit()
                          .putString("custom_bg_path_" + uid, permBg.getAbsolutePath())
                          .putBoolean("custom_bg_is_video_" + uid, isVideo)
                          .apply();
+                         
+                     activity.currentBgBase64 = permBg.getAbsolutePath(); // Прямое обновление для UI
                      finalBg = permBg;
                  }
                  if (pendingPhotoFile != null) {
@@ -272,7 +287,7 @@ public class EditProfileFragment extends Fragment {
              // === 2. ЗАГРУЗКА НА СЕРВЕР В ФОНОВОМ ПОТОКЕ ===
              File uploadBg = finalBg;
              File uploadPhoto = finalPhoto;
-             
+
              if (activity.vpsToken != null) {
                  Utils.backgroundExecutor.execute(() -> {
                      VpsApi.saveUserProfile(activity.vpsToken, n, a, uploadPhoto, uploadBg, new VpsApi.Callback() {
@@ -289,34 +304,17 @@ public class EditProfileFragment extends Fragment {
                                  if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null")) {
                                      activity.prefs.edit()
                                          .putString("my_bg_base64", newBgUrl)
-                                         .putString("synced_bg_url_" + uid, newBgUrl) 
+                                         .putString("synced_bg_url_" + uid, newBgUrl) // Помечаем, что текущий файл соответствует серверу
                                          .apply();
                                  }
 
                                  if (pendingPhotoFile != null && pendingPhotoFile.exists()) pendingPhotoFile.delete();
                                  if (pendingBgFile != null && pendingBgFile.exists()) pendingBgFile.delete();
-
-                                 activity.runOnUiThread(() -> {
-                                    Toast.makeText(activity, R.string.saved_successfully, Toast.LENGTH_SHORT).show();
-                                 });
-                             } catch (Exception e) {
-                                 activity.runOnUiThread(() -> {
-                                    Toast.makeText(activity, "Ошибка обработки ответа сервера", Toast.LENGTH_SHORT).show();
-                                 });
-                             }
+                             } catch (Exception e) {}
                          }
-                         @Override public void onError(String error) { 
-                             if (isAdded()) {
-                                 activity.runOnUiThread(() -> {
-                                    Toast.makeText(activity, activity.getString(R.string.err_saving) + " " + error, Toast.LENGTH_LONG).show(); 
-                                 });
-                             }
-                         }
+                         @Override public void onError(String error) {}
                      });
                  });
-             } else {
-                 Toast.makeText(activity, "Ошибка авторизации. Перезапустите приложение.", Toast.LENGTH_LONG).show();
-                 btnSave.setEnabled(true);
              }
         });
 
@@ -329,77 +327,64 @@ public class EditProfileFragment extends Fragment {
 
         Utils.backgroundExecutor.execute(() -> {
             try {
+                // 1. ПРОВЕРКА РАЗМЕРА В САМОМ НАЧАЛЕ (До копирования и сжатия)
+                android.database.Cursor cursor = activity.getContentResolver().query(uri, null, null, null, null);
+                long fileSize = 0;
+                if (cursor != null && cursor.moveToFirst()) {
+                    int sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE);
+                    if (sizeIndex != -1) fileSize = cursor.getLong(sizeIndex);
+                    cursor.close();
+                }
+
+                long maxBytes = maxMb * 1024L * 1024L;
+                if (fileSize > maxBytes) {
+                    activity.runOnUiThread(() -> Toast.makeText(activity, activity.getString(R.string.err_file_size_limit) + " " + maxMb + " MB", Toast.LENGTH_LONG).show());
+                    return; // ЖЕСТКОЕ ОТБРАСЫВАНИЕ!
+                }
+
                 InputStream is = activity.getContentResolver().openInputStream(uri);
                 if (is == null) return;
 
                 String mimeType = activity.getContentResolver().getType(uri);
                 boolean isVideoBg = !isPhoto && mimeType != null && mimeType.startsWith("video/");
+                boolean isGif = !isPhoto && mimeType != null && mimeType.contains("gif");
                 
                 String prefix = isPhoto ? "temp_avatar_" : "temp_bg_";
-                String extension = isPhoto ? ".jpg" : (isVideoBg ? ".mp4" : ".jpg"); 
+                String extension = isPhoto ? ".jpg" : (isVideoBg ? ".mp4" : (isGif ? ".gif" : ".jpg")); 
                 File tempFile = new File(activity.getCacheDir(), prefix + System.currentTimeMillis() + extension);
                 
                 FileOutputStream fos = new FileOutputStream(tempFile);
                 byte[] buffer = new byte[8192]; 
                 int nRead;
-                while ((nRead = is.read(buffer)) != -1) {
-                    fos.write(buffer, 0, nRead);
-                }
-                fos.flush();
-                fos.close();
-                is.close();
-
-                long maxBytes = maxMb * 1024L * 1024L;
+                while ((nRead = is.read(buffer)) != -1) fos.write(buffer, 0, nRead);
+                fos.flush(); fos.close(); is.close();
                 
-                // === АППАРАТНОЕ СЖАТИЕ ЧЕРЕЗ TRANSCODER ===
                 if (isVideoBg) {
                     isCompressing = true;
-                    activity.runOnUiThread(() -> Toast.makeText(activity, R.string.toast_compressing_video, Toast.LENGTH_LONG).show());
-                    
                     File compressedFile = new File(activity.getCacheDir(), "compressed_bg_" + System.currentTimeMillis() + ".mp4");
                     
                     Transcoder.into(compressedFile.getAbsolutePath())
                         .addDataSource(tempFile.getAbsolutePath())
                         .setVideoTrackStrategy(DefaultVideoStrategy.atMost(540).build()) 
                         .setListener(new TranscoderListener() {
-                            @Override
-                            public void onTranscodeProgress(double progress) {}
+                            @Override public void onTranscodeProgress(double progress) {}
 
                             @Override
                             public void onTranscodeCompleted(int successCode) {
                                 isCompressing = false;
-                                tempFile.delete(); // Удаляем исходник
+                                tempFile.delete(); 
                                 
-                                if (compressedFile.length() > maxBytes) {
-                                    compressedFile.delete();
-                                    activity.runOnUiThread(() -> Toast.makeText(activity, activity.getString(R.string.err_file_size_limit) + " " + maxMb + " MB", Toast.LENGTH_LONG).show());
-                                } else {
-                                    activity.runOnUiThread(() -> {
-                                        pendingBgFile = compressedFile;
-                                        Toast.makeText(activity, R.string.toast_video_ready, Toast.LENGTH_SHORT).show();
-                                        activity.previewBackground(compressedFile.getAbsolutePath(), true);
-                                    });
-                                }
+                                activity.runOnUiThread(() -> {
+                                    pendingBgFile = compressedFile;
+                                    activity.previewBackground(compressedFile.getAbsolutePath(), true);
+                                });
                             }
-
-                            @Override
-                            public void onTranscodeCanceled() {
+                            @Override public void onTranscodeCanceled() { isCompressing = false; }
+                            @Override public void onTranscodeFailed(@NonNull Throwable exception) {
                                 isCompressing = false;
-                            }
-
-                            @Override
-                            public void onTranscodeFailed(@NonNull Throwable exception) {
-                                isCompressing = false;
-                                activity.runOnUiThread(() -> Toast.makeText(activity, R.string.err_video_compress, Toast.LENGTH_SHORT).show());
                             }
                         }).transcode();
                     return; 
-                }
-
-                if (tempFile.length() > maxBytes) {
-                    tempFile.delete(); 
-                    activity.runOnUiThread(() -> Toast.makeText(activity, activity.getString(R.string.err_file_size_limit) + " " + maxMb + " MB", Toast.LENGTH_LONG).show());
-                    return;
                 }
 
                 activity.runOnUiThread(() -> {
@@ -409,14 +394,10 @@ public class EditProfileFragment extends Fragment {
                         if (avatarPreview != null) Glide.with(this).load(tempFile).circleCrop().into(avatarPreview);
                     } else {
                         pendingBgFile = tempFile;
-                        Toast.makeText(activity, R.string.background_selected_success, Toast.LENGTH_SHORT).show();
                         activity.previewBackground(tempFile.getAbsolutePath(), false);
                     }
                 });
-
-            } catch (Exception e) {
-                activity.runOnUiThread(() -> Toast.makeText(activity, R.string.err_processing_file, Toast.LENGTH_SHORT).show());
-            }
+            } catch (Exception e) {}
         });
     }
 
@@ -438,9 +419,7 @@ public class EditProfileFragment extends Fragment {
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
             activity.clearPreviewBackground();
-            if (!activity.navigator.hasSubScreen()) {
-                activity.headerManager.resetHeader();
-            }
+            if (!activity.navigator.hasSubScreen()) activity.headerManager.resetHeader();
         }
     }
 
@@ -449,9 +428,7 @@ public class EditProfileFragment extends Fragment {
         super.onResume();
         if (!isHidden() && getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
-            if (activity.previewBgPath == null) {
-                activity.updateGlobalBackground(true); 
-            }
+            if (activity.previewBgPath == null) activity.updateGlobalBackground(true); 
         }
     }
 
@@ -462,9 +439,7 @@ public class EditProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!hidden) {
                 setupHeader(activity);
-                if (activity.previewBgPath == null) {
-                    activity.updateGlobalBackground(true);
-                }
+                if (activity.previewBgPath == null) activity.updateGlobalBackground(true);
             }
         }
     }
