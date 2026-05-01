@@ -134,76 +134,54 @@ public class EditProfileFragment extends Fragment {
              
              btnSave.setEnabled(false); 
              
-             if (activity.mGoogleSignInClient != null) {
-                 activity.mGoogleSignInClient.silentSignIn().addOnSuccessListener(freshAccount -> {
-                     VpsApi.authenticateWithGoogle(activity, freshAccount.getIdToken(), new VpsApi.LoginCallback() {
-                         @Override public void onSuccess(String token) {
-                             activity.vpsToken = token;
-                             
-                             // ОТПРАВЛЯЕМ ФАЙЛЫ, А НЕ ТЕКСТ!
-                             VpsApi.saveUserProfile(activity.vpsToken, n, a, pendingPhotoFile, pendingBgFile, new VpsApi.Callback() {
-                                 @Override public void onSuccess(String result) {
-                                     if (!isAdded()) return;
-                                     try {
-                                         // Сервер прислал нам JSON со ссылками. Распакуем его!
-                                         JSONObject json = new JSONObject(result);
-                                         String newPhotoUrl = json.optString("photoUrl", null);
-                                         String newBgUrl = json.optString("backgroundUrl", null);
+             // ИСПРАВЛЕНИЕ: Никаких GoogleSignInClient! Сразу берем vpsToken и шлем на сервер.
+             if (activity.vpsToken != null) {
+                 VpsApi.saveUserProfile(activity.vpsToken, n, a, pendingPhotoFile, pendingBgFile, new VpsApi.Callback() {
+                     @Override public void onSuccess(String result) {
+                         if (!isAdded()) return;
+                         try {
+                             JSONObject json = new JSONObject(result);
+                             String newPhotoUrl = json.optString("photoUrl", null);
+                             String newBgUrl = json.optString("backgroundUrl", null);
 
-                                         activity.prefs.edit()
-                                                 .putString("my_nickname", n)
-                                                 .putString("my_about", a)
-                                                 .apply();
-                                                 
-                                         // Сохраняем КРАСИВЫЕ ССЫЛКИ вместо адского Base64
-                                         if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null")) {
-                                             activity.prefs.edit().putString("my_photo_base64", newPhotoUrl).apply();
-                                         }
-                                         if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null")) {
-                                             activity.prefs.edit().putString("my_bg_base64", newBgUrl).apply();
-                                             activity.currentBgBase64 = newBgUrl; 
-                                         }
-
-                                         // Удаляем временные файлы за ненадобностью
-                                         if (pendingPhotoFile != null && pendingPhotoFile.exists()) pendingPhotoFile.delete();
-                                         if (pendingBgFile != null && pendingBgFile.exists()) pendingBgFile.delete();
-
-                                         Toast.makeText(activity, R.string.saved_successfully, Toast.LENGTH_SHORT).show();
-                                         activity.updateGlobalBackground(true);
-                                         
-                                         // МАГИЯ! Мгновенно обновляем аватарку в нижнем меню
-                                         if (activity instanceof MainActivity) {
-                                             ((MainActivity) activity).updateAvatarInUI();
-                                         }
-                                         
-                                         activity.navigator.closeSubScreen();
-                                     } catch (Exception e) {
-                                         Toast.makeText(activity, "Ошибка обработки ответа сервера", Toast.LENGTH_SHORT).show();
-                                         btnSave.setEnabled(true);
-                                     }
-                                 }
-                                 @Override public void onError(String error) { 
-                                     if (isAdded()) {
-                                         Toast.makeText(activity, activity.getString(R.string.err_saving) + " " + error, Toast.LENGTH_LONG).show(); 
-                                         btnSave.setEnabled(true);
-                                     }
-                                 }
-                             });
-                         }
-                         @Override public void onError(String error) {
-                             if (isAdded()) {
-                                 Toast.makeText(activity, activity.getString(R.string.err_token) + error, Toast.LENGTH_LONG).show();
-                                 btnSave.setEnabled(true);
+                             activity.prefs.edit()
+                                     .putString("my_nickname", n)
+                                     .putString("my_about", a)
+                                     .apply();
+                                     
+                             if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null")) {
+                                 activity.prefs.edit().putString("my_photo_base64", newPhotoUrl).apply();
                              }
+                             if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null")) {
+                                 activity.prefs.edit().putString("my_bg_base64", newBgUrl).apply();
+                                 activity.currentBgBase64 = newBgUrl; 
+                             }
+
+                             if (pendingPhotoFile != null && pendingPhotoFile.exists()) pendingPhotoFile.delete();
+                             if (pendingBgFile != null && pendingBgFile.exists()) pendingBgFile.delete();
+
+                             Toast.makeText(activity, R.string.saved_successfully, Toast.LENGTH_SHORT).show();
+                             activity.updateGlobalBackground(true);
+                             
+                             if (activity instanceof MainActivity) {
+                                 ((MainActivity) activity).updateAvatarInUI();
+                             }
+                             
+                             activity.navigator.closeSubScreen();
+                         } catch (Exception e) {
+                             Toast.makeText(activity, "Ошибка обработки ответа сервера", Toast.LENGTH_SHORT).show();
+                             btnSave.setEnabled(true);
                          }
-                     });
-                 }).addOnFailureListener(e -> {
-                     if (isAdded()) {
-                         Toast.makeText(activity, "Не удалось обновить сессию Google. Перезапустите приложение.", Toast.LENGTH_LONG).show();
-                         btnSave.setEnabled(true);
+                     }
+                     @Override public void onError(String error) { 
+                         if (isAdded()) {
+                             Toast.makeText(activity, activity.getString(R.string.err_saving) + " " + error, Toast.LENGTH_LONG).show(); 
+                             btnSave.setEnabled(true);
+                         }
                      }
                  });
              } else {
+                 Toast.makeText(activity, "Ошибка авторизации. Перезапустите приложение.", Toast.LENGTH_LONG).show();
                  btnSave.setEnabled(true);
              }
         });
@@ -220,13 +198,12 @@ public class EditProfileFragment extends Fragment {
                 InputStream is = activity.getContentResolver().openInputStream(uri);
                 if (is == null) return;
 
-                // Создаем временный файл в кэше приложения (никакого выжирания ОЗУ)
                 String prefix = isPhoto ? "temp_avatar_" : "temp_bg_";
-                String extension = isPhoto ? ".jpg" : ".tmp"; // Для фона точное расширение определит сервер
+                String extension = isPhoto ? ".jpg" : ".tmp"; 
                 File tempFile = new File(activity.getCacheDir(), prefix + System.currentTimeMillis() + extension);
                 
                 FileOutputStream fos = new FileOutputStream(tempFile);
-                byte[] buffer = new byte[8192]; // Читаем маленькими кусками
+                byte[] buffer = new byte[8192]; 
                 int nRead;
                 while ((nRead = is.read(buffer)) != -1) {
                     fos.write(buffer, 0, nRead);
@@ -237,7 +214,7 @@ public class EditProfileFragment extends Fragment {
 
                 long fileSizeInMB = tempFile.length() / (1024 * 1024);
                 if (fileSizeInMB >= maxMb) {
-                    tempFile.delete(); // Файл слишком большой - убиваем
+                    tempFile.delete(); 
                     activity.runOnUiThread(() -> {
                         String errMsg = activity.getString(R.string.err_file_size_limit) + " " + maxMb + " MB";
                         Toast.makeText(activity, errMsg, Toast.LENGTH_LONG).show();
@@ -250,7 +227,6 @@ public class EditProfileFragment extends Fragment {
                         pendingPhotoFile = tempFile;
                         ImageView avatarPreview = getView() != null ? getView().findViewById(R.id.edit_avatar_preview) : null;
                         if (avatarPreview != null) {
-                            // Glide отлично умеет читать напрямую из файла!
                             Glide.with(this).load(tempFile).circleCrop().into(avatarPreview);
                         }
                     } else {
