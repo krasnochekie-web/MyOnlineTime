@@ -27,7 +27,6 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 
-// --- ИМПОРТЫ ДЛЯ АППАРАТНОГО СЖАТИЯ ВИДЕО ---
 import com.otaliastudios.transcoder.Transcoder;
 import com.otaliastudios.transcoder.TranscoderListener;
 import com.otaliastudios.transcoder.strategy.DefaultVideoStrategy;
@@ -81,28 +80,22 @@ public class EditProfileFragment extends Fragment {
         }
     }
 
-    // === ЕДИНЫЙ МЕТОД ЗАЩИТЫ ===
     private boolean isActionSpam(boolean isMedia) {
         long now = System.currentTimeMillis();
         
-        // 1. Если пользователь УЖЕ в бане
         if (now < penaltyEndTime) {
-            // Любая попытка сбрасывает таймер наказания заново на 30 секунд
             penaltyEndTime = now + 30000; 
             if (getActivity() != null) {
                 Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
             }
-            return true; // Блокируем действие
+            return true; 
         }
 
-        // 2. Если пользователь не в бане, фиксируем попытку
         if (isMedia) {
             mediaAttemptTimes.add(now);
-            // Удаляем старые клики (старше 10 секунд)
             while (!mediaAttemptTimes.isEmpty() && now - mediaAttemptTimes.getFirst() > 10000) {
                 mediaAttemptTimes.removeFirst();
             }
-            // Лимит для медиа: > 5 кликов за 10 секунд
             if (mediaAttemptTimes.size() > 5) {
                 penaltyEndTime = now + 30000;
                 if (getActivity() != null) Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
@@ -113,7 +106,6 @@ public class EditProfileFragment extends Fragment {
             while (!textAttemptTimes.isEmpty() && now - textAttemptTimes.getFirst() > 10000) {
                 textAttemptTimes.removeFirst();
             }
-            // Лимит для текста: > 10 сохранений за 10 секунд
             if (textAttemptTimes.size() > 10) {
                 penaltyEndTime = now + 30000;
                 if (getActivity() != null) Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
@@ -177,9 +169,15 @@ public class EditProfileFragment extends Fragment {
             });
         }
 
-        Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + acct.getId());
-        if (cachedAvatar != null && avatarPreview != null) {
-            Glide.with(activity).load(cachedAvatar).circleCrop().into(avatarPreview);
+        // Обновляем превьюшку без кэша памяти, чтобы она не зависала!
+        File localAvatarFile = new File(activity.getFilesDir(), "avatar_" + acct.getId() + ".png");
+        if (localAvatarFile.exists() && avatarPreview != null) {
+            Glide.with(activity)
+                 .load(localAvatarFile)
+                 .skipMemoryCache(true)
+                 .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
+                 .circleCrop()
+                 .into(avatarPreview);
         } else {
             String savedAvatar = activity.prefs.getString("my_photo_base64", null);
             if (savedAvatar != null && avatarPreview != null) {
@@ -220,21 +218,19 @@ public class EditProfileFragment extends Fragment {
              final String n = inputName.getText().toString().trim();
              final String a = inputAbout.getText().toString().trim();
 
-             // Если ничего не изменилось — выходим сразу
              if (n.equals(initialName) && a.equals(initialAbout) && pendingPhotoFile == null && pendingBgFile == null) {
                  activity.clearPreviewBackground(); 
                  activity.navigator.closeSubScreen();
                  return;
              }
              
-             // Проверяем на спам (передаем true, если загружаются файлы, иначе false)
              if (isActionSpam(pendingPhotoFile != null || pendingBgFile != null)) {
                  return; 
              }
              
              btnSave.setEnabled(false); 
 
-             // === 1. ОПТИМИСТИЧНЫЙ UI (МГНОВЕННОЕ ЛОКАЛЬНОЕ СОХРАНЕНИЕ) ===
+             // === 1. ОПТИМИСТИЧНЫЙ UI ===
              String uid = acct.getId();
              File finalBg = pendingBgFile;
              File finalPhoto = pendingPhotoFile;
@@ -245,7 +241,6 @@ public class EditProfileFragment extends Fragment {
                      boolean isGif = pendingBgFile.getName().endsWith(".gif");
                      String ext = isVideo ? ".mp4" : (isGif ? ".gif" : ".jpg");
                      
-                     // Строго удаляем все старые файлы фона для этого пользователя (Очистка памяти!)
                      File dir = activity.getFilesDir();
                      File[] files = dir.listFiles();
                      if (files != null) {
@@ -254,7 +249,6 @@ public class EditProfileFragment extends Fragment {
                          }
                      }
 
-                     // Сохраняем с уникальным Timestamp (Разрушает любой старый кэш!)
                      File permBg = new File(activity.getFilesDir(), "my_bg_" + uid + "_" + System.currentTimeMillis() + ext);
                      copyFile(pendingBgFile, permBg);
                      
@@ -263,7 +257,7 @@ public class EditProfileFragment extends Fragment {
                          .putBoolean("custom_bg_is_video_" + uid, isVideo)
                          .apply();
                          
-                     activity.currentBgBase64 = permBg.getAbsolutePath(); // Прямое обновление для UI
+                     activity.currentBgBase64 = permBg.getAbsolutePath(); 
                      finalBg = permBg;
                  }
                  if (pendingPhotoFile != null) {
@@ -281,10 +275,10 @@ public class EditProfileFragment extends Fragment {
 
              activity.clearPreviewBackground();
              activity.updateGlobalBackground(true);
-             activity.updateAvatarInUI();
+             activity.updateAvatarInUI(); // Моментально обновляем UI!
              activity.navigator.closeSubScreen();
 
-             // === 2. ЗАГРУЗКА НА СЕРВЕР В ФОНОВОМ ПОТОКЕ ===
+             // === 2. ФОНОВАЯ ОТПРАВКА НА СЕРВЕР ===
              File uploadBg = finalBg;
              File uploadPhoto = finalPhoto;
 
@@ -292,19 +286,21 @@ public class EditProfileFragment extends Fragment {
                  Utils.backgroundExecutor.execute(() -> {
                      VpsApi.saveUserProfile(activity.vpsToken, n, a, uploadPhoto, uploadBg, new VpsApi.Callback() {
                          @Override public void onSuccess(String result) {
-                             if (!isAdded()) return;
                              try {
                                  JSONObject json = new JSONObject(result);
                                  String newPhotoUrl = json.optString("photoUrl", null);
                                  String newBgUrl = json.optString("backgroundUrl", null);
 
                                  if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null")) {
-                                     activity.prefs.edit().putString("my_photo_base64", newPhotoUrl).apply();
+                                     activity.prefs.edit()
+                                         .putString("my_photo_base64", newPhotoUrl)
+                                         .putString("synced_photo_url_" + uid, newPhotoUrl) // Защита от отката кэша аватара
+                                         .apply();
                                  }
                                  if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null")) {
                                      activity.prefs.edit()
                                          .putString("my_bg_base64", newBgUrl)
-                                         .putString("synced_bg_url_" + uid, newBgUrl) // Помечаем, что текущий файл соответствует серверу
+                                         .putString("synced_bg_url_" + uid, newBgUrl) 
                                          .apply();
                                  }
 
@@ -327,7 +323,6 @@ public class EditProfileFragment extends Fragment {
 
         Utils.backgroundExecutor.execute(() -> {
             try {
-                // 1. ПРОВЕРКА РАЗМЕРА В САМОМ НАЧАЛЕ (До копирования и сжатия)
                 android.database.Cursor cursor = activity.getContentResolver().query(uri, null, null, null, null);
                 long fileSize = 0;
                 if (cursor != null && cursor.moveToFirst()) {
@@ -339,7 +334,7 @@ public class EditProfileFragment extends Fragment {
                 long maxBytes = maxMb * 1024L * 1024L;
                 if (fileSize > maxBytes) {
                     activity.runOnUiThread(() -> Toast.makeText(activity, activity.getString(R.string.err_file_size_limit) + " " + maxMb + " MB", Toast.LENGTH_LONG).show());
-                    return; // ЖЕСТКОЕ ОТБРАСЫВАНИЕ!
+                    return; 
                 }
 
                 InputStream is = activity.getContentResolver().openInputStream(uri);
