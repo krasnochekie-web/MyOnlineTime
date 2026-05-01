@@ -37,6 +37,10 @@ public class EditProfileFragment extends Fragment {
     private File pendingPhotoFile = null;
     private File pendingBgFile = null;
 
+    // --- ПЕРЕМЕННЫЕ ЗАЩИТЫ ОТ СПАМА ---
+    private static int saveSpamCount = 0;
+    private static long lastSaveTime = 0;
+
     private final ActivityResultLauncher<String[]> photoPicker = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(),
             uri -> { if (uri != null) processMediaFile(uri, 10, true); }
@@ -69,7 +73,6 @@ public class EditProfileFragment extends Fragment {
         final GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
         if (acct == null) return view;
 
-        // Сохраняем исходные значения, чтобы потом с ними сравнивать
         final String initialName = getArguments() != null ? getArguments().getString("CURRENT_NAME", "") : "";
         final String initialAbout = getArguments() != null ? getArguments().getString("CURRENT_ABOUT", "") : "";
 
@@ -143,13 +146,26 @@ public class EditProfileFragment extends Fragment {
         btnSave.setOnClickListener(v -> { 
              final String n = inputName.getText().toString().trim();
              final String a = inputAbout.getText().toString().trim();
-             
-             // === УМНОЕ ЗАКРЫТИЕ ===
-             // Если текст не поменялся и новые файлы не выбраны — просто выходим
+
+             // === УМНОЕ ЗАКРЫТИЕ БЕЗ ЗАПРОСА ===
              if (n.equals(initialName) && a.equals(initialAbout) && pendingPhotoFile == null && pendingBgFile == null) {
+                 activity.clearPreviewBackground(); // Убираем превью
                  activity.navigator.closeSubScreen();
                  return;
              }
+             
+             // === ЗАЩИТА ОТ СПАМА (RATE LIMITING) ===
+             long now = System.currentTimeMillis();
+             if (now - lastSaveTime < 3000) { // 3 секунды перерыв
+                 saveSpamCount++;
+                 if (saveSpamCount >= 5) {
+                     Toast.makeText(activity, R.string.err_wait_before_change, Toast.LENGTH_SHORT).show();
+                     return; // Блокируем вызов
+                 }
+             } else {
+                 saveSpamCount = 1; // Сбрасываем счетчик, если прошло достаточно времени
+             }
+             lastSaveTime = now;
              
              btnSave.setEnabled(false); 
              
@@ -179,7 +195,9 @@ public class EditProfileFragment extends Fragment {
                              if (pendingBgFile != null && pendingBgFile.exists()) pendingBgFile.delete();
 
                              Toast.makeText(activity, R.string.saved_successfully, Toast.LENGTH_SHORT).show();
-                             activity.updateGlobalBackground(true);
+                             
+                             // Закрепляем превью как реальный фон
+                             activity.clearPreviewBackground(); 
                              
                              if (activity instanceof MainActivity) {
                                  ((MainActivity) activity).updateAvatarInUI();
@@ -216,7 +234,6 @@ public class EditProfileFragment extends Fragment {
                 InputStream is = activity.getContentResolver().openInputStream(uri);
                 if (is == null) return;
 
-                // === УМНОЕ ОПРЕДЕЛЕНИЕ ФОРМАТА ===
                 String mimeType = activity.getContentResolver().getType(uri);
                 boolean isVideoBg = !isPhoto && mimeType != null && mimeType.startsWith("video/");
                 
@@ -234,8 +251,9 @@ public class EditProfileFragment extends Fragment {
                 fos.close();
                 is.close();
 
-                long fileSizeInMB = tempFile.length() / (1024 * 1024);
-                if (fileSizeInMB >= maxMb) {
+                // === ИСПРАВЛЕНИЕ: Точная проверка размера в байтах! ===
+                long maxBytes = maxMb * 1024L * 1024L;
+                if (tempFile.length() > maxBytes) {
                     tempFile.delete(); 
                     activity.runOnUiThread(() -> {
                         String errMsg = activity.getString(R.string.err_file_size_limit) + " " + maxMb + " MB";
@@ -254,6 +272,8 @@ public class EditProfileFragment extends Fragment {
                     } else {
                         pendingBgFile = tempFile;
                         Toast.makeText(activity, R.string.background_selected_success, Toast.LENGTH_SHORT).show();
+                        // === ЗАПУСКАЕМ ПРЕДПРОСМОТР ФОНА ===
+                        activity.previewBackground(tempFile.getAbsolutePath(), isVideoBg);
                     }
                 });
 
@@ -279,8 +299,12 @@ public class EditProfileFragment extends Fragment {
     public void onDestroyView() {
         super.onDestroyView();
         MainActivity activity = (MainActivity) getActivity();
-        if (activity != null && !activity.navigator.hasSubScreen()) {
-            activity.headerManager.resetHeader();
+        if (activity != null) {
+            // Очищаем предпросмотр, если вышли, не сохранив настройки
+            activity.clearPreviewBackground();
+            if (!activity.navigator.hasSubScreen()) {
+                activity.headerManager.resetHeader();
+            }
         }
     }
 
@@ -288,7 +312,10 @@ public class EditProfileFragment extends Fragment {
     public void onResume() {
         super.onResume();
         if (!isHidden() && getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(true); 
+            MainActivity activity = (MainActivity) getActivity();
+            if (activity.previewBgPath == null) {
+                activity.updateGlobalBackground(true); 
+            }
         }
     }
 
@@ -299,7 +326,9 @@ public class EditProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!hidden) {
                 setupHeader(activity);
-                activity.updateGlobalBackground(true);
+                if (activity.previewBgPath == null) {
+                    activity.updateGlobalBackground(true);
+                }
             }
         }
     }
