@@ -58,7 +58,17 @@ public class SettingsFragment extends Fragment {
         loadUserData(view);
 
         view.findViewById(R.id.btn_change_email).setOnClickListener(v -> { /* Пока пусто */ });
-        view.findViewById(R.id.btn_delete_account).setOnClickListener(v -> { /* Пока пусто */ });
+        
+        // Кнопка удаления фона! Привязываем её:
+        View btnDeleteBg = view.findViewById(R.id.btn_delete_background); // Проверь ID твоей кнопки!
+        if (btnDeleteBg != null) {
+            btnDeleteBg.setOnClickListener(v -> {
+                if (activity != null) {
+                    activity.deleteMyBackgroundLocal();
+                    Toast.makeText(activity, "Фон удален", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
         
         View btnSwitch = view.findViewById(R.id.btn_switch_account);
         if (btnSwitch != null) {
@@ -241,5 +251,5 @@ public class SettingsFragment extends Fragment {
             }
         }
     }
-            }
-                            
+                    }
+                    
