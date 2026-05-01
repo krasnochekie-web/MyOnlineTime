@@ -3,6 +3,7 @@ package com.myonlinetime.app.ui;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -43,7 +44,7 @@ public class SettingsFragment extends Fragment {
         
         loadUserData(view);
 
-        // Кнопки Аккаунта
+        // Кнопки Аккаунта (для авторизованных)
         view.findViewById(R.id.btn_change_email).setOnClickListener(v -> { /* Пока пусто */ });
         view.findViewById(R.id.btn_delete_account).setOnClickListener(v -> { /* Пока пусто */ });
         
@@ -66,9 +67,20 @@ public class SettingsFragment extends Fragment {
                 if (activity != null && activity.mGoogleSignInClient != null) {
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
                         activity.vpsToken = null; 
-                        loadUserData(view); // Скрываем верхний блок, настройки улетают вверх
+                        loadUserData(view); // Мгновенно переключаем интерфейс на гостя
                         Toast.makeText(getContext(), getString(R.string.settings_sign_out), Toast.LENGTH_SHORT).show();
                     });
+                }
+            });
+        }
+
+        // Кнопка Входа (для гостей)
+        View btnSignInGuest = view.findViewById(R.id.btn_sign_in_guest);
+        if (btnSignInGuest != null) {
+            btnSignInGuest.setOnClickListener(v -> {
+                if (activity != null && activity.mGoogleSignInClient != null) {
+                    Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
+                    activity.startActivityForResult(signInIntent, 9001); 
                 }
             });
         }
@@ -106,16 +118,17 @@ public class SettingsFragment extends Fragment {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
 
-        // Находим ВЕСЬ контейнер данных пользователя и блок аккаунта
         View userHeaderBlock = view.findViewById(R.id.settings_user_header_block);
         View accountBlock = view.findViewById(R.id.settings_account_block);
+        View guestBlock = view.findViewById(R.id.settings_guest_login_block);
 
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         
         if (account != null) {
-            // АВТОРИЗОВАН: Показываем блоки, заполняем данными
+            // АВТОРИЗОВАН: Показываем данные, скрываем кнопку входа
             if (userHeaderBlock != null) userHeaderBlock.setVisibility(View.VISIBLE);
             if (accountBlock != null) accountBlock.setVisibility(View.VISIBLE);
+            if (guestBlock != null) guestBlock.setVisibility(View.GONE);
 
             ImageView avatarView = view.findViewById(R.id.settings_avatar);
             TextView nicknameView = view.findViewById(R.id.settings_nickname);
@@ -131,25 +144,32 @@ public class SettingsFragment extends Fragment {
                 String createdAt = activity.prefs.getString("my_created_at", "");
                 regDateTxt.setText(getString(R.string.settings_reg_date, createdAt.isEmpty() ? "..." : createdAt));
             }
+            
             if (avatarView != null) {
-                String savedAvatar = activity.prefs.getString("my_photo_base64", null);
-                if (savedAvatar != null) {
-                    if (savedAvatar.startsWith("http")) {
-                        Glide.with(this).load(savedAvatar).circleCrop().into(avatarView);
-                    } else {
-                        try {
-                            byte[] bytes = android.util.Base64.decode(savedAvatar, android.util.Base64.DEFAULT);
-                            Glide.with(this).load(bytes).circleCrop().into(avatarView);
-                        } catch (Exception e){}
+                Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + account.getId());
+                if (cachedAvatar != null) {
+                    Glide.with(this).load(cachedAvatar).circleCrop().into(avatarView);
+                } else {
+                    String savedAvatar = activity.prefs.getString("my_photo_base64", null);
+                    if (savedAvatar != null) {
+                        if (savedAvatar.startsWith("http")) {
+                            Glide.with(this).load(savedAvatar).circleCrop().into(avatarView);
+                        } else {
+                            try {
+                                byte[] bytes = android.util.Base64.decode(savedAvatar, android.util.Base64.DEFAULT);
+                                Glide.with(this).load(bytes).circleCrop().into(avatarView);
+                            } catch (Exception e){}
+                        }
+                    } else if (account.getPhotoUrl() != null) {
+                        Glide.with(this).load(account.getPhotoUrl()).circleCrop().into(avatarView);
                     }
-                } else if (account.getPhotoUrl() != null) {
-                    Glide.with(this).load(account.getPhotoUrl()).circleCrop().into(avatarView);
                 }
             }
         } else {
-            // ВЫШЕЛ: Просто скрываем все блоки аккаунта. Контент снизу подтянется вверх.
+            // ГОСТЬ: Скрываем шапку и старые настройки, показываем аккуратную кнопку входа
             if (userHeaderBlock != null) userHeaderBlock.setVisibility(View.GONE);
             if (accountBlock != null) accountBlock.setVisibility(View.GONE);
+            if (guestBlock != null) guestBlock.setVisibility(View.VISIBLE);
         }
     }
 
@@ -181,6 +201,17 @@ public class SettingsFragment extends Fragment {
         super.onResume();
         if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(false); 
+        }
+    }
+
+    @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        if (!hidden && getView() != null) {
+            loadUserData(getView()); 
+            if (getActivity() instanceof MainActivity) {
+                ((MainActivity) getActivity()).updateGlobalBackground(false); 
+            }
         }
     }
 }
