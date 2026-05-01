@@ -222,7 +222,11 @@ public class ProfileFragment extends Fragment {
                         StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
                         if (user.photo != null && user.photo.length() > 10) {
-                            if (isMe) activity.prefs.edit().putString("my_photo_base64", user.photo).apply();
+                            if (isMe) {
+                                activity.prefs.edit().putString("my_photo_base64", user.photo).apply();
+                                // === ИСПРАВЛЕНИЕ: МГНОВЕННО УВЕДОМЛЯЕМ МЕНЮ О СКАЧАННОЙ АВАТАРКЕ ===
+                                activity.updateAvatarInUI();
+                            }
                             handleMediaLoading(activity, user.photo, false, finalTargetUid);
                         }
 
@@ -457,7 +461,6 @@ public class ProfileFragment extends Fragment {
                         nameView.setText(currentName);
                         aboutView.setText(activity.prefs.getString("my_about", ""));
                         
-                        // === ЖЕСТКАЯ ЗАЩИТА ОТ ПУСТОГО ЭКРАНА (ПРИ ЗАХОДЕ С НОВОГО АККАУНТА) ===
                         if (currentName.equals("...") && fetchProfileDataRunnable != null) {
                             fetchProfileDataRunnable.run();
                         }
