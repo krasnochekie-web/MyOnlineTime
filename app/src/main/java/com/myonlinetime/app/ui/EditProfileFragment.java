@@ -69,8 +69,9 @@ public class EditProfileFragment extends Fragment {
         final GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
         if (acct == null) return view;
 
-        String currentName = getArguments() != null ? getArguments().getString("CURRENT_NAME", "") : "";
-        String currentAbout = getArguments() != null ? getArguments().getString("CURRENT_ABOUT", "") : "";
+        // Сохраняем исходные значения, чтобы потом с ними сравнивать
+        final String initialName = getArguments() != null ? getArguments().getString("CURRENT_NAME", "") : "";
+        final String initialAbout = getArguments() != null ? getArguments().getString("CURRENT_ABOUT", "") : "";
 
         final EditText inputName = view.findViewById(R.id.input_nickname);
         final EditText inputAbout = view.findViewById(R.id.input_about);
@@ -80,38 +81,28 @@ public class EditProfileFragment extends Fragment {
         ImageView avatarPreview = view.findViewById(R.id.edit_avatar_preview);
         View btnSave = view.findViewById(R.id.btn_save_changes);
 
-        // === НАШ НОВЫЙ ФИЛЬТР БЕЗОПАСНОСТИ ЮНИКОДА ===
         InputFilter exoticFilter = new InputFilter() {
             @Override
             public CharSequence filter(CharSequence source, int start, int end, Spanned dest, int dstart, int dend) {
                 for (int i = start; i < end; i++) {
                     int type = Character.getType(source.charAt(i));
-                    // Блокируем:
-                    // SURROGATE - почти все эмодзи и "тяжелые" символы из доп. плоскостей
-                    // NON_SPACING_MARK - те самые нагромождения Zalgo-текста, ломающие высоту
-                    // CONTROL - непечатные управляющие символы
-                    // OTHER_SYMBOL - символы-картинки, дингбаты
-                    if (type == Character.SURROGATE || 
-                        type == Character.NON_SPACING_MARK || 
-                        type == Character.CONTROL || 
-                        type == Character.OTHER_SYMBOL) {
-                        return ""; // Отбрасываем плохой символ на лету
+                    if (type == Character.SURROGATE || type == Character.NON_SPACING_MARK || 
+                        type == Character.CONTROL || type == Character.OTHER_SYMBOL) {
+                        return "";
                     }
                 }
-                return null; // Все ок, печатаем
+                return null;
             }
         };
 
-        // Ставим лимит 16 + фильтр защиты на никнейм
         inputName.setFilters(new InputFilter[]{ exoticFilter, new InputFilter.LengthFilter(16) });
-        // Ставим лимит 1024 + фильтр защиты на описание (чтобы там не сломали профиль)
         inputAbout.setFilters(new InputFilter[]{ exoticFilter, new InputFilter.LengthFilter(1024) });
 
-        inputName.setText(currentName);
-        inputAbout.setText(currentAbout);
+        inputName.setText(initialName);
+        inputAbout.setText(initialAbout);
 
         if (aboutCounter != null) {
-            aboutCounter.setText(currentAbout.length() + "/1024");
+            aboutCounter.setText(initialAbout.length() + "/1024");
             inputAbout.addTextChangedListener(new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
                 @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
@@ -152,6 +143,13 @@ public class EditProfileFragment extends Fragment {
         btnSave.setOnClickListener(v -> { 
              final String n = inputName.getText().toString().trim();
              final String a = inputAbout.getText().toString().trim();
+             
+             // === УМНОЕ ЗАКРЫТИЕ ===
+             // Если текст не поменялся и новые файлы не выбраны — просто выходим
+             if (n.equals(initialName) && a.equals(initialAbout) && pendingPhotoFile == null && pendingBgFile == null) {
+                 activity.navigator.closeSubScreen();
+                 return;
+             }
              
              btnSave.setEnabled(false); 
              
@@ -218,8 +216,12 @@ public class EditProfileFragment extends Fragment {
                 InputStream is = activity.getContentResolver().openInputStream(uri);
                 if (is == null) return;
 
+                // === УМНОЕ ОПРЕДЕЛЕНИЕ ФОРМАТА ===
+                String mimeType = activity.getContentResolver().getType(uri);
+                boolean isVideoBg = !isPhoto && mimeType != null && mimeType.startsWith("video/");
+                
                 String prefix = isPhoto ? "temp_avatar_" : "temp_bg_";
-                String extension = isPhoto ? ".jpg" : ".tmp"; 
+                String extension = isPhoto ? ".jpg" : (isVideoBg ? ".mp4" : ".jpg"); 
                 File tempFile = new File(activity.getCacheDir(), prefix + System.currentTimeMillis() + extension);
                 
                 FileOutputStream fos = new FileOutputStream(tempFile);
