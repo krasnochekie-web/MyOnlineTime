@@ -60,6 +60,35 @@ public class ProfileFragment extends Fragment {
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
 
+    // === ПРИЕМНИК СИГНАЛА ОБНОВЛЕНИЯ ===
+    private final android.content.BroadcastReceiver profileUpdateReceiver = new android.content.BroadcastReceiver() {
+        @Override
+        public void onReceive(android.content.Context context, android.content.Intent intent) {
+            MainActivity activity = (MainActivity) getActivity();
+            if (activity != null && isAdded() && isMe) {
+                // Обновляем имя и описание
+                TextView nameView = getView().findViewById(R.id.profile_name);
+                TextView aboutView = getView().findViewById(R.id.profile_about);
+                
+                GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
+                if (acct != null && nameView != null && aboutView != null) {
+                    nameView.setText(activity.prefs.getString("my_nickname", acct.getDisplayName()));
+                    aboutView.setText(activity.prefs.getString("my_about", ""));
+                    
+                    LinearLayout appsContainerLocal = getView().findViewById(R.id.profile_apps_container);
+                    ImageView btnExpand = getView().findViewById(R.id.btn_expand_apps);
+                    ImageView btnCollapse = getView().findViewById(R.id.btn_collapse_apps);
+                    applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+                }
+
+                // Перезагружаем аватарку с учетом Оптимистичного UI
+                if (acct != null) {
+                    handleMediaLoading(activity, null, true, acct.getId());
+                }
+            }
+        }
+    };
+
     private static class AppUiData {
         String pkgName;
         String appName;
@@ -235,7 +264,6 @@ public class ProfileFragment extends Fragment {
                             if (isMe) {
                                 boolean cacheChanged = false;
                                 
-                                // === ИСПРАВЛЕНИЕ: Обновляем кэш и интерфейс ТОЛЬКО если данные реально отличаются ===
                                 if (user.hiddenApps != null) {
                                     Set<String> newHidden = new HashSet<>(user.hiddenApps);
                                     if (!localHiddenApps.equals(newHidden)) {
@@ -255,7 +283,6 @@ public class ProfileFragment extends Fragment {
                                     }
                                 }
                                 
-                                // Теперь второй раз перерисует только если ты изменил настройки на другом устройстве!
                                 if (cacheChanged) requestLoadMyStats();
                             }
 
@@ -353,15 +380,40 @@ public class ProfileFragment extends Fragment {
         uiHandler.postDelayed(loadMyStatsRunnable, 150);
     }
 
+    // === ИДЕАЛЬНАЯ ЗАГРУЗКА АВАТАРОК В ПРОФИЛЕ ===
     private void handleMediaLoading(MainActivity activity, String base64Data, boolean useLocalFile, String uid) {
-        if (base64Data == null || base64Data.isEmpty()) {
-            if (useLocalFile) {
-                File file = new File(activity.getFilesDir(), "avatar_" + uid + ".png");
-                Glide.with(activity).load(file).circleCrop().error(R.drawable.bg_edit_circle).into(avatarView);
+        if (!isAdded() || avatarView == null) return;
+
+        // Если это наш профиль, сначала проверяем свежий Оптимистичный UI кэш
+        if (useLocalFile && isMe) {
+            String customAvatarPath = activity.prefs.getString("custom_avatar_path_" + uid, null);
+            if (customAvatarPath != null) {
+                File localCustomFile = new File(customAvatarPath);
+                if (localCustomFile.exists()) {
+                    Glide.with(activity)
+                         .load(localCustomFile)
+                         .skipMemoryCache(true) // Выключаем кэш, чтобы всегда было свежее!
+                         .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
+                         .circleCrop()
+                         .error(R.drawable.bg_edit_circle)
+                         .into(avatarView);
+                    return;
+                }
             }
+
+            // Фоллбэк: берем старый аватар
+            File file = new File(activity.getFilesDir(), "avatar_" + uid + ".png");
+            Glide.with(activity).load(file).circleCrop().error(R.drawable.bg_edit_circle).into(avatarView);
             return;
         }
 
+        // Если это чужой профиль или данных вообще нет
+        if (base64Data == null || base64Data.isEmpty()) {
+            Glide.with(activity).load(R.drawable.bg_edit_circle).circleCrop().into(avatarView);
+            return;
+        }
+
+        // Грузим из интернета (Для чужих профилей или первого захода)
         if (base64Data.startsWith("http")) {
             Glide.with(activity).load(base64Data).circleCrop().into(avatarView);
             return;
@@ -432,6 +484,18 @@ public class ProfileFragment extends Fragment {
         if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(isMe);
         }
+        
+        // Подключаем слушатель обновлений!
+        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
+            .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_PROFILE_UPDATED"));
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        // Отключаем слушатель
+        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
+            .unregisterReceiver(profileUpdateReceiver);
     }
 
     @Override
@@ -461,8 +525,8 @@ public class ProfileFragment extends Fragment {
                         LinearLayout appsContainerLocal = getView().findViewById(R.id.profile_apps_container);
                         applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
                         
-                        String b64 = activity.prefs.getString("my_photo_base64", null);
-                        handleMediaLoading(activity, b64, true, acct.getId());
+                        // Используем Оптимистичный UI и здесь
+                        handleMediaLoading(activity, null, true, acct.getId());
                     }
                 }
                 activity.updateGlobalBackground(isMe);
