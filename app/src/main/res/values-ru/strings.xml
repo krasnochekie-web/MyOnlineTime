@@ -8,6 +8,7 @@
     <string name="find">Поиск</string>
     <string name="time">Время</string>
 	<string name="notif_max_count">99+</string>	
+	<string name="err_wait_cooldown">Подождите, чтобы изменить данную информацию.</string>
 	<string name="err_wait_before_change">Необходимо подождать, прежде чем сменить фон!</string>
 	<string name="title_search">Поиск</string>
 	<string name="saved_successfully">Успешно сохранено!</string>
