@@ -27,7 +27,6 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 
-// --- ИМПОРТЫ ДЛЯ АППАРАТНОГО СЖАТИЯ ВИДЕО ---
 import com.otaliastudios.transcoder.Transcoder;
 import com.otaliastudios.transcoder.TranscoderListener;
 import com.otaliastudios.transcoder.strategy.DefaultVideoStrategy;
@@ -35,8 +34,10 @@ import com.otaliastudios.transcoder.strategy.DefaultVideoStrategy;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 
 public class EditProfileFragment extends Fragment {
 
@@ -45,7 +46,7 @@ public class EditProfileFragment extends Fragment {
     
     private boolean isCompressing = false; 
 
-    // === ПЕРЕМЕННЫЕ ЗАЩИТЫ ОТ СПАМА (RATE LIMITING) ===
+    // === ПЕРЕМЕННЫЕ ЗАЩИТЫ ОТ СПАМА ===
     private static long penaltyEndTime = 0;
     private static final java.util.LinkedList<Long> textAttemptTimes = new java.util.LinkedList<>();
     private static final java.util.LinkedList<Long> mediaAttemptTimes = new java.util.LinkedList<>();
@@ -71,28 +72,25 @@ public class EditProfileFragment extends Fragment {
 
     public EditProfileFragment() {}
 
-    // === ЕДИНЫЙ МЕТОД ЗАЩИТЫ ===
+    private void copyFile(File src, File dst) throws Exception {
+        try (InputStream in = new FileInputStream(src); OutputStream out = new FileOutputStream(dst)) {
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = in.read(buf)) > 0) out.write(buf, 0, len);
+        }
+    }
+
     private boolean isActionSpam(boolean isMedia) {
         long now = System.currentTimeMillis();
-        
-        // 1. Если пользователь УЖЕ в бане
         if (now < penaltyEndTime) {
-            // Любая попытка сбрасывает таймер наказания заново на 30 секунд
             penaltyEndTime = now + 30000; 
-            if (getActivity() != null) {
-                Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
-            }
-            return true; // Блокируем действие
+            if (getActivity() != null) Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
+            return true;
         }
 
-        // 2. Если пользователь не в бане, фиксируем попытку
         if (isMedia) {
             mediaAttemptTimes.add(now);
-            // Удаляем старые клики (старше 10 секунд)
-            while (!mediaAttemptTimes.isEmpty() && now - mediaAttemptTimes.getFirst() > 10000) {
-                mediaAttemptTimes.removeFirst();
-            }
-            // Лимит для медиа: > 5 кликов за 10 секунд
+            while (!mediaAttemptTimes.isEmpty() && now - mediaAttemptTimes.getFirst() > 10000) mediaAttemptTimes.removeFirst();
             if (mediaAttemptTimes.size() > 5) {
                 penaltyEndTime = now + 30000;
                 if (getActivity() != null) Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
@@ -100,17 +98,13 @@ public class EditProfileFragment extends Fragment {
             }
         } else {
             textAttemptTimes.add(now);
-            while (!textAttemptTimes.isEmpty() && now - textAttemptTimes.getFirst() > 10000) {
-                textAttemptTimes.removeFirst();
-            }
-            // Лимит для текста: > 10 сохранений за 10 секунд
+            while (!textAttemptTimes.isEmpty() && now - textAttemptTimes.getFirst() > 10000) textAttemptTimes.removeFirst();
             if (textAttemptTimes.size() > 10) {
                 penaltyEndTime = now + 30000;
                 if (getActivity() != null) Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
                 return true;
             }
         }
-        
         return false; 
     }
 
@@ -173,9 +167,8 @@ public class EditProfileFragment extends Fragment {
         } else {
             String savedAvatar = activity.prefs.getString("my_photo_base64", null);
             if (savedAvatar != null && avatarPreview != null) {
-                if (savedAvatar.startsWith("http")) {
-                    Glide.with(activity).load(savedAvatar).circleCrop().into(avatarPreview);
-                } else {
+                if (savedAvatar.startsWith("http")) Glide.with(activity).load(savedAvatar).circleCrop().into(avatarPreview);
+                else {
                     try {
                         byte[] bytes = android.util.Base64.decode(savedAvatar, android.util.Base64.DEFAULT);
                         Glide.with(activity).load(bytes).circleCrop().into(avatarPreview);
@@ -210,69 +203,82 @@ public class EditProfileFragment extends Fragment {
              final String n = inputName.getText().toString().trim();
              final String a = inputAbout.getText().toString().trim();
 
-             // Если ничего не изменилось — выходим сразу
              if (n.equals(initialName) && a.equals(initialAbout) && pendingPhotoFile == null && pendingBgFile == null) {
                  activity.clearPreviewBackground(); 
                  activity.navigator.closeSubScreen();
                  return;
              }
              
-             // Проверяем на спам (передаем true, если загружаются файлы, иначе false)
-             if (isActionSpam(pendingPhotoFile != null || pendingBgFile != null)) {
-                 return; 
-             }
+             if (isActionSpam(pendingPhotoFile != null || pendingBgFile != null)) return; 
              
              btnSave.setEnabled(false); 
-             
+
+             // === 1. ОПТИМИСТИЧНЫЙ UI (МГНОВЕННОЕ ЛОКАЛЬНОЕ СОХРАНЕНИЕ) ===
+             String uid = acct.getId();
+             File finalBg = pendingBgFile;
+             File finalPhoto = pendingPhotoFile;
+
+             try {
+                 if (pendingBgFile != null) {
+                     boolean isVideo = pendingBgFile.getName().endsWith(".mp4");
+                     File permBg = new File(activity.getFilesDir(), "my_bg_" + uid + (isVideo ? ".mp4" : ".jpg"));
+                     copyFile(pendingBgFile, permBg);
+                     
+                     activity.prefs.edit()
+                         .putString("custom_bg_path_" + uid, permBg.getAbsolutePath())
+                         .putBoolean("custom_bg_is_video_" + uid, isVideo)
+                         .apply();
+                     finalBg = permBg;
+                 }
+                 if (pendingPhotoFile != null) {
+                     File permAvatar = new File(activity.getFilesDir(), "avatar_" + uid + ".png");
+                     copyFile(pendingPhotoFile, permAvatar);
+                     activity.mMemoryCache.remove("avatar_" + uid);
+                     finalPhoto = permAvatar;
+                 }
+             } catch (Exception e) { e.printStackTrace(); }
+
+             activity.prefs.edit()
+                 .putString("my_nickname", n)
+                 .putString("my_about", a)
+                 .apply();
+
+             activity.clearPreviewBackground();
+             activity.updateGlobalBackground(true);
+             activity.updateAvatarInUI();
+             activity.navigator.closeSubScreen();
+
+             // === 2. ЗАГРУЗКА НА СЕРВЕР В ФОНОВОМ ПОТОКЕ ===
+             File uploadBg = finalBg;
+             File uploadPhoto = finalPhoto;
+
              if (activity.vpsToken != null) {
-                 VpsApi.saveUserProfile(activity.vpsToken, n, a, pendingPhotoFile, pendingBgFile, new VpsApi.Callback() {
-                     @Override public void onSuccess(String result) {
-                         if (!isAdded()) return;
-                         try {
-                             JSONObject json = new JSONObject(result);
-                             String newPhotoUrl = json.optString("photoUrl", null);
-                             String newBgUrl = json.optString("backgroundUrl", null);
+                 Utils.backgroundExecutor.execute(() -> {
+                     VpsApi.saveUserProfile(activity.vpsToken, n, a, uploadPhoto, uploadBg, new VpsApi.Callback() {
+                         @Override public void onSuccess(String result) {
+                             try {
+                                 JSONObject json = new JSONObject(result);
+                                 String newPhotoUrl = json.optString("photoUrl", null);
+                                 String newBgUrl = json.optString("backgroundUrl", null);
 
-                             activity.prefs.edit()
-                                     .putString("my_nickname", n)
-                                     .putString("my_about", a)
-                                     .apply();
-                                     
-                             if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null")) {
-                                 activity.prefs.edit().putString("my_photo_base64", newPhotoUrl).apply();
-                             }
-                             if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null")) {
-                                 activity.prefs.edit().putString("my_bg_base64", newBgUrl).apply();
-                                 activity.currentBgBase64 = newBgUrl; 
-                             }
+                                 if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null")) {
+                                     activity.prefs.edit().putString("my_photo_base64", newPhotoUrl).apply();
+                                 }
+                                 if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null")) {
+                                     activity.prefs.edit()
+                                         .putString("my_bg_base64", newBgUrl)
+                                         .putString("synced_bg_url_" + uid, newBgUrl) // Помечаем, что текущий файл соответствует серверу
+                                         .apply();
+                                 }
 
-                             if (pendingPhotoFile != null && pendingPhotoFile.exists()) pendingPhotoFile.delete();
-                             if (pendingBgFile != null && pendingBgFile.exists()) pendingBgFile.delete();
-
-                             Toast.makeText(activity, R.string.saved_successfully, Toast.LENGTH_SHORT).show();
-                             
-                             activity.clearPreviewBackground(); 
-                             
-                             if (activity instanceof MainActivity) {
-                                 ((MainActivity) activity).updateAvatarInUI();
-                             }
-                             
-                             activity.navigator.closeSubScreen();
-                         } catch (Exception e) {
-                             Toast.makeText(activity, "Ошибка обработки ответа сервера", Toast.LENGTH_SHORT).show();
-                             btnSave.setEnabled(true);
+                                 // Удаляем временные исходники
+                                 if (pendingPhotoFile != null && pendingPhotoFile.exists()) pendingPhotoFile.delete();
+                                 if (pendingBgFile != null && pendingBgFile.exists()) pendingBgFile.delete();
+                             } catch (Exception e) {}
                          }
-                     }
-                     @Override public void onError(String error) { 
-                         if (isAdded()) {
-                             Toast.makeText(activity, activity.getString(R.string.err_saving) + " " + error, Toast.LENGTH_LONG).show(); 
-                             btnSave.setEnabled(true);
-                         }
-                     }
+                         @Override public void onError(String error) {}
+                     });
                  });
-             } else {
-                 Toast.makeText(activity, "Ошибка авторизации. Перезапустите приложение.", Toast.LENGTH_LONG).show();
-                 btnSave.setEnabled(true);
              }
         });
 
@@ -298,16 +304,11 @@ public class EditProfileFragment extends Fragment {
                 FileOutputStream fos = new FileOutputStream(tempFile);
                 byte[] buffer = new byte[8192]; 
                 int nRead;
-                while ((nRead = is.read(buffer)) != -1) {
-                    fos.write(buffer, 0, nRead);
-                }
-                fos.flush();
-                fos.close();
-                is.close();
+                while ((nRead = is.read(buffer)) != -1) fos.write(buffer, 0, nRead);
+                fos.flush(); fos.close(); is.close();
 
                 long maxBytes = maxMb * 1024L * 1024L;
                 
-                // === АППАРАТНОЕ СЖАТИЕ ЧЕРЕЗ TRANSCODER ===
                 if (isVideoBg) {
                     isCompressing = true;
                     activity.runOnUiThread(() -> Toast.makeText(activity, R.string.toast_compressing_video, Toast.LENGTH_LONG).show());
@@ -316,15 +317,14 @@ public class EditProfileFragment extends Fragment {
                     
                     Transcoder.into(compressedFile.getAbsolutePath())
                         .addDataSource(tempFile.getAbsolutePath())
-                        .setVideoTrackStrategy(DefaultVideoStrategy.atMost(540).build()) 
+                        .setVideoTrackStrategy(DefaultVideoStrategy.atMost(720).build()) 
                         .setListener(new TranscoderListener() {
-                            @Override
-                            public void onTranscodeProgress(double progress) {}
+                            @Override public void onTranscodeProgress(double progress) {}
 
                             @Override
                             public void onTranscodeCompleted(int successCode) {
                                 isCompressing = false;
-                                tempFile.delete(); // Удаляем исходник
+                                tempFile.delete(); 
                                 
                                 if (compressedFile.length() > maxBytes) {
                                     compressedFile.delete();
@@ -337,14 +337,8 @@ public class EditProfileFragment extends Fragment {
                                     });
                                 }
                             }
-
-                            @Override
-                            public void onTranscodeCanceled() {
-                                isCompressing = false;
-                            }
-
-                            @Override
-                            public void onTranscodeFailed(@NonNull Throwable exception) {
+                            @Override public void onTranscodeCanceled() { isCompressing = false; }
+                            @Override public void onTranscodeFailed(@NonNull Throwable exception) {
                                 isCompressing = false;
                                 activity.runOnUiThread(() -> Toast.makeText(activity, R.string.err_video_compress, Toast.LENGTH_SHORT).show());
                             }
@@ -365,11 +359,9 @@ public class EditProfileFragment extends Fragment {
                         if (avatarPreview != null) Glide.with(this).load(tempFile).circleCrop().into(avatarPreview);
                     } else {
                         pendingBgFile = tempFile;
-                        Toast.makeText(activity, R.string.background_selected_success, Toast.LENGTH_SHORT).show();
                         activity.previewBackground(tempFile.getAbsolutePath(), false);
                     }
                 });
-
             } catch (Exception e) {
                 activity.runOnUiThread(() -> Toast.makeText(activity, R.string.err_processing_file, Toast.LENGTH_SHORT).show());
             }
@@ -394,9 +386,7 @@ public class EditProfileFragment extends Fragment {
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
             activity.clearPreviewBackground();
-            if (!activity.navigator.hasSubScreen()) {
-                activity.headerManager.resetHeader();
-            }
+            if (!activity.navigator.hasSubScreen()) activity.headerManager.resetHeader();
         }
     }
 
@@ -405,9 +395,7 @@ public class EditProfileFragment extends Fragment {
         super.onResume();
         if (!isHidden() && getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
-            if (activity.previewBgPath == null) {
-                activity.updateGlobalBackground(true); 
-            }
+            if (activity.previewBgPath == null) activity.updateGlobalBackground(true); 
         }
     }
 
@@ -418,10 +406,9 @@ public class EditProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!hidden) {
                 setupHeader(activity);
-                if (activity.previewBgPath == null) {
-                    activity.updateGlobalBackground(true);
-                }
+                if (activity.previewBgPath == null) activity.updateGlobalBackground(true);
             }
         }
     }
 }
+```</UID></UID>
