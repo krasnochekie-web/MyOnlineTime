@@ -4,15 +4,14 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
-import com.bumptech.glide.Glide;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.bumptech.glide.Glide;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.models.User;
-import com.myonlinetime.app.utils.Utils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,29 +41,20 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
         final User u = users.get(position);
         
         holder.name.setText(u.nickname != null ? u.nickname : activity.getString(R.string.new_user));
-        holder.avatar.setImageResource(android.R.drawable.sym_def_app_icon);
 
-        // Уникальная метка для карточки, чтобы при быстрой прокрутке картинки не путались
-        holder.avatar.setTag(u.uid);
+        // 1. Очищаем старую картинку, чтобы при быстром скролле не было "морганий" чужих аватарок
+        Glide.with(activity).clear(holder.avatar);
 
-        if (u.photo != null && u.photo.length() > 10) {
-            if (u.photo.startsWith("http")) {
-                Glide.with(activity).load(u.photo).circleCrop().into(holder.avatar);
-            } else {
-                // Асинхронная расшифровка Base64 (без всяких проверок на видео)
-                Utils.backgroundExecutor.execute(() -> {
-                    try {
-                        byte[] imageByteArray = android.util.Base64.decode(u.photo, android.util.Base64.DEFAULT);
-                        
-                        activity.runOnUiThread(() -> {
-                            // Отрисовываем, только если карточка не успела уехать при скролле
-                            if (u.uid.equals(holder.avatar.getTag())) {
-                                Glide.with(activity).load(imageByteArray).circleCrop().into(holder.avatar);
-                            }
-                        });
-                    } catch (Exception e) {}
-                });
-            }
+        // ТЕПЕРЬ ТУТ ТОЛЬКО ЧИСТЫЕ И БЫСТРЫЕ ССЫЛКИ! НИКАКОГО BASE64!
+        if (u.photo != null && u.photo.startsWith("http")) {
+            Glide.with(activity)
+                 .load(u.photo)
+                 .circleCrop()
+                 .placeholder(android.R.drawable.sym_def_app_icon) // Пока грузится из сети, показываем дефолтную
+                 .into(holder.avatar);
+        } else {
+            // Если фото нет или это старый Base64 мусор — ставим заглушку
+            holder.avatar.setImageResource(android.R.drawable.sym_def_app_icon);
         }
 
         holder.itemView.setOnClickListener(v -> {
