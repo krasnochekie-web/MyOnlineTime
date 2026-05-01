@@ -395,25 +395,25 @@ public class MainActivity extends AppCompatActivity {
 
         bgHandler.removeCallbacks(hideBgRunnable);
 
+        GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
+        if (acct == null) {
+            bgHandler.postDelayed(hideBgRunnable, 200);
+            return;
+        }
+        
+        String uid = acct.getId();
+
         String myBgUrl = prefs.getString("my_bg_base64", null);
         if (myBgUrl != null && myBgUrl.startsWith("http")) {
             syncMyBackground(myBgUrl);
         }
 
-        String path = null;
-        boolean isVideo = false;
+        String path = prefs.getString("custom_bg_path_" + uid, null);
+        boolean isVideo = prefs.getBoolean("custom_bg_is_video_" + uid, false);
 
-        if (currentTab == 4 && currentBgBase64 != null && !currentBgBase64.isEmpty() && !currentBgBase64.equals("null")) {
-            path = resolveBackgroundPath(currentBgBase64);
+        if ((path == null || !new File(path).exists()) && myBgUrl != null && myBgUrl.startsWith("http")) {
+            path = resolveBackgroundPath(myBgUrl);
             isVideo = path != null && (path.toLowerCase().endsWith(".mp4") || path.toLowerCase().endsWith(".mov"));
-        } else {
-            path = prefs.getString("custom_bg_path", null);
-            isVideo = prefs.getBoolean("custom_bg_is_video", false);
-            
-            if ((path == null || !new File(path).exists()) && myBgUrl != null && myBgUrl.startsWith("http")) {
-                path = resolveBackgroundPath(myBgUrl);
-                isVideo = path != null && (path.toLowerCase().endsWith(".mp4") || path.toLowerCase().endsWith(".mov"));
-            }
         }
 
         if (path == null || path.isEmpty()) {
@@ -477,11 +477,11 @@ public class MainActivity extends AppCompatActivity {
         File localFile = new File(getFilesDir(), "my_bg_" + uid + ext);
 
         if (bgUrl.equals(cachedUrl) && localFile.exists()) {
-            String currentCustom = prefs.getString("custom_bg_path", "");
+            String currentCustom = prefs.getString("custom_bg_path_" + uid, "");
             if (!localFile.getAbsolutePath().equals(currentCustom)) {
                 prefs.edit()
-                     .putString("custom_bg_path", localFile.getAbsolutePath())
-                     .putBoolean("custom_bg_is_video", isVideo)
+                     .putString("custom_bg_path_" + uid, localFile.getAbsolutePath())
+                     .putBoolean("custom_bg_is_video_" + uid, isVideo)
                      .apply();
                 updateGlobalBackground(true);
             }
@@ -507,8 +507,8 @@ public class MainActivity extends AppCompatActivity {
                     isSyncingBg = false;
                     prefs.edit()
                          .putString("synced_bg_url_" + uid, bgUrl)
-                         .putString("custom_bg_path", localFile.getAbsolutePath())
-                         .putBoolean("custom_bg_is_video", isVideo)
+                         .putString("custom_bg_path_" + uid, localFile.getAbsolutePath())
+                         .putBoolean("custom_bg_is_video_" + uid, isVideo)
                          .apply();
                          
                     updateGlobalBackground(true);
@@ -537,13 +537,17 @@ public class MainActivity extends AppCompatActivity {
         if (previewBgPath != null) {
             previewBackground(previewBgPath, isPreviewVideo);
         } else {
-            String path = prefs.getString("custom_bg_path", null);
-            if (path != null) {
-                boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
-                if (isVideo && playerView != null && playerView.getVisibility() == View.VISIBLE) {
-                    if (exoPlayer != null && !exoPlayer.isPlaying()) exoPlayer.play();
-                } else if (!isVideo && globalImageView != null && globalImageView.getVisibility() == View.VISIBLE) {
-                    Glide.with(this).load(new File(path)).centerCrop().into(globalImageView);
+            GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
+            if (acct != null) {
+                String uid = acct.getId();
+                String path = prefs.getString("custom_bg_path_" + uid, null);
+                if (path != null) {
+                    boolean isVideo = prefs.getBoolean("custom_bg_is_video_" + uid, false);
+                    if (isVideo && playerView != null && playerView.getVisibility() == View.VISIBLE) {
+                        if (exoPlayer != null && !exoPlayer.isPlaying()) exoPlayer.play();
+                    } else if (!isVideo && globalImageView != null && globalImageView.getVisibility() == View.VISIBLE) {
+                        Glide.with(this).load(new File(path)).centerCrop().into(globalImageView);
+                    }
                 }
             }
         }
