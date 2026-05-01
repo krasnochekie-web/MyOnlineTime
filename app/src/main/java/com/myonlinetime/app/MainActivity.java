@@ -55,8 +55,11 @@ public class MainActivity extends AppCompatActivity {
     private View bottomNav;
     public View mainRoot;
     public TextView headerTitle;
-    public String currentBgBase64 = null; // Теперь здесь хранится URL
+    public String currentBgBase64 = null; 
     public ImageView headerBackBtn;
+    
+    public String previewBgPath = null;
+    public boolean isPreviewVideo = false;
     
     private ImageView iconFeed, iconSearch, iconUsage, iconProfile, iconSettings;
     
@@ -82,7 +85,7 @@ public class MainActivity extends AppCompatActivity {
     
     private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable hideBgRunnable;
-    private boolean isSyncingBg = false; // Флаг от двойного скачивания
+    private boolean isSyncingBg = false; 
 
     private final SharedPreferences.OnSharedPreferenceChangeListener notifListener = (sharedPrefs, key) -> {
         if ("notif_history_array".equals(key)) {
@@ -310,9 +313,69 @@ public class MainActivity extends AppCompatActivity {
         playerView.setPlayer(exoPlayer);
         exoPlayer.setRepeatMode(Player.REPEAT_MODE_ALL);
         exoPlayer.setVolume(0f);
+        exoPlayer.setVideoScalingMode(androidx.media3.common.C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING);
     }
 
-    // --- УМНАЯ ОТРИСОВКА ФОНА ---
+    public void previewBackground(String path, boolean isVideo) {
+        previewBgPath = path;
+        isPreviewVideo = isVideo;
+
+        bgHandler.removeCallbacks(hideBgRunnable);
+
+        if (isVideo) {
+            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+            if (playerView != null) playerView.setVisibility(View.VISIBLE);
+            
+            MediaItem mediaItem = path.startsWith("http") ? 
+                    MediaItem.fromUri(Uri.parse(path)) : 
+                    MediaItem.fromUri(Uri.fromFile(new File(path)));
+                    
+            if (exoPlayer != null) {
+                exoPlayer.setMediaItem(mediaItem);
+                exoPlayer.prepare();
+                exoPlayer.play();
+            }
+        } else {
+            if (playerView != null) playerView.setVisibility(View.INVISIBLE);
+            if (exoPlayer != null) exoPlayer.pause();
+            if (globalImageView != null) {
+                globalImageView.setVisibility(View.VISIBLE);
+                if (path.startsWith("http")) {
+                    Glide.with(this).load(path).centerCrop().into(globalImageView);
+                } else {
+                    Glide.with(this).load(new File(path)).centerCrop().into(globalImageView);
+                }
+            }
+        }
+    }
+
+    public void clearPreviewBackground() {
+        if (previewBgPath != null) {
+            previewBgPath = null;
+            currentBgPath = null; 
+            updateGlobalBackground(true);
+        }
+    }
+
+    private String resolveBackgroundPath(String path) {
+        if (path == null) return null;
+        if (path.startsWith("http")) {
+            GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+            if (account != null) {
+                String uid = account.getId();
+                String cachedUrl = prefs.getString("synced_bg_url_" + uid, "");
+                if (path.equals(cachedUrl)) {
+                    boolean isVideo = path.toLowerCase().endsWith(".mp4") || path.toLowerCase().endsWith(".mov");
+                    File localFile = new File(getFilesDir(), "my_bg_" + uid + (isVideo ? ".mp4" : ".jpg"));
+                    if (localFile.exists()) {
+                        return localFile.getAbsolutePath();
+                    }
+                }
+            }
+        }
+        return path;
+    }
+
     public void updateGlobalBackground(boolean show) {
         if (hideBgRunnable == null) {
             hideBgRunnable = () -> {
@@ -322,6 +385,8 @@ public class MainActivity extends AppCompatActivity {
             };
         }
 
+        if (previewBgPath != null) return;
+
         if (!show) {
             bgHandler.removeCallbacks(hideBgRunnable);
             bgHandler.postDelayed(hideBgRunnable, 200);
@@ -330,29 +395,24 @@ public class MainActivity extends AppCompatActivity {
 
         bgHandler.removeCallbacks(hideBgRunnable);
 
-        // 1. АВТО-КЭШИРОВАНИЕ ФОНА ПОЛЬЗОВАТЕЛЯ
         String myBgUrl = prefs.getString("my_bg_base64", null);
         if (myBgUrl != null && myBgUrl.startsWith("http")) {
             syncMyBackground(myBgUrl);
         }
 
-        // 2. ВЫБОР ИСТОЧНИКА ДЛЯ ФОНА
         String path = null;
         boolean isVideo = false;
 
         if (currentTab == 4 && currentBgBase64 != null && !currentBgBase64.isEmpty() && !currentBgBase64.equals("null")) {
-            // Если мы смотрим чей-то профиль (или свой) — показываем его фон напрямую из сети
-            path = currentBgBase64;
-            isVideo = path.toLowerCase().endsWith(".mp4") || path.toLowerCase().endsWith(".mov");
+            path = resolveBackgroundPath(currentBgBase64);
+            isVideo = path != null && (path.toLowerCase().endsWith(".mp4") || path.toLowerCase().endsWith(".mov"));
         } else {
-            // Если мы в настройках или ленте — показываем наш ГЛОБАЛЬНЫЙ локальный фон
             path = prefs.getString("custom_bg_path", null);
             isVideo = prefs.getBoolean("custom_bg_is_video", false);
             
-            // Заглушка: если файл еще скачивается, временно стримим из интернета
             if ((path == null || !new File(path).exists()) && myBgUrl != null && myBgUrl.startsWith("http")) {
-                path = myBgUrl;
-                isVideo = path.toLowerCase().endsWith(".mp4") || path.toLowerCase().endsWith(".mov");
+                path = resolveBackgroundPath(myBgUrl);
+                isVideo = path != null && (path.toLowerCase().endsWith(".mp4") || path.toLowerCase().endsWith(".mov"));
             }
         }
 
@@ -361,7 +421,6 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Если фон не поменялся — просто возвращаем видимость
         if (path.equals(currentBgPath)) {
             if (isVideo) {
                 if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
@@ -381,7 +440,6 @@ public class MainActivity extends AppCompatActivity {
             if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
             if (playerView != null) playerView.setVisibility(View.VISIBLE);
             
-            // ExoPlayer отлично читает как локальные пути, так и http(s) ссылки
             MediaItem mediaItem = path.startsWith("http") ? 
                     MediaItem.fromUri(Uri.parse(path)) : 
                     MediaItem.fromUri(Uri.fromFile(new File(path)));
@@ -396,7 +454,6 @@ public class MainActivity extends AppCompatActivity {
             if (exoPlayer != null) exoPlayer.pause();
             if (globalImageView != null) {
                 globalImageView.setVisibility(View.VISIBLE);
-                // Glide сам разберется, это локальный файл или веб-ссылка
                 if (path.startsWith("http")) {
                     Glide.with(this).load(path).centerCrop().into(globalImageView);
                 } else {
@@ -406,7 +463,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }   
     
-    // --- ЗАГРУЗЧИК ФОНА В КЭШ ДЛЯ КАЖДОГО АККАУНТА ---
     public void syncMyBackground(String bgUrl) {
         if (bgUrl == null || bgUrl.isEmpty() || bgUrl.equals("null") || isSyncingBg) return;
         
@@ -418,12 +474,10 @@ public class MainActivity extends AppCompatActivity {
         boolean isVideo = bgUrl.toLowerCase().endsWith(".mp4") || bgUrl.toLowerCase().endsWith(".mov");
         String ext = isVideo ? ".mp4" : ".jpg";
         
-        // У каждого аккаунта будет свой собственный файл фона!
         File localFile = new File(getFilesDir(), "my_bg_" + uid + ext);
 
         if (bgUrl.equals(cachedUrl) && localFile.exists()) {
             String currentCustom = prefs.getString("custom_bg_path", "");
-            // Если файл есть, просто убеждаемся, что приложение использует именно его
             if (!localFile.getAbsolutePath().equals(currentCustom)) {
                 prefs.edit()
                      .putString("custom_bg_path", localFile.getAbsolutePath())
@@ -434,7 +488,6 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Если файла нет или ссылка новая — скачиваем!
         isSyncingBg = true;
         Utils.backgroundExecutor.execute(() -> {
             try {
@@ -481,14 +534,17 @@ public class MainActivity extends AppCompatActivity {
         loadUserAvatarToBottomNav(); 
         updateNotificationBadge(); 
         
-        // Восстанавливаем фон при возврате в приложение
-        String path = prefs.getString("custom_bg_path", null);
-        if (path != null) {
-            boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
-            if (isVideo && playerView != null && playerView.getVisibility() == View.VISIBLE) {
-                if (exoPlayer != null && !exoPlayer.isPlaying()) exoPlayer.play();
-            } else if (!isVideo && globalImageView != null && globalImageView.getVisibility() == View.VISIBLE) {
-                Glide.with(this).load(new File(path)).centerCrop().into(globalImageView);
+        if (previewBgPath != null) {
+            previewBackground(previewBgPath, isPreviewVideo);
+        } else {
+            String path = prefs.getString("custom_bg_path", null);
+            if (path != null) {
+                boolean isVideo = prefs.getBoolean("custom_bg_is_video", false);
+                if (isVideo && playerView != null && playerView.getVisibility() == View.VISIBLE) {
+                    if (exoPlayer != null && !exoPlayer.isPlaying()) exoPlayer.play();
+                } else if (!isVideo && globalImageView != null && globalImageView.getVisibility() == View.VISIBLE) {
+                    Glide.with(this).load(new File(path)).centerCrop().into(globalImageView);
+                }
             }
         }
         
@@ -549,7 +605,6 @@ public class MainActivity extends AppCompatActivity {
         outState.putInt("SAVED_TAB", currentTab); 
     }
 
-    // --- МЕТОД ДЛЯ МГНОВЕННОГО ОБНОВЛЕНИЯ АВАТАРКИ ---
     public void updateAvatarInUI() {
         runOnUiThread(this::loadUserAvatarToBottomNav);
     }
@@ -573,7 +628,6 @@ public class MainActivity extends AppCompatActivity {
                 String savedAvatarBase64 = prefs.getString("my_photo_base64", null);
                 if (savedAvatarBase64 != null) {
                     iconProfile.setImageTintList(null);
-                    // Работает как с новыми ссылками, так и со старым Base64
                     if (savedAvatarBase64.startsWith("http")) {
                         Glide.with(this).load(savedAvatarBase64).circleCrop().into(iconProfile);
                     } else {
@@ -725,70 +779,6 @@ public class MainActivity extends AppCompatActivity {
                 });
             } catch (ApiException e) {
                 Toast.makeText(this, getString(R.string.err_login_failed), Toast.LENGTH_SHORT).show();
-            }
-        }
-
-        if (requestCode == RC_PICK_IMAGE && resultCode == RESULT_OK && data != null) {
-            // Оставлено пустым, логика перенесена в EditProfileFragment
-        }
-
-        if (requestCode == 9003 && resultCode == RESULT_OK && data != null && data.getData() != null) {
-            try {
-                android.net.Uri selectedFileUri = data.getData();
-                android.database.Cursor cursor = getContentResolver().query(selectedFileUri, null, null, null, null);
-                long fileSize = 0;
-                if (cursor != null && cursor.moveToFirst()) {
-                    int sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE);
-                    if (sizeIndex != -1) fileSize = cursor.getLong(sizeIndex);
-                    cursor.close();
-                }
-
-                if (fileSize > 30 * 1024 * 1024) {
-                    Toast.makeText(this, getString(R.string.toast_file_too_large), Toast.LENGTH_LONG).show();
-                    return; 
-                }
-
-                String mimeType = getContentResolver().getType(selectedFileUri);
-                boolean isVideo = (mimeType != null && mimeType.startsWith("video/"));
-                boolean isGif = (mimeType != null && mimeType.contains("gif"));
-                
-                if (mimeType == null) {
-                    String pathLower = selectedFileUri.toString().toLowerCase();
-                    isVideo = pathLower.contains(".mp4") || pathLower.contains(".mkv") || pathLower.contains(".avi") || pathLower.contains(".mov");
-                    isGif = pathLower.contains(".gif");
-                }
-                
-                String oldPath = prefs.getString("custom_bg_path", null);
-                if (oldPath != null) {
-                    File oldFile = new File(oldPath);
-                    if (oldFile.exists()) oldFile.delete();
-                }
-
-                String extension = isVideo ? ".mp4" : (isGif ? ".gif" : ".jpg"); 
-                String backgroundFileName = "profile_bg_" + System.currentTimeMillis() + extension;
-                File outFile = new File(getFilesDir(), backgroundFileName);
-                
-                java.io.InputStream inputStream = getContentResolver().openInputStream(selectedFileUri);
-                java.io.FileOutputStream outputStream = new java.io.FileOutputStream(outFile);
-                byte[] buffer = new byte[8192];
-                int bytesRead;
-                while ((bytesRead = inputStream.read(buffer)) != -1) {
-                    outputStream.write(buffer, 0, bytesRead);
-                }
-                outputStream.close();
-                inputStream.close();
-                
-                prefs.edit()
-                    .putString("custom_bg_path", outFile.getAbsolutePath())
-                    .putBoolean("custom_bg_is_video", isVideo)
-                    .apply();
-                    
-                Toast.makeText(this, getString(R.string.toast_bg_success), Toast.LENGTH_SHORT).show();
-                updateGlobalBackground(true);
-
-            } catch (Exception e) {
-                e.printStackTrace();
-                Toast.makeText(this, getString(R.string.toast_bg_error), Toast.LENGTH_SHORT).show();
             }
         }
     }
