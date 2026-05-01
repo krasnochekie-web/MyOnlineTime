@@ -56,6 +56,10 @@ public class ProfileFragment extends Fragment {
     private boolean isMe = false;
     private ImageView avatarView;
 
+    // === ДОБАВЛЕНО: Предохранитель от двойного мерцания списка ===
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private Runnable loadMyStatsRunnable;
+
     private static class AppUiData {
         String pkgName;
         String appName;
@@ -132,6 +136,14 @@ public class ProfileFragment extends Fragment {
             });
         }
 
+        // === ДОБАВЛЕНО: Настройка предохранителя ===
+        loadMyStatsRunnable = () -> {
+            if (isAdded() && appsContainerLocal != null && weekTimeText != null) {
+                appsContainerLocal.removeAllViews();
+                StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
+            }
+        };
+
         btnExpand.setOnClickListener(v -> {
             btnExpand.setVisibility(View.GONE);
             btnCollapse.setVisibility(View.VISIBLE);
@@ -148,10 +160,8 @@ public class ProfileFragment extends Fragment {
         followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(finalTargetUid, false)));
 
         loadLocalCacheAsync(() -> {
-            if (isMe && isAdded()) {
-                if(appsContainerLocal != null) appsContainerLocal.removeAllViews();
-                StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
-            }
+            // === ИСПРАВЛЕНИЕ: Используем безопасный вызов вместо прямого ===
+            if (isMe && isAdded()) requestLoadMyStats();
         });
 
         if (isMe) {
@@ -239,10 +249,8 @@ public class ProfileFragment extends Fragment {
                                     prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
                                     cacheChanged = true;
                                 }
-                                if (cacheChanged) {
-                                    if(appsContainerLocal != null) appsContainerLocal.removeAllViews();
-                                    StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
-                                }
+                                // === ИСПРАВЛЕНИЕ: Используем безопасный вызов ===
+                                if (cacheChanged) requestLoadMyStats();
                             }
 
                             if (!isMe) {
@@ -332,6 +340,12 @@ public class ProfileFragment extends Fragment {
         }
 
         return view;
+    }
+
+    // === ДОБАВЛЕНО: Безопасный вызов отрисовки статистики (предотвращает двойное мерцание) ===
+    private void requestLoadMyStats() {
+        uiHandler.removeCallbacks(loadMyStatsRunnable);
+        uiHandler.postDelayed(loadMyStatsRunnable, 150); // Ждем 150мс, отсекая дубли
     }
 
     private void handleMediaLoading(MainActivity activity, String base64Data, boolean useLocalFile, String uid) {
@@ -432,11 +446,19 @@ public class ProfileFragment extends Fragment {
                     
                     TextView nameView = getView() != null ? getView().findViewById(R.id.profile_name) : null;
                     TextView aboutView = getView() != null ? getView().findViewById(R.id.profile_about) : null;
+                    ImageView btnExpand = getView() != null ? getView().findViewById(R.id.btn_expand_apps) : null;
+                    ImageView btnCollapse = getView() != null ? getView().findViewById(R.id.btn_collapse_apps) : null;
                     GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
                     
                     if (nameView != null && aboutView != null && acct != null) {
                         nameView.setText(activity.prefs.getString("my_nickname", acct.getDisplayName()));
+                        
+                        // ИСПРАВЛЕНИЕ: Обновляем описание, применяем логику скрытия и перезагружаем список
                         aboutView.setText(activity.prefs.getString("my_about", ""));
+                        LinearLayout appsContainerLocal = getView().findViewById(R.id.profile_apps_container);
+                        applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+                        requestLoadMyStats();
+                        
                         String b64 = activity.prefs.getString("my_photo_base64", null);
                         handleMediaLoading(activity, b64, true, acct.getId());
                     }
@@ -473,6 +495,7 @@ public class ProfileFragment extends Fragment {
     }
 
     private void renderOtherUserStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
+        // ИСПРАВЛЕНИЕ: Очищаем контейнер ДО фоновой загрузки, чтобы не было дублей
         container.removeAllViews();
         if (topApps == null || topApps.isEmpty() || activity == null) return;
 
@@ -741,7 +764,7 @@ public class ProfileFragment extends Fragment {
             localDescriptions.put(pkgName, newDesc);
             prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
 
-            // === ИСПРАВЛЕНИЕ: МГНОВЕННАЯ ПЕРЕРИСОВКА ОПИСАНИЯ ===
+            // ИСПРАВЛЕНИЕ: МГНОВЕННАЯ ПЕРЕРИСОВКА ОПИСАНИЯ
             if (descView != null) {
                 if (!newDesc.isEmpty()) {
                     descView.setText(newDesc);
@@ -751,16 +774,8 @@ public class ProfileFragment extends Fragment {
                 }
             }
 
-            // Жестко заставляем контейнер перерисоваться
-            View rootView = getView();
-            if (rootView != null) {
-                LinearLayout container = rootView.findViewById(R.id.profile_apps_container);
-                TextView weekTime = rootView.findViewById(R.id.profile_week_time);
-                if (container != null && weekTime != null) {
-                    container.removeAllViews();
-                    StatsHelper.loadStatsToProfile(activity, weekTime, container);
-                }
-            }
+            // === ИСПРАВЛЕНИЕ: Безопасный вызов отрисовки статистики с пересчетом ===
+            requestLoadMyStats();
 
             dialog.dismiss();
             
