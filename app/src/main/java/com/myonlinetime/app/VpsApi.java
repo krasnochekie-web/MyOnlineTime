@@ -7,6 +7,7 @@ import android.os.Looper;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,7 @@ import java.util.ArrayList;
 import okhttp3.Call;
 import okhttp3.HttpUrl;
 import okhttp3.MediaType;
+import okhttp3.MultipartBody;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -29,7 +31,6 @@ public class VpsApi {
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
-    // ДОБАВЛЕНО ПОЛЕ background
     private static class SaveUserPayload { 
         String nickname, about, photo, background; 
         long totalTime; 
@@ -49,7 +50,7 @@ public class VpsApi {
 
     public static void authenticateWithGoogle(Context context, String googleIdToken, final LoginCallback callback) {
         String jsonBody = "{\"idToken\":\"" + googleIdToken + "\"}";
-        RequestBody body = RequestBody.create(jsonBody, JSON);
+        RequestBody body = RequestBody.create(JSON, jsonBody);
         
         Request request = new Request.Builder()
                 .url(BASE_URL + "auth/google") 
@@ -88,24 +89,33 @@ public class VpsApi {
         payload.photo = photo;
         payload.totalTime = totalTime;
         payload.topApps = topApps;
-        Request request = createAuthedRequest("save_user", ourServerToken).post(RequestBody.create(gson.toJson(payload), JSON)).build();
+        Request request = createAuthedRequest("save_user", ourServerToken).post(RequestBody.create(JSON, gson.toJson(payload))).build();
         enqueueCall(request, callback);
     }
 
-    // НОВЫЙ МЕТОД: Специально для экрана редактирования профиля (с фоном)
-    public static void saveUserProfile(String ourServerToken, String nickname, String about, String photo, String background, final Callback callback) {
-        SaveUserPayload payload = new SaveUserPayload();
-        payload.nickname = nickname;
-        payload.about = about;
-        payload.photo = photo;
-        payload.background = background;
-        // Оставляем совместимость со старым форматом
-        payload.totalTime = 0;
-        payload.topApps = null;
-        
+    // --- БЕЗ BASE64! МЕТОД ДЛЯ ПРЯМОЙ ОТПРАВКИ ФАЙЛОВ ЧЕРЕЗ MULTIPART ---
+    public static void saveUserProfile(String ourServerToken, String nickname, String about, File photoFile, File bgFile, final Callback callback) {
+        MultipartBody.Builder builder = new MultipartBody.Builder().setType(MultipartBody.FORM);
+
+        if (nickname != null) builder.addFormDataPart("nickname", nickname);
+        if (about != null) builder.addFormDataPart("about", about);
+
+        // Прикрепляем файл аватарки, если он есть
+        if (photoFile != null && photoFile.exists()) {
+            builder.addFormDataPart("photo", photoFile.getName(),
+                    RequestBody.create(MediaType.parse("application/octet-stream"), photoFile));
+        }
+
+        // Прикрепляем файл фона, если он есть
+        if (bgFile != null && bgFile.exists()) {
+            builder.addFormDataPart("background", bgFile.getName(),
+                    RequestBody.create(MediaType.parse("application/octet-stream"), bgFile));
+        }
+
         Request request = createAuthedRequest("save_user", ourServerToken)
-                .post(RequestBody.create(gson.toJson(payload), JSON))
+                .post(builder.build())
                 .build();
+                
         enqueueCall(request, callback);
     }
 
@@ -154,14 +164,14 @@ public class VpsApi {
         FollowPayload payload = new FollowPayload();
         payload.targetUid = targetUid;
         payload.isFollowing = isFollowing;
-        Request request = createAuthedRequest("set_follow", ourServerToken).post(RequestBody.create(gson.toJson(payload), JSON)).build();
+        Request request = createAuthedRequest("set_follow", ourServerToken).post(RequestBody.create(JSON, gson.toJson(payload))).build();
         enqueueCall(request, callback);
     }
 
     public static void checkIsFollowing(String ourServerToken, String targetUid, final BooleanCallback callback) {
         CheckFollowPayload payload = new CheckFollowPayload();
         payload.targetUid = targetUid;
-        Request request = createAuthedRequest("check_is_following", ourServerToken).post(RequestBody.create(gson.toJson(payload), JSON)).build();
+        Request request = createAuthedRequest("check_is_following", ourServerToken).post(RequestBody.create(JSON, gson.toJson(payload))).build();
         client.newCall(request).enqueue(new okhttp3.Callback() {
             @Override public void onFailure(Call call, IOException e) {
                 if(callback!=null) {
@@ -225,7 +235,7 @@ public class VpsApi {
         payload.pkgName = pkgName;
         payload.isHidden = isHidden;
         Request request = createAuthedRequest("set_app_visibility", ourServerToken)
-                .post(RequestBody.create(gson.toJson(payload), JSON))
+                .post(RequestBody.create(JSON, gson.toJson(payload)))
                 .build();
         enqueueCall(request, callback);
     }
@@ -235,7 +245,7 @@ public class VpsApi {
         payload.pkgName = pkgName;
         payload.description = description;
         Request request = createAuthedRequest("set_app_description", ourServerToken)
-                .post(RequestBody.create(gson.toJson(payload), JSON))
+                .post(RequestBody.create(JSON, gson.toJson(payload)))
                 .build();
         enqueueCall(request, callback);
     }
