@@ -54,9 +54,6 @@ public class UsageMath {
         });
     }
 
-    // =========================================================================
-    // ТОЧНАЯ МАТЕМАТИКА (Сегодня / Вчера)
-    // =========================================================================
     public static Map<String, Long> getFilteredExactTimes(Context context, long start, long end) {
         Set<String> currentInstalledApps = getInstalledApps(context);
         String launcherPkg = getDefaultLauncher(context);
@@ -67,7 +64,6 @@ public class UsageMath {
         for (Map.Entry<String, Long> entry : safeData.entrySet()) {
             String pkg = entry.getKey();
             
-            // РЕТРОАКТИВНАЯ ОЧИСТКА: Выжигаем системный мусор из старого кэша
             if (!isValidApp(context, pkg, currentInstalledApps, launcherPkg)) continue;
             
             long safeTime = entry.getValue();
@@ -122,9 +118,7 @@ public class UsageMath {
         return results;
     }
 
-    // =========================================================================
-    // АГРЕГИРОВАННАЯ МАТЕМАТИКА (Неделя / Месяц / Год)
-    // =========================================================================
+    // === ИСПРАВЛЕННЫЙ МЕТОД: БОЛЬШЕ НЕТ ЗАДВОЕНИЙ ===
     public static Map<String, Long> getFilteredStats(Context context, int interval, long start, long end) {
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
@@ -133,16 +127,16 @@ public class UsageMath {
         Set<String> currentInstalledApps = getInstalledApps(context);
         String launcherPkg = getDefaultLauncher(context);
 
-        List<UsageStats> stats = usm.queryUsageStats(interval, start, end);
+        // Используем встроенный агрегатор Android, он сам схлопывает пересекающиеся бакеты
+        Map<String, UsageStats> stats = usm.queryAndAggregateUsageStats(start, end);
         if (stats != null) {
-            for (UsageStats s : stats) {
-                if (s.getPackageName() == null) continue;
-                long time = s.getTotalTimeInForeground();
-                String pkg = s.getPackageName().replaceAll("\\s+", "");
+            for (Map.Entry<String, UsageStats> entry : stats.entrySet()) {
+                if (entry.getKey() == null) continue;
+                long time = entry.getValue().getTotalTimeInForeground();
+                String pkg = entry.getKey().replaceAll("\\s+", "");
                 
                 if (time > 0 && isValidApp(context, pkg, currentInstalledApps, launcherPkg)) {
-                    Long current = results.get(pkg);
-                    results.put(pkg, (current == null ? 0L : current) + time);
+                    results.put(pkg, time);
                 }
             }
         }
@@ -151,7 +145,6 @@ public class UsageMath {
         for (Map.Entry<String, Long> entry : safeData.entrySet()) {
             String pkg = entry.getKey();
             
-            // РЕТРОАКТИВНАЯ ОЧИСТКА 
             if (!isValidApp(context, pkg, currentInstalledApps, launcherPkg)) continue;
             
             long safeTime = entry.getValue();
@@ -162,10 +155,6 @@ public class UsageMath {
         return results;
     }
 
-    // =========================================================================
-    // ЛОГИКА "СЕЙФА" (Независимое хранилище времени)
-    // =========================================================================
-    
     private static String getDayKey(long timestamp) {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy_MM_dd", Locale.US);
         return "day_" + sdf.format(new Date(timestamp));
@@ -223,10 +212,6 @@ public class UsageMath {
         return aggregatedSafe;
     }
 
-    // =========================================================================
-    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
-    // =========================================================================
-
     public static long sumMap(Map<String, Long> map) {
         long total = 0;
         if (map != null) {
@@ -262,16 +247,15 @@ public class UsageMath {
         
         String lowerPkg = pkg.toLowerCase();
 
-        // БРОНЕБОЙНЫЙ ФИЛЬТР: Отсекаем все системные настройки и эмуляторы!
         boolean isSystemTrash = pkg.equals("android") || 
                                 pkg.equals("com.android.systemui") || 
                                 pkg.equals("com.google.android.gms") || 
                                 pkg.equals("com.android.vending") || 
-                                lowerPkg.contains("settings") ||      // Убиваем ВСЕ варианты Настроек
-                                lowerPkg.contains("launcher") ||      // Убиваем системные лаунчеры
-                                lowerPkg.contains("bluestacks") ||    // Убиваем все скрытые сервисы эмулятора
-                                lowerPkg.contains("documentsui") ||   // Убиваем системный файловый пикер
-                                lowerPkg.contains("filemanager") ||   // Убиваем встроенные файловые менеджеры
+                                lowerPkg.contains("settings") || 
+                                lowerPkg.contains("launcher") || 
+                                lowerPkg.contains("bluestacks") || 
+                                lowerPkg.contains("documentsui") || 
+                                lowerPkg.contains("filemanager") || 
                                 pkg.equals(launcherPkg);
         
         if (isSystemTrash) return false;
