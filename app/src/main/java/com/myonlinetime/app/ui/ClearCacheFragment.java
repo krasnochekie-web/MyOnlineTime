@@ -30,7 +30,11 @@ public class ClearCacheFragment extends Fragment {
         setupHeader(activity);
 
         view.findViewById(R.id.btn_action_clear_bg).setOnClickListener(v -> {
-            if (activity != null) clearCustomBackground(activity);
+            if (activity != null) {
+                // Вызываем наш правильный мульти-аккаунтный метод из MainActivity!
+                activity.deleteMyBackgroundLocal();
+                Toast.makeText(activity, getString(R.string.toast_bg_cleared), Toast.LENGTH_SHORT).show();
+            }
         });
 
         view.findViewById(R.id.btn_action_clear_cache).setOnClickListener(v -> {
@@ -48,7 +52,6 @@ public class ClearCacheFragment extends Fragment {
             activity.headerBackBtn.setVisibility(View.VISIBLE);
             activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow);
 
-            // Оставляем колокольчик видимым, как на экране уведомлений!
             ImageView bellBtn = activity.findViewById(R.id.header_bell_btn);
             if (bellBtn != null) {
                 bellBtn.setVisibility(View.VISIBLE);
@@ -59,29 +62,20 @@ public class ClearCacheFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        // Возвращаем шапку (надпись My Online Time) при выходе
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
             activity.headerManager.resetHeader();
         }
     }
 
-    // ========================================================
-    // ИСПРАВЛЕННЫЙ МЕТОД onResume
-    // ========================================================
     @Override
     public void onResume() {
         super.onResume();
-        // ДОБАВЛЕНО: Проверка !isHidden()
         if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(false); 
         }
     }
-    // ========================================================
 
-    // ========================================================
-    // ВОССТАНОВЛЕНИЕ ШАПКИ ПРИ ВОЗВРАТЕ ИЗ СТЕКА
-    // ========================================================
     @Override
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
@@ -89,37 +83,9 @@ public class ClearCacheFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             setupHeader(activity);
             
-            // Также восстанавливаем фон (чтобы видео не играло под меню настроек)
             if (activity != null) {
                 activity.updateGlobalBackground(false);
             }
-        }
-    }
-
-    // ==========================================
-    // ЛОГИКА ОЧИСТКИ ФОНА
-    // ==========================================
-    private void clearCustomBackground(MainActivity activity) {
-        SharedPreferences profilePrefs = activity.getSharedPreferences("UserProfile", Context.MODE_PRIVATE);
-        String bgPath = profilePrefs.getString("custom_bg_path", null);
-        
-        if (bgPath != null) {
-            File bgFile = new File(bgPath);
-            if (bgFile.exists()) {
-                bgFile.delete(); // Физически удаляем файл
-            }
-            
-            profilePrefs.edit()
-                .remove("custom_bg_path")
-                .remove("custom_bg_is_video")
-                .apply();
-                
-            Toast.makeText(activity, getString(R.string.toast_bg_cleared), Toast.LENGTH_SHORT).show();
-            
-            // Фон удален, даем команду MainActivity обновить стейт
-            activity.updateGlobalBackground(false); 
-        } else {
-            Toast.makeText(activity, getString(R.string.toast_bg_already_clear), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -179,4 +145,5 @@ public class ClearCacheFragment extends Fragment {
         }
         return size;
     }
-}
+        }
+                        
