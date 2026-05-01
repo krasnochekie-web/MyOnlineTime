@@ -18,6 +18,7 @@ import androidx.fragment.app.Fragment;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.signature.ObjectKey;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.myonlinetime.app.MainActivity;
@@ -65,6 +66,7 @@ public class SettingsFragment extends Fragment {
                 if (activity != null && activity.mGoogleSignInClient != null) {
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
                         activity.resetAccountState(); 
+                        activity.clearAllFragments();
                         Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
                         activity.startActivityForResult(signInIntent, 9001); 
                     });
@@ -77,14 +79,7 @@ public class SettingsFragment extends Fragment {
             btnSignOut.setOnClickListener(v -> {
                 if (activity != null && activity.mGoogleSignInClient != null) {
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
-                        activity.resetAccountState(); 
-                        
-                        // Бесшовный выход без перезапуска приложения
-                        activity.updateAvatarInUI();
-                        activity.navigator.switchScreen(0, null);
-                        
-                        loadUserData(view); 
-                        Toast.makeText(getContext(), getString(R.string.settings_sign_out), Toast.LENGTH_SHORT).show();
+                        activity.performSignOut();
                     });
                 }
             });
@@ -163,7 +158,11 @@ public class SettingsFragment extends Fragment {
                 if (customAvatarPath != null) {
                     File localFile = new File(customAvatarPath);
                     if (localFile.exists()) {
-                        Glide.with(this).load(localFile).skipMemoryCache(true).diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE).circleCrop().into(avatarView);
+                        Glide.with(this)
+                             .load(localFile)
+                             .signature(new ObjectKey(localFile.lastModified()))
+                             .circleCrop()
+                             .into(avatarView);
                         return; 
                     }
                 }
@@ -242,4 +241,5 @@ public class SettingsFragment extends Fragment {
             }
         }
     }
-}
+            }
+                            
