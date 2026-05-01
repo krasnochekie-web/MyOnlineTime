@@ -94,11 +94,6 @@ public class StatsHelper {
     }
 
     public static void loadStatsToProfile(final MainActivity activity, final TextView weekTimeText, final LinearLayout appsContainer) {
-        if (appsContainer != null) {
-            appsContainer.setLayoutTransition(null);
-            appsContainer.removeAllViews();
-        }
-        
         Utils.backgroundExecutor.execute(() -> {
             long now = System.currentTimeMillis();
             Calendar cal = Calendar.getInstance(); 
@@ -172,6 +167,10 @@ public class StatsHelper {
 
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (activity.isDestroyed() || activity.isFinishing() || appsContainer == null) return;
+
+                // === ИСПРАВЛЕНИЕ ДУБЛИКАТОВ: Удаляем старые View строго перед добавлением новых ===
+                appsContainer.setLayoutTransition(null);
+                appsContainer.removeAllViews(); 
 
                 long minutes = finalTotalMillis / 1000 / 60;
                 long hours = minutes / 60;
