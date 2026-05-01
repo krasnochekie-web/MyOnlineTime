@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.InputFilter;
+import android.text.Spanned;
 import android.text.TextWatcher;
 import com.myonlinetime.app.utils.Utils;
 import android.view.LayoutInflater;
@@ -33,11 +34,9 @@ import java.io.InputStream;
 
 public class EditProfileFragment extends Fragment {
 
-    // ПРОЩАЙ BASE64! Теперь мы храним ссылки на реальные временные файлы
     private File pendingPhotoFile = null;
     private File pendingBgFile = null;
 
-    // Современные лончеры для системного выбора файлов
     private final ActivityResultLauncher<String[]> photoPicker = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(),
             uri -> { if (uri != null) processMediaFile(uri, 10, true); }
@@ -81,8 +80,32 @@ public class EditProfileFragment extends Fragment {
         ImageView avatarPreview = view.findViewById(R.id.edit_avatar_preview);
         View btnSave = view.findViewById(R.id.btn_save_changes);
 
-        inputName.setFilters(new InputFilter[]{new InputFilter.LengthFilter(32)});
-        inputAbout.setFilters(new InputFilter[]{new InputFilter.LengthFilter(1024)});
+        // === НАШ НОВЫЙ ФИЛЬТР БЕЗОПАСНОСТИ ЮНИКОДА ===
+        InputFilter exoticFilter = new InputFilter() {
+            @Override
+            public CharSequence filter(CharSequence source, int start, int end, Spanned dest, int dstart, int dend) {
+                for (int i = start; i < end; i++) {
+                    int type = Character.getType(source.charAt(i));
+                    // Блокируем:
+                    // SURROGATE - почти все эмодзи и "тяжелые" символы из доп. плоскостей
+                    // NON_SPACING_MARK - те самые нагромождения Zalgo-текста, ломающие высоту
+                    // CONTROL - непечатные управляющие символы
+                    // OTHER_SYMBOL - символы-картинки, дингбаты
+                    if (type == Character.SURROGATE || 
+                        type == Character.NON_SPACING_MARK || 
+                        type == Character.CONTROL || 
+                        type == Character.OTHER_SYMBOL) {
+                        return ""; // Отбрасываем плохой символ на лету
+                    }
+                }
+                return null; // Все ок, печатаем
+            }
+        };
+
+        // Ставим лимит 16 + фильтр защиты на никнейм
+        inputName.setFilters(new InputFilter[]{ exoticFilter, new InputFilter.LengthFilter(16) });
+        // Ставим лимит 1024 + фильтр защиты на описание (чтобы там не сломали профиль)
+        inputAbout.setFilters(new InputFilter[]{ exoticFilter, new InputFilter.LengthFilter(1024) });
 
         inputName.setText(currentName);
         inputAbout.setText(currentAbout);
@@ -98,14 +121,12 @@ public class EditProfileFragment extends Fragment {
             });
         }
 
-        // Загрузка текущей аватарки
         Bitmap cachedAvatar = activity.mMemoryCache.get("avatar_" + acct.getId());
         if (cachedAvatar != null && avatarPreview != null) {
             Glide.with(activity).load(cachedAvatar).circleCrop().into(avatarPreview);
         } else {
             String savedAvatar = activity.prefs.getString("my_photo_base64", null);
             if (savedAvatar != null && avatarPreview != null) {
-                // Если это уже новая URL-ссылка, либо старый кусок Base64 (для обратной совместимости)
                 if (savedAvatar.startsWith("http")) {
                     Glide.with(activity).load(savedAvatar).circleCrop().into(avatarPreview);
                 } else {
@@ -134,7 +155,6 @@ public class EditProfileFragment extends Fragment {
              
              btnSave.setEnabled(false); 
              
-             // ИСПРАВЛЕНИЕ: Никаких GoogleSignInClient! Сразу берем vpsToken и шлем на сервер.
              if (activity.vpsToken != null) {
                  VpsApi.saveUserProfile(activity.vpsToken, n, a, pendingPhotoFile, pendingBgFile, new VpsApi.Callback() {
                      @Override public void onSuccess(String result) {
