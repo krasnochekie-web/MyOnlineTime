@@ -33,16 +33,14 @@ import java.util.Map;
 
 public class StatsHelper {
 
-    // Класс-контейнер для предзагрузки тяжелых данных
     private static class AppData {
         String pkgName;
         String appName;
         android.graphics.drawable.Drawable icon;
         long time;
-        boolean isDeleted; // Флаг для корзины
+        boolean isDeleted;
     }
 
-    // Парсер для совсем уж мертвых приложений, которых нет даже в Сейфе
     private static String formatDeletedAppName(String pkg) {
         try {
             String[] parts = pkg.split("\\.");
@@ -53,7 +51,6 @@ public class StatsHelper {
         }
     }
 
-    // 1. МЕТОД ДЛЯ ФОНОВОЙ СИНХРОНИЗАЦИИ С СЕРВЕРОМ
     public static void syncUserProfile(final MainActivity activity) {
         final GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         if (account == null) return;
@@ -96,7 +93,6 @@ public class StatsHelper {
         });
     }
 
-    // 2. МЕТОД ДЛЯ ОТРИСОВКИ ТОП-10 В ПРОФИЛЕ (ОПТИМИЗИРОВАННЫЙ С ПОДДЕРЖКОЙ УДАЛЕННЫХ)
     public static void loadStatsToProfile(final MainActivity activity, final TextView weekTimeText, final LinearLayout appsContainer) {
         if (appsContainer != null) {
             appsContainer.setLayoutTransition(null);
@@ -120,7 +116,6 @@ public class StatsHelper {
             File dbIconsDir = new File(activity.getFilesDir(), "saved_app_icons");
             final List<AppData> preloadedData = new ArrayList<>();
 
-            // 1. Собираем тяжелые иконки и названия в ФОНЕ!
             int fetchLimit = 0;
             for (String pkg : finalList) {
                 if (fetchLimit >= 10) break;
@@ -140,21 +135,19 @@ public class StatsHelper {
                                    PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
                         appInfo = pm.getApplicationInfo(pkg, flag);
                         
-                        // СПАСАЕМ СИСТЕМНЫЕ ПРИЛОЖЕНИЯ: Проверяем, скрыто ли оно оболочкой
                         boolean isInstalled = (appInfo.flags & ApplicationInfo.FLAG_INSTALLED) != 0;
                         boolean isSystemApp = (appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
                         
                         if (!isInstalled && !isSystemApp) {
-                            data.isDeleted = true; // Физически удалено пользователем
+                            data.isDeleted = true; 
                         } else {
-                            data.isDeleted = false; // Просто отключенный/скрытый системный процесс
+                            data.isDeleted = false; 
                         }
                     } catch (PackageManager.NameNotFoundException ignored) {
-                        data.isDeleted = true; // Система вообще не знает этот пакет - 100% удален
+                        data.isDeleted = true; 
                     }
                 }
 
-                // ДОСТАЕМ ИМЯ (Из Сейфа или системы)
                 String cachedName = dbNames.getString(pkg, null);
                 if (cachedName != null) {
                     data.appName = cachedName;
@@ -164,7 +157,6 @@ public class StatsHelper {
                     data.appName = formatDeletedAppName(pkg);
                 }
 
-                // ДОСТАЕМ ИКОНКУ (Из Сейфа или системы)
                 File diskIcon = new File(dbIconsDir, pkg + ".png");
                 if (diskIcon.exists()) {
                     data.icon = android.graphics.drawable.Drawable.createFromPath(diskIcon.getAbsolutePath());
@@ -178,7 +170,6 @@ public class StatsHelper {
                 fetchLimit++;
             }
 
-            // 2. Возвращаемся в UI-поток только для мгновенной сборки карточек
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (activity.isDestroyed() || activity.isFinishing() || appsContainer == null) return;
 
@@ -214,7 +205,6 @@ public class StatsHelper {
                     }
                     timeView.setText(Utils.formatTime(activity, data.time));
                     
-                    // Логика корзины
                     if (iconDeleted != null) {
                         if (data.isDeleted) {
                             iconDeleted.setVisibility(View.VISIBLE);
@@ -227,7 +217,6 @@ public class StatsHelper {
                     
                     appsContainer.addView(view);
 
-                    // Пробрасываем события для владельца (скрытие/описание)
                     if (activity.getSupportFragmentManager() != null) {
                         for (Fragment f : activity.getSupportFragmentManager().getFragments()) {
                             if (f instanceof ProfileFragment) {
