@@ -3,23 +3,22 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bgDynamic"
-    android:paddingTop="@dimen/header_clearance"
     android:nestedScrollingEnabled="true">
 
+    <!-- Крутилка теперь не мешает разметке -->
     <ProgressBar
         android:id="@+id/follows_loading_spinner"
         android:layout_width="40dp"
         android:layout_height="40dp"
         android:layout_centerInParent="true"
-        android:layout_marginBottom="8dp"
-        android:indeterminateTint="@color/textDynamic" />
+        android:indeterminateTint="@color/textDynamic"
+        android:visibility="gone" />
 
     <TextView
         android:id="@+id/follows_status_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_below="@id/follows_loading_spinner"
-        android:layout_centerHorizontal="true"
+        android:layout_centerInParent="true"
         android:textColor="@color/textGrayDynamic"
         android:textSize="12sp"
         android:visibility="gone" />
@@ -29,5 +28,6 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
+        android:paddingTop="@dimen/header_clearance"
         android:paddingBottom="@dimen/bottom_nav_clearance" />
 </RelativeLayout>
