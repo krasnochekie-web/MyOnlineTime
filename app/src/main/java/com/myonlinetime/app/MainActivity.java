@@ -387,7 +387,13 @@ public class MainActivity extends AppCompatActivity {
         exoPlayer.setVideoScalingMode(androidx.media3.common.C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING);
     }
 
+    // === ИСПРАВЛЕНИЕ: Предотвращаем перезапуск чужого фона ===
     public void previewBackground(String path, boolean isVideo) {
+        if (path != null && path.equals(previewBgPath)) {
+            updateGlobalBackground(true);
+            return;
+        }
+
         previewBgPath = path;
         isPreviewVideo = isVideo;
 
@@ -420,15 +426,14 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // === ИСПРАВЛЕНИЕ: Не обнуляем currentBgPath, чтобы свой фон плавно перехватывал эстафету ===
     public void clearPreviewBackground() {
         if (previewBgPath != null) {
             previewBgPath = null;
-            currentBgPath = null; 
             updateGlobalBackground(true);
         }
     }
 
-    // === ИСПРАВЛЕНИЕ: ПРЯМОЙ ПРИКАЗ СЕРВЕРУ НА УДАЛЕНИЕ ФОНА ===
     public void deleteMyBackgroundLocal() {
         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
         if (acct == null) return;
@@ -448,7 +453,7 @@ public class MainActivity extends AppCompatActivity {
             .remove("custom_bg_path_" + uid)
             .remove("custom_bg_is_video_" + uid)
             .remove("synced_bg_url_" + uid)
-            .remove("my_bg_base64") // Обязательно выжигаем ссылку!
+            .remove("my_bg_base64")
             .apply();
 
         currentBgBase64 = null;
@@ -459,7 +464,6 @@ public class MainActivity extends AppCompatActivity {
         if (vpsToken != null) {
             VpsApi.deleteBackground(vpsToken, new VpsApi.Callback() {
                 @Override public void onSuccess(String result) {
-                    // Сервер подтвердил удаление
                 }
                 @Override public void onError(String error) {
                     runOnUiThread(() -> Toast.makeText(MainActivity.this, getString(R.string.err_server) + " " + error, Toast.LENGTH_SHORT).show());
@@ -487,16 +491,14 @@ public class MainActivity extends AppCompatActivity {
         return path;
     }
 
+    // === ИСПРАВЛЕНИЕ: Мягкая пауза вместо немедленного отключения ===
     public void updateGlobalBackground(boolean show) {
         if (hideBgRunnable == null) {
             hideBgRunnable = () -> {
-                if (playerView != null) playerView.setVisibility(View.INVISIBLE);
                 if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
                 if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
             };
         }
-
-        if (previewBgPath != null) return;
 
         if (!show) {
             bgHandler.removeCallbacks(hideBgRunnable);
@@ -505,6 +507,20 @@ public class MainActivity extends AppCompatActivity {
         }
 
         bgHandler.removeCallbacks(hideBgRunnable);
+
+        // Плавно продолжаем превью чужого фона
+        if (previewBgPath != null) {
+            if (isPreviewVideo) {
+                if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+                if (playerView != null) playerView.setVisibility(View.VISIBLE);
+                if (exoPlayer != null && !exoPlayer.isPlaying()) exoPlayer.play();
+            } else {
+                if (playerView != null) playerView.setVisibility(View.INVISIBLE);
+                if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
+                if (globalImageView != null) globalImageView.setVisibility(View.VISIBLE);
+            }
+            return;
+        }
 
         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
         if (acct == null) {
@@ -537,9 +553,11 @@ public class MainActivity extends AppCompatActivity {
 
         if (path == null || path.isEmpty() || (!new File(path).exists() && !path.startsWith("http"))) {
             bgHandler.postDelayed(hideBgRunnable, 200);
+            currentBgPath = null;
             return;
         }
 
+        // Если это тот же самый фон, просто снимаем с паузы
         if (path.equals(currentBgPath)) {
             if (isVideo) {
                 if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
@@ -926,6 +944,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateNavState(int index) {
         currentTab = index;
+        
+        // === ИСПРАВЛЕНИЕ: Мягкое отключение превью при клике в нижнем меню ===
+        clearPreviewBackground();
+        
         mainHeader.setVisibility(View.VISIBLE);
         mainHeader.bringToFront(); 
         if (permissionOverlay != null && permissionOverlay.getVisibility() == View.VISIBLE) {
