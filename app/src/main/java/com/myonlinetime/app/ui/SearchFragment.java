@@ -45,7 +45,7 @@ public class SearchFragment extends Fragment {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.resetHeader();
             
-            // === ИСПРАВЛЕНИЕ: Ждем окончания анимации перед отключением фонов ===
+            // Ждем окончания анимации перед отключением фонов
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (isAdded() && !isHidden()) {
                     activity.clearPreviewBackground();
@@ -108,6 +108,7 @@ public class SearchFragment extends Fragment {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.resetHeader();
             
+            // Плавное отключение чужого фона при возврате в Поиск
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (isAdded() && !isHidden()) {
                     activity.clearPreviewBackground();
