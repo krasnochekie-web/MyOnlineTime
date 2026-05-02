@@ -31,7 +31,6 @@ public class SearchFragment extends Fragment {
     private RecyclerView resultsList; 
     private UserListAdapter adapter;  
     
-    private Runnable hideBgRunnable;
     private Handler searchHandler = new Handler(Looper.getMainLooper());
     private Runnable searchRunnable;
 
@@ -43,6 +42,10 @@ public class SearchFragment extends Fragment {
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.resetHeader();
+            
+            // === ЖЕСТКО УБИВАЕМ ЧУЖИЕ ФОНЫ ПРИ ВОЗВРАТЕ ===
+            activity.clearPreviewBackground();
+            activity.updateGlobalBackground(false);
         }
 
         View view = inflater.inflate(R.layout.layout_search, container, false);
@@ -52,11 +55,10 @@ public class SearchFragment extends Fragment {
 
         resultsList.setLayoutManager(new LinearLayoutManager(activity));
         
-        // === ИСПРАВЛЕНИЕ: ПЕРЕДАЕМ ПРАВИЛЬНЫЙ КОЛЛБЭК ДЛЯ КЛИКА ПО ЮЗЕРУ ===
+        // === ИСПРАВЛЕНИЕ: Передаем заголовок "Поиск" в чужой профиль ===
         adapter = new UserListAdapter(activity, clickedUser -> {
             if (activity != null && activity.navigator != null) {
-                // Открываем профиль ПОВЕРХ поиска, передавая UID нужного человека
-                activity.navigator.openSubScreen(ProfileFragment.newInstance(clickedUser.uid));
+                activity.navigator.openSubScreen(ProfileFragment.newInstance(clickedUser.uid, activity.getString(R.string.title_search)));
             }
         });
         
@@ -95,22 +97,9 @@ public class SearchFragment extends Fragment {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.resetHeader();
             
-            if (hideBgRunnable == null) {
-                hideBgRunnable = () -> {
-                    if (isAdded() && !isHidden()) {
-                        activity.updateGlobalBackground(false);
-                    }
-                };
-            }
-            if (getView() != null) {
-                getView().postDelayed(hideBgRunnable, 300);
-            } else {
-                activity.updateGlobalBackground(false);
-            }
-        } else {
-            if (hideBgRunnable != null && getView() != null) {
-                getView().removeCallbacks(hideBgRunnable);
-            }
+            // === ЖЕСТКО УБИВАЕМ ЧУЖИЕ ФОНЫ ПРИ ВОЗВРАТЕ ===
+            activity.clearPreviewBackground();
+            activity.updateGlobalBackground(false);
         }
     }
 
@@ -163,18 +152,9 @@ public class SearchFragment extends Fragment {
         super.onResume();
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
-            if (hideBgRunnable == null) {
-                hideBgRunnable = () -> {
-                    if (isAdded() && !isHidden()) {
-                        activity.updateGlobalBackground(false);
-                    }
-                };
-            }
-            if (getView() != null) {
-                getView().postDelayed(hideBgRunnable, 300);
-            } else {
-                activity.updateGlobalBackground(false);
-            }
+            // === ЖЕСТКО УБИВАЕМ ЧУЖИЕ ФОНЫ ПРИ ВОЗВРАТЕ ===
+            activity.clearPreviewBackground();
+            activity.updateGlobalBackground(false);
         }
     }
 }
