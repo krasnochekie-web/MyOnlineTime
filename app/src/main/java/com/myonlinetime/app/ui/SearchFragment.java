@@ -44,8 +44,14 @@ public class SearchFragment extends Fragment {
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.resetHeader();
-            activity.clearPreviewBackground();
-            activity.updateGlobalBackground(false);
+            
+            // Задержка очистки для анимации
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (isAdded() && !isHidden()) {
+                    activity.clearPreviewBackground();
+                    activity.updateGlobalBackground(false);
+                }
+            }, 400);
         }
 
         View view = inflater.inflate(R.layout.layout_search, container, false);
@@ -56,18 +62,14 @@ public class SearchFragment extends Fragment {
 
         resultsList.setLayoutManager(new LinearLayoutManager(activity));
         
-        // Получаем твой UID для проверки
         GoogleSignInAccount acct = activity != null ? GoogleSignIn.getLastSignedInAccount(activity) : null;
         final String myUid = acct != null ? acct.getId() : "";
 
-        // === ИСПРАВЛЕНИЕ: ЗАЩИТА ОТ КЛИКА НА СВОЙ ПРОФИЛЬ ===
         adapter = new UserListAdapter(activity, clickedUser -> {
             if (activity != null && activity.navigator != null) {
                 if (clickedUser.uid != null && clickedUser.uid.equals(myUid)) {
-                    // Если кликнул на себя - переходим на вкладку своего профиля
                     activity.navigator.switchScreen(4, myUid);
                 } else {
-                    // Если чужой - открываем OtherProfileFragment
                     activity.navigator.openSubScreen(OtherProfileFragment.newInstance(clickedUser.uid, activity.getString(R.string.title_search)));
                 }
             }
@@ -86,9 +88,7 @@ public class SearchFragment extends Fragment {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
                 lastSearchQuery = s.toString();
-                
                 if (searchRunnable != null) searchHandler.removeCallbacks(searchRunnable);
-                
                 searchRunnable = () -> performSearch(s.toString(), activity);
                 searchHandler.postDelayed(searchRunnable, 400);
             }
@@ -107,43 +107,35 @@ public class SearchFragment extends Fragment {
         if (!hidden) {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.resetHeader();
-            activity.clearPreviewBackground();
-            activity.updateGlobalBackground(false);
+            
+            // Задержка очистки для анимации
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (isAdded() && !isHidden()) {
+                    activity.clearPreviewBackground();
+                    activity.updateGlobalBackground(false);
+                }
+            }, 400);
         }
     }
 
     private void performSearch(final String query, final MainActivity activity) {
         if(query.trim().length() > 0) {
-            
             if (loadingSpinner != null) loadingSpinner.setVisibility(View.VISIBLE);
-
             if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
                 executeSearchApi(activity.vpsToken, query);
             } else {
                 if (activity.mGoogleSignInClient != null) {
                     activity.mGoogleSignInClient.silentSignIn().addOnSuccessListener(freshAccount -> {
                         VpsApi.authenticateWithGoogle(activity, freshAccount.getIdToken(), new VpsApi.LoginCallback() {
-                            @Override
-                            public void onSuccess(String token) {
-                                activity.vpsToken = token;
-                                executeSearchApi(token, query);
-                            }
-                            @Override public void onError(String e) {
-                                if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-                            }
+                            @Override public void onSuccess(String token) { activity.vpsToken = token; executeSearchApi(token, query); }
+                            @Override public void onError(String e) { if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE); }
                         });
                     }).addOnFailureListener(e -> {
                         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
                         if(acct != null) {
                             VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
-                                @Override
-                                public void onSuccess(String token) {
-                                    activity.vpsToken = token;
-                                    executeSearchApi(token, query);
-                                }
-                                @Override public void onError(String ex) {
-                                    if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-                                }
+                                @Override public void onSuccess(String token) { activity.vpsToken = token; executeSearchApi(token, query); }
+                                @Override public void onError(String ex) { if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE); }
                             });
                         }
                     });
@@ -159,9 +151,7 @@ public class SearchFragment extends Fragment {
         VpsApi.searchUsers(token, query, new VpsApi.SearchCallback() {
             @Override public void onFound(List<User> users) {
                 if (!isAdded()) return; 
-                
                 if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-                
                 adapter.setUsers(users);
             }
         });
@@ -172,8 +162,12 @@ public class SearchFragment extends Fragment {
         super.onResume();
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
-            activity.clearPreviewBackground();
-            activity.updateGlobalBackground(false);
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (isAdded() && !isHidden()) {
+                    activity.clearPreviewBackground();
+                    activity.updateGlobalBackground(false);
+                }
+            }, 400);
         }
     }
 }
