@@ -10,7 +10,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
-import android.widget.ProgressBar; // ИМПОРТИРОВАЛИ
+import android.widget.ProgressBar; 
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -31,7 +31,7 @@ public class SearchFragment extends Fragment {
     private String lastSearchQuery = "";
     private RecyclerView resultsList; 
     private UserListAdapter adapter;  
-    private ProgressBar loadingSpinner; // ДОБАВИЛИ ПЕРЕМЕННУЮ
+    private ProgressBar loadingSpinner; 
     
     private Handler searchHandler = new Handler(Looper.getMainLooper());
     private Runnable searchRunnable;
@@ -52,13 +52,14 @@ public class SearchFragment extends Fragment {
         
         EditText searchInput = view.findViewById(R.id.search_input);
         resultsList = view.findViewById(R.id.search_results_list);
-        loadingSpinner = view.findViewById(R.id.search_loading_spinner); // НАХОДИМ КРУТИЛКУ
+        loadingSpinner = view.findViewById(R.id.search_loading_spinner); 
 
         resultsList.setLayoutManager(new LinearLayoutManager(activity));
         
+        // === ИСПРАВЛЕНИЕ: Вызываем OtherProfileFragment вместо ProfileFragment ===
         adapter = new UserListAdapter(activity, clickedUser -> {
             if (activity != null && activity.navigator != null) {
-                activity.navigator.openSubScreen(ProfileFragment.newInstance(clickedUser.uid, activity.getString(R.string.title_search)));
+                activity.navigator.openSubScreen(OtherProfileFragment.newInstance(clickedUser.uid, activity.getString(R.string.title_search)));
             }
         });
         
@@ -104,7 +105,6 @@ public class SearchFragment extends Fragment {
     private void performSearch(final String query, final MainActivity activity) {
         if(query.trim().length() > 0) {
             
-            // ПОКАЗЫВАЕМ КРУТИЛКУ ПРИ СТАРТЕ ПОИСКА
             if (loadingSpinner != null) loadingSpinner.setVisibility(View.VISIBLE);
 
             if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
@@ -140,7 +140,6 @@ public class SearchFragment extends Fragment {
                 }
             }
         } else {
-            // ЕСЛИ ПОЛЕ ПУСТОЕ - ПРЯЧЕМ КРУТИЛКУ И ОЧИЩАЕМ СПИСОК
             if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
             adapter.setUsers(new ArrayList<>());
         }
@@ -151,7 +150,6 @@ public class SearchFragment extends Fragment {
             @Override public void onFound(List<User> users) {
                 if (!isAdded()) return; 
                 
-                // ПРЯЧЕМ КРУТИЛКУ, КОГДА ПРИШЕЛ ОТВЕТ
                 if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
                 
                 adapter.setUsers(users);
