@@ -48,8 +48,13 @@ public class SettingsFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.layout_settings, container, false);
         MainActivity activity = (MainActivity) getActivity();
+        
         if (activity != null) {
             prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            
+            // === ИСПРАВЛЕНИЕ: Гарантированно гасим чужие фоны при переходе в настройки ===
+            activity.clearPreviewBackground();
+            activity.updateGlobalBackground(false);
         }
 
         regDateTxt = view.findViewById(R.id.settings_reg_date_txt);
@@ -64,8 +69,6 @@ public class SettingsFragment extends Fragment {
         if (btnSwitch != null) {
             btnSwitch.setOnClickListener(v -> {
                 if (activity != null && activity.mGoogleSignInClient != null) {
-                    // ИСПРАВЛЕНИЕ: Мы выходим из Google, но НЕ убиваем экран приложения. 
-                    // Сброс памяти произойдет в MainActivity ТОЛЬКО после успешного выбора нового аккаунта.
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
                         Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
                         activity.startActivityForResult(signInIntent, 9001); 
@@ -79,6 +82,8 @@ public class SettingsFragment extends Fragment {
             btnSignOut.setOnClickListener(v -> {
                 if (activity != null && activity.mGoogleSignInClient != null) {
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
+                        // === ИСПРАВЛЕНИЕ: Гасим фон при полном выходе из аккаунта ===
+                        activity.updateGlobalBackground(false);
                         activity.performSignOut();
                     });
                 }
@@ -220,7 +225,9 @@ public class SettingsFragment extends Fragment {
     public void onResume() {
         super.onResume();
         if (!isHidden() && getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+            MainActivity activity = (MainActivity) getActivity();
+            activity.clearPreviewBackground();
+            activity.updateGlobalBackground(false); 
         }
         LocalBroadcastManager.getInstance(requireContext()).registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_PROFILE_UPDATED"));
     }
@@ -237,7 +244,9 @@ public class SettingsFragment extends Fragment {
         if (!hidden && getView() != null) {
             loadUserData(getView()); 
             if (getActivity() instanceof MainActivity) {
-                ((MainActivity) getActivity()).updateGlobalBackground(false); 
+                MainActivity activity = (MainActivity) getActivity();
+                activity.clearPreviewBackground();
+                activity.updateGlobalBackground(false); 
             }
         }
     }
