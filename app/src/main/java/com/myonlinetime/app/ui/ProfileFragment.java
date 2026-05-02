@@ -124,8 +124,9 @@ public class ProfileFragment extends Fragment {
 
         activity.mainHeader.setVisibility(View.VISIBLE);
         if (!isMe) {
+            // ИСПРАВЛЕНИЕ СТРЕЛОЧКИ: Теперь она уважает AppNavigator!
             activity.headerManager.showBackButton(activity.getString(R.string.title_search), v -> {
-                if (getFragmentManager() != null) getFragmentManager().popBackStack();
+                activity.onBackPressed();
             });
         } else {
             activity.headerManager.resetHeader();
@@ -224,7 +225,6 @@ public class ProfileFragment extends Fragment {
                         if (user.photo != null && user.photo.length() > 10) {
                             if (isMe) {
                                 activity.prefs.edit().putString("my_photo_base64", user.photo).apply();
-                                // === ИСПРАВЛЕНИЕ: МГНОВЕННО УВЕДОМЛЯЕМ МЕНЮ О СКАЧАННОЙ АВАТАРКЕ ===
                                 activity.updateAvatarInUI();
                             }
                             handleMediaLoading(activity, user.photo, false, finalTargetUid);
@@ -444,8 +444,9 @@ public class ProfileFragment extends Fragment {
             if (!hidden) {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 if (!isMe) {
+                    // ИСПРАВЛЕНИЕ СТРЕЛОЧКИ: Здесь тоже нужно уважать AppNavigator
                     activity.headerManager.showBackButton(activity.getString(R.string.title_search), v -> {
-                        if (getFragmentManager() != null) getFragmentManager().popBackStack();
+                        activity.onBackPressed();
                     });
                 } else {
                     activity.headerManager.resetHeader();
