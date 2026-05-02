@@ -64,9 +64,9 @@ public class SettingsFragment extends Fragment {
         if (btnSwitch != null) {
             btnSwitch.setOnClickListener(v -> {
                 if (activity != null && activity.mGoogleSignInClient != null) {
+                    // ИСПРАВЛЕНИЕ: Мы выходим из Google, но НЕ убиваем экран приложения. 
+                    // Сброс памяти произойдет в MainActivity ТОЛЬКО после успешного выбора нового аккаунта.
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
-                        activity.resetAccountState(); 
-                        activity.clearAllFragments();
                         Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
                         activity.startActivityForResult(signInIntent, 9001); 
                     });
