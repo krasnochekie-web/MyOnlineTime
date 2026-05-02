@@ -56,6 +56,7 @@ public class ProfileFragment extends Fragment {
     
     private boolean isMe = false;
     private ImageView avatarView;
+    private String currentTargetUid = "";
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
@@ -97,12 +98,17 @@ public class ProfileFragment extends Fragment {
         boolean isDeleted;
     }
 
-    public static ProfileFragment newInstance(String targetUid) {
+    public static ProfileFragment newInstance(String targetUid, String backTitle) {
         ProfileFragment fragment = new ProfileFragment();
         Bundle args = new Bundle();
         args.putString("TARGET_UID", targetUid);
+        args.putString("BACK_TITLE", backTitle);
         fragment.setArguments(args);
         return fragment;
+    }
+    
+    public static ProfileFragment newInstance(String targetUid) {
+        return newInstance(targetUid, "");
     }
 
     public ProfileFragment() {}
@@ -113,21 +119,20 @@ public class ProfileFragment extends Fragment {
         final MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return view;
 
-        String targetUid = getArguments() != null ? getArguments().getString("TARGET_UID") : "";
+        String targetUid = getArguments() != null ? getArguments().getString("TARGET_UID", "") : "";
+        String backTitle = getArguments() != null ? getArguments().getString("BACK_TITLE", "") : "";
+        if (backTitle.isEmpty()) backTitle = activity.getString(R.string.title_search);
 
         final GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         if (account == null) return view;
 
         final String myUid = account.getId();
         isMe = targetUid.equals(myUid) || targetUid.isEmpty(); 
-        final String finalTargetUid = isMe ? myUid : targetUid;
+        currentTargetUid = isMe ? myUid : targetUid;
 
         activity.mainHeader.setVisibility(View.VISIBLE);
         if (!isMe) {
-            // ИСПРАВЛЕНИЕ СТРЕЛОЧКИ: Теперь она уважает AppNavigator!
-            activity.headerManager.showBackButton(activity.getString(R.string.title_search), v -> {
-                activity.onBackPressed();
-            });
+            activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
         } else {
             activity.headerManager.resetHeader();
         }
@@ -171,8 +176,8 @@ public class ProfileFragment extends Fragment {
             StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
         });
 
-        followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(finalTargetUid, true)));
-        followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(finalTargetUid, false)));
+        followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(currentTargetUid, "followers")));
+        followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(currentTargetUid, "following")));
 
         loadLocalCacheAsync(() -> {
             if (isMe && isAdded()) requestLoadMyStats();
@@ -202,39 +207,37 @@ public class ProfileFragment extends Fragment {
         }
 
         fetchProfileDataRunnable = () -> {
-            VpsApi.getUser(activity, activity.vpsToken, finalTargetUid, new VpsApi.UserCallback() {
+            VpsApi.getUser(activity, activity.vpsToken, currentTargetUid, new VpsApi.UserCallback() {
                 @Override
                 public void onLoaded(User user) {
                     if (!isAdded()) return;
                     if (user != null) {
-                        if (user.nickname != null) {
-                            nameView.setText(user.nickname);
-                            if (isMe) activity.prefs.edit().putString("my_nickname", user.nickname).apply();
-                        } else {
-                            nameView.setText(isMe ? "..." : activity.getString(R.string.no_name));
-                        }
-
-                        if (user.about != null) {
-                            aboutView.setText(user.about);
-                            if (isMe) activity.prefs.edit().putString("my_about", user.about).apply();
-                        } else {
-                            aboutView.setText("");
-                        }
+                        nameView.setText(user.nickname != null ? user.nickname : (isMe ? "..." : activity.getString(R.string.no_name)));
+                        aboutView.setText(user.about != null ? user.about : "");
                         StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+
+                        if (isMe && user.nickname != null) activity.prefs.edit().putString("my_nickname", user.nickname).apply();
+                        if (isMe && user.about != null) activity.prefs.edit().putString("my_about", user.about).apply();
 
                         if (user.photo != null && user.photo.length() > 10) {
                             if (isMe) {
                                 activity.prefs.edit().putString("my_photo_base64", user.photo).apply();
                                 activity.updateAvatarInUI();
                             }
-                            handleMediaLoading(activity, user.photo, false, finalTargetUid);
+                            handleMediaLoading(activity, user.photo, false, currentTargetUid);
                         }
 
                         if (user.background != null && user.background.length() > 10) {
                             if (isMe) {
                                 activity.prefs.edit().putString("my_bg_base64", user.background).apply();
                                 activity.syncMyBackground(user.background);
+                            } else {
+                                boolean isVideo = user.background.endsWith(".mp4") || user.background.endsWith(".mov");
+                                activity.previewBackground(user.background, isVideo);
                             }
+                        } else if (!isMe) {
+                            activity.clearPreviewBackground();
+                            activity.updateGlobalBackground(false);
                         }
 
                         if (isMe && user.createdAt != null) {
@@ -267,9 +270,7 @@ public class ProfileFragment extends Fragment {
                                 }
                             }
                             if (cacheChanged) requestLoadMyStats();
-                        }
-
-                        if (!isMe) {
+                        } else {
                             if (user.hiddenApps != null) {
                                 localHiddenApps.clear();
                                 localHiddenApps.addAll(user.hiddenApps);
@@ -278,49 +279,32 @@ public class ProfileFragment extends Fragment {
                                 localDescriptions.clear();
                                 localDescriptions.putAll(user.appDescriptions);
                             }
-                            renderOtherUserStats(user.topApps, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
+                            renderOtherUserStats(user.topApps, user.totalTime, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
                         }
                     } else if (!isMe) nameView.setText(activity.getString(R.string.new_user));
                 }
                 @Override public void onError(String e) {}
             });
 
-            VpsApi.getCounts(activity.vpsToken, finalTargetUid, new VpsApi.Callback() {
-                @Override public void onSuccess(String result) {
-                    if (!isAdded()) return; 
-                    try {
-                        org.json.JSONObject json = new org.json.JSONObject(result);
-                        followersCount.setText(String.valueOf(json.optInt("followers", 0)));
-                        followingCount.setText(String.valueOf(json.optInt("following", 0)));
-                    } catch (Exception e) {}
-                }
-                @Override public void onError(String error) {}
-            });
+            refreshCounts(activity);
 
             if (!isMe) {
-                VpsApi.checkIsFollowing(activity.vpsToken, finalTargetUid, new VpsApi.BooleanCallback() {
+                VpsApi.checkIsFollowing(activity.vpsToken, currentTargetUid, new VpsApi.BooleanCallback() {
                      @Override public void onResult(final boolean isFollowing) {
                          if (!isAdded()) return;
                          updateFollowButton(btnFollow, isFollowing);
                          btnFollow.setVisibility(View.VISIBLE);
-                         btnFollow.setOnClickListener(new View.OnClickListener() {
-                             boolean currentStatus = isFollowing;
-                             public void onClick(View v) {
-                                 currentStatus = !currentStatus;
-                                 updateFollowButton(btnFollow, currentStatus);
-                                 try {
-                                     int count = Integer.parseInt(followersCount.getText().toString());
-                                     count = currentStatus ? count + 1 : count - 1;
-                                     if (count < 0) count = 0;
-                                     followersCount.setText(String.valueOf(count));
-                                 } catch (Exception e) {}
-                                 VpsApi.setFollow(activity.vpsToken, finalTargetUid, currentStatus, new VpsApi.Callback() {
-                                     @Override public void onSuccess(String s) {}
-                                     @Override public void onError(String err) {
-                                         if (isAdded()) Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
-                                     }
-                                 });
-                             }
+                         btnFollow.setOnClickListener(v -> {
+                             boolean currentStatus = !isFollowing;
+                             updateFollowButton(btnFollow, currentStatus);
+                             VpsApi.setFollow(activity.vpsToken, currentTargetUid, currentStatus, new VpsApi.Callback() {
+                                 @Override public void onSuccess(String s) {
+                                     refreshCounts(activity);
+                                 }
+                                 @Override public void onError(String err) {
+                                     if (isAdded()) Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
+                                 }
+                             });
                          });
                      }
                 });
@@ -354,6 +338,23 @@ public class ProfileFragment extends Fragment {
         }
 
         return view;
+    }
+
+    private void refreshCounts(MainActivity activity) {
+        if (activity.vpsToken == null) return;
+        VpsApi.getCounts(activity.vpsToken, currentTargetUid, new VpsApi.Callback() {
+            @Override public void onSuccess(String result) {
+                if (!isAdded() || getView() == null) return; 
+                try {
+                    org.json.JSONObject json = new org.json.JSONObject(result);
+                    TextView followersCount = getView().findViewById(R.id.txt_followers_count);
+                    TextView followingCount = getView().findViewById(R.id.txt_following_count);
+                    if (followersCount != null) followersCount.setText(String.valueOf(json.optInt("followers", 0)));
+                    if (followingCount != null) followingCount.setText(String.valueOf(json.optInt("following", 0)));
+                } catch (Exception e) {}
+            }
+            @Override public void onError(String error) {}
+        });
     }
 
     private void requestLoadMyStats() {
@@ -421,8 +422,13 @@ public class ProfileFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        if (!isHidden() && getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(isMe);
+        if (getActivity() instanceof MainActivity) {
+            MainActivity activity = (MainActivity) getActivity();
+            if (!isHidden()) {
+                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
+                refreshCounts(activity);
+                if (isMe) activity.updateGlobalBackground(true);
+            }
         }
         
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
@@ -443,11 +449,11 @@ public class ProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!hidden) {
                 activity.mainHeader.setVisibility(View.VISIBLE);
+                
+                String backTitle = getArguments() != null ? getArguments().getString("BACK_TITLE", activity.getString(R.string.title_search)) : activity.getString(R.string.title_search);
+                
                 if (!isMe) {
-                    // ИСПРАВЛЕНИЕ СТРЕЛОЧКИ: Здесь тоже нужно уважать AppNavigator
-                    activity.headerManager.showBackButton(activity.getString(R.string.title_search), v -> {
-                        activity.onBackPressed();
-                    });
+                    activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
                 } else {
                     activity.headerManager.resetHeader();
                     
@@ -474,11 +480,28 @@ public class ProfileFragment extends Fragment {
                     }
                 }
                 activity.updateGlobalBackground(isMe);
+                
+                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
+                refreshCounts(activity);
+                
             } else {
-                if (activity.navigator != null && activity.navigator.getCurrentTabIndex() != 4) {
+                if (!isMe) {
+                    activity.clearPreviewBackground();
+                    activity.updateGlobalBackground(false);
+                } else if (activity.navigator != null && activity.navigator.getCurrentTabIndex() != 4) {
                     activity.updateGlobalBackground(false);
                 }
             }
+        }
+    }
+    
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        MainActivity activity = (MainActivity) getActivity();
+        if (activity != null && !isMe) {
+            activity.clearPreviewBackground();
+            activity.updateGlobalBackground(false);
         }
     }
 
@@ -504,12 +527,22 @@ public class ProfileFragment extends Fragment {
         });
     }
 
-    private void renderOtherUserStats(Map<String, Long> topApps, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
+    private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
         if (container != null) {
             container.setLayoutTransition(null);
             container.removeAllViews();
         }
-        if (topApps == null || topApps.isEmpty() || activity == null) return;
+        if (activity == null) return;
+
+        if (topApps == null || topApps.isEmpty()) {
+            long minutes = serverTotalTime / 1000 / 60;
+            long hours = minutes / 60;
+            long mins = minutes % 60;
+            if (weekTimeText != null) {
+                weekTimeText.setText(hours > 0 ? activity.getString(R.string.format_hours_mins, hours, mins) : activity.getString(R.string.format_mins, mins));
+            }
+            return;
+        }
 
         final long[] totalVisibleTime = {0};
         final List<AppUiData> preloadedData = new ArrayList<>();
@@ -619,29 +652,16 @@ public class ProfileFragment extends Fragment {
                         }
                     }
                     
-                    container.addView(view);
+                    if (container != null) container.addView(view);
                 }
 
-                if (preloadedData.isEmpty() && !topApps.isEmpty()) {
-                    String hiddenText = activity.getString(R.string.hidden_time_placeholder) + "  "; 
-                    SpannableString ss = new SpannableString(hiddenText);
-                    
-                    android.graphics.drawable.Drawable d = activity.getResources().getDrawable(R.drawable.ic_hidden_exclamation);
-                    d.setBounds(0, 0, d.getIntrinsicWidth(), d.getIntrinsicHeight());
-                    ImageSpan span = new ImageSpan(d, ImageSpan.ALIGN_BOTTOM);
-                    ss.setSpan(span, hiddenText.length() - 1, hiddenText.length(), Spanned.SPAN_INCLUSIVE_EXCLUSIVE);
+                long timeToShow = Math.max(serverTotalTime, totalVisibleTime[0]);
+                long minutes = timeToShow / 1000 / 60;
+                long hours = minutes / 60;
+                long mins = minutes % 60;
 
-                    weekTimeText.setText(ss);
-                    weekTimeText.setOnClickListener(v -> Toast.makeText(activity, R.string.user_hid_time, Toast.LENGTH_SHORT).show());
-                } else {
-                    long minutes = totalVisibleTime[0] / 1000 / 60;
-                    long hours = minutes / 60;
-                    long mins = minutes % 60;
-                    if (hours > 0) {
-                        weekTimeText.setText(activity.getString(R.string.format_hours_mins, hours, mins));
-                    } else {
-                        weekTimeText.setText(activity.getString(R.string.format_mins, mins));
-                    }
+                if (weekTimeText != null) {
+                    weekTimeText.setText(hours > 0 ? activity.getString(R.string.format_hours_mins, hours, mins) : activity.getString(R.string.format_mins, mins));
                     weekTimeText.setOnClickListener(null); 
                 }
 
