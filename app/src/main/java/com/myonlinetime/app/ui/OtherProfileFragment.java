@@ -1,6 +1,5 @@
 package com.myonlinetime.app.ui;
 
-import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -37,6 +36,10 @@ public class OtherProfileFragment extends Fragment {
     private String targetUid = "";
     private String backTitle = "";
 
+    // === КЭШИРУЕМ ФОН ДЛЯ ПЛАВНЫХ ПЕРЕХОДОВ ===
+    private String loadedBgUrl = null;
+    private boolean isLoadedBgVideo = false;
+
     private static class AppUiData {
         String pkgName;
         String appName;
@@ -63,22 +66,14 @@ public class OtherProfileFragment extends Fragment {
         final MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return view;
 
-        // ЖЕСТКАЯ ЗАЛИВКА ФОНА, ЧТОБЫ НЕ БЫЛО ПРОСВЕЧИВАНИЙ
-        view.setBackgroundColor(ContextCompat.getColor(activity, R.color.bgDynamic));
-
         targetUid = getArguments() != null ? getArguments().getString("TARGET_UID", "") : "";
         backTitle = getArguments() != null ? getArguments().getString("BACK_TITLE", activity.getString(R.string.title_search)) : activity.getString(R.string.title_search);
 
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
 
-        // Аккуратно прячем твой фон после начала анимации, чтобы не моргало
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (isAdded() && getActivity() != null) {
-                activity.clearPreviewBackground();
-                activity.updateGlobalBackground(false);
-            }
-        }, 150);
+        activity.clearPreviewBackground();
+        activity.updateGlobalBackground(false);
 
         final TextView nameView = view.findViewById(R.id.profile_name);
         final TextView aboutView = view.findViewById(R.id.profile_about);
@@ -117,7 +112,6 @@ public class OtherProfileFragment extends Fragment {
         followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "followers")));
         followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "following")));
 
-        // ЗАГРУЗКА ТОЛЬКО ОДИН РАЗ, БЕЗ ON_RESUME
         if (activity.vpsToken != null) {
             VpsApi.getUser(activity, activity.vpsToken, targetUid, new VpsApi.UserCallback() {
                 @Override
@@ -133,9 +127,11 @@ public class OtherProfileFragment extends Fragment {
                         }
 
                         if (user.background != null && user.background.length() > 10) {
-                            boolean isVideo = user.background.endsWith(".mp4") || user.background.endsWith(".mov");
-                            activity.previewBackground(user.background, isVideo);
+                            loadedBgUrl = user.background;
+                            isLoadedBgVideo = user.background.endsWith(".mp4") || user.background.endsWith(".mov");
+                            activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
                         } else {
+                            loadedBgUrl = null;
                             activity.clearPreviewBackground();
                         }
 
@@ -235,7 +231,9 @@ public class OtherProfileFragment extends Fragment {
     public void onResume() {
         super.onResume();
         if (getActivity() instanceof MainActivity && !isHidden()) {
-            refreshCounts((MainActivity) getActivity());
+            MainActivity activity = (MainActivity) getActivity();
+            refreshCounts(activity);
+            if (loadedBgUrl != null) activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
         }
     }
 
@@ -248,6 +246,11 @@ public class OtherProfileFragment extends Fragment {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
                 refreshCounts(activity);
+                
+                // === ВОССТАНАВЛИВАЕМ ФОН ИЗ КЭША ПРИ ВОЗВРАТЕ НА ЭКРАН ===
+                if (loadedBgUrl != null) {
+                    activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
+                }
             } else {
                 activity.clearPreviewBackground();
             }
@@ -263,11 +266,11 @@ public class OtherProfileFragment extends Fragment {
         }
     }
 
-    // БЕЗОПАСНЫЙ ПАРСИНГ СПИСКА ПРИЛОЖЕНИЙ
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
         if (container != null) {
             container.setLayoutTransition(null);
             container.removeAllViews();
+            container.setVisibility(View.VISIBLE); // === ГАРАНТИРУЕМ, ЧТО СПИСОК ВИДЕН ===
         }
         if (activity == null) return;
 
@@ -289,8 +292,6 @@ public class OtherProfileFragment extends Fragment {
             SharedPreferences dbNames = activity.getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
 
             int limit = 0;
-            
-            // Защита от ClassCastException, если сервер отдал Double
             Map<String, ?> safeTopApps = (Map<String, ?>) topApps;
 
             for (Map.Entry<String, ?> entry : safeTopApps.entrySet()) {
@@ -376,7 +377,10 @@ public class OtherProfileFragment extends Fragment {
                             iconDeleted.setOnClickListener(null);
                         }
                     }
-                    if (container != null) container.addView(view);
+                    if (container != null) {
+                        container.addView(view);
+                        container.setVisibility(View.VISIBLE); // === ЕЩЕ РАЗ ГАРАНТИРУЕМ ВИДИМОСТЬ ===
+                    }
                 }
 
                 long timeToShow = Math.max(serverTotalTime, totalVisibleTime[0]);
