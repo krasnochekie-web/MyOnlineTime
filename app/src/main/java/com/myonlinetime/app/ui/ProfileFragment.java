@@ -133,6 +133,9 @@ public class ProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         if (!isMe) {
             activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
+            // === ИСПРАВЛЕНИЕ: МГНОВЕННО ГАСИМ ФОН ПРИ ОТКРЫТИИ ЧУЖОГО ПРОФИЛЯ ===
+            activity.clearPreviewBackground();
+            activity.updateGlobalBackground(false);
         } else {
             activity.headerManager.resetHeader();
         }
@@ -235,9 +238,6 @@ public class ProfileFragment extends Fragment {
                                 boolean isVideo = user.background.endsWith(".mp4") || user.background.endsWith(".mov");
                                 activity.previewBackground(user.background, isVideo);
                             }
-                        } else if (!isMe) {
-                            activity.clearPreviewBackground();
-                            activity.updateGlobalBackground(false);
                         }
 
                         if (isMe && user.createdAt != null) {
@@ -292,12 +292,26 @@ public class ProfileFragment extends Fragment {
                 VpsApi.checkIsFollowing(activity.vpsToken, currentTargetUid, new VpsApi.BooleanCallback() {
                      @Override public void onResult(final boolean isFollowing) {
                          if (!isAdded()) return;
+                         // === ИСПРАВЛЕНИЕ: СОХРАНЯЕМ СТАТУС В КНОПКУ ===
+                         btnFollow.setTag(isFollowing);
                          updateFollowButton(btnFollow, isFollowing);
                          btnFollow.setVisibility(View.VISIBLE);
+                         
                          btnFollow.setOnClickListener(v -> {
-                             boolean currentStatus = !isFollowing;
-                             updateFollowButton(btnFollow, currentStatus);
-                             VpsApi.setFollow(activity.vpsToken, currentTargetUid, currentStatus, new VpsApi.Callback() {
+                             boolean currentStatus = btnFollow.getTag() != null && (boolean) btnFollow.getTag();
+                             boolean nextStatus = !currentStatus;
+                             
+                             btnFollow.setTag(nextStatus); // Сохраняем мгновенно новое состояние
+                             updateFollowButton(btnFollow, nextStatus);
+                             
+                             try {
+                                 int count = Integer.parseInt(followersCount.getText().toString());
+                                 count = nextStatus ? count + 1 : count - 1;
+                                 if (count < 0) count = 0;
+                                 followersCount.setText(String.valueOf(count));
+                             } catch (Exception e) {}
+                             
+                             VpsApi.setFollow(activity.vpsToken, currentTargetUid, nextStatus, new VpsApi.Callback() {
                                  @Override public void onSuccess(String s) {
                                      refreshCounts(activity);
                                  }
@@ -485,23 +499,10 @@ public class ProfileFragment extends Fragment {
                 refreshCounts(activity);
                 
             } else {
-                if (!isMe) {
-                    activity.clearPreviewBackground();
-                    activity.updateGlobalBackground(false);
-                } else if (activity.navigator != null && activity.navigator.getCurrentTabIndex() != 4) {
+                if (activity.navigator != null && activity.navigator.getCurrentTabIndex() != 4) {
                     activity.updateGlobalBackground(false);
                 }
             }
-        }
-    }
-    
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-        MainActivity activity = (MainActivity) getActivity();
-        if (activity != null && !isMe) {
-            activity.clearPreviewBackground();
-            activity.updateGlobalBackground(false);
         }
     }
 
@@ -527,6 +528,7 @@ public class ProfileFragment extends Fragment {
         });
     }
 
+    // === ИСПРАВЛЕНИЕ: Добавлен serverTotalTime и исправлено чтение времени из JSON ===
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
         if (container != null) {
             container.setLayoutTransition(null);
@@ -562,7 +564,10 @@ public class ProfileFragment extends Fragment {
 
                 AppUiData data = new AppUiData();
                 data.pkgName = pkgName;
-                data.time = entry.getValue();
+                
+                // === ИСПРАВЛЕНИЕ ClassCastException: Безопасно преобразуем число из JSON ===
+                data.time = ((Number) entry.getValue()).longValue(); 
+                
                 data.description = localDescriptions.get(pkgName);
                 data.isDeleted = false;
 
@@ -608,7 +613,7 @@ public class ProfileFragment extends Fragment {
                 }
 
                 preloadedData.add(data);
-                totalVisibleTime[0] += entry.getValue();
+                totalVisibleTime[0] += data.time;
                 limit++;
             }
 
@@ -655,6 +660,7 @@ public class ProfileFragment extends Fragment {
                     if (container != null) container.addView(view);
                 }
 
+                // Выводим максимум между локально подсчитанным временем и общим серверным
                 long timeToShow = Math.max(serverTotalTime, totalVisibleTime[0]);
                 long minutes = timeToShow / 1000 / 60;
                 long hours = minutes / 60;
