@@ -19,9 +19,17 @@ import java.util.List;
 public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserViewHolder> {
     private List<User> users = new ArrayList<>();
     private MainActivity activity;
+    private OnUserClickListener listener;
 
-    public UserListAdapter(MainActivity activity) {
+    // === ДОБАВЛЕНО: Интерфейс для правильной обработки кликов ===
+    public interface OnUserClickListener {
+        void onUserClick(User user);
+    }
+
+    // === ИСПРАВЛЕНО: Теперь конструктор требует слушатель ===
+    public UserListAdapter(MainActivity activity, OnUserClickListener listener) {
         this.activity = activity;
+        this.listener = listener;
     }
 
     public void setUsers(List<User> newUsers) {
@@ -42,23 +50,24 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
         
         holder.name.setText(u.nickname != null ? u.nickname : activity.getString(R.string.new_user));
 
-        // 1. Очищаем старую картинку, чтобы при быстром скролле не было "морганий" чужих аватарок
+        // Очищаем старую картинку, чтобы при быстром скролле не было "морганий" чужих аватарок
         Glide.with(activity).clear(holder.avatar);
 
-        // ТЕПЕРЬ ТУТ ТОЛЬКО ЧИСТЫЕ И БЫСТРЫЕ ССЫЛКИ! НИКАКОГО BASE64!
         if (u.photo != null && u.photo.startsWith("http")) {
             Glide.with(activity)
                  .load(u.photo)
                  .circleCrop()
-                 .placeholder(android.R.drawable.sym_def_app_icon) // Пока грузится из сети, показываем дефолтную
+                 .placeholder(android.R.drawable.sym_def_app_icon) 
                  .into(holder.avatar);
         } else {
-            // Если фото нет или это старый Base64 мусор — ставим заглушку
             holder.avatar.setImageResource(android.R.drawable.sym_def_app_icon);
         }
 
+        // === ИСПРАВЛЕНО: Больше не дергаем нижнее меню! Передаем клик во фрагмент ===
         holder.itemView.setOnClickListener(v -> {
-            activity.navigator.switchScreen(4, u.uid);
+            if (listener != null) {
+                listener.onUserClick(u);
+            }
         });
     }
 
