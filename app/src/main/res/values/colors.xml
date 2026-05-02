@@ -9,6 +9,7 @@
     <color name="hisaStatic">#696969</color>
     <color name="chartBarNormal">#FFB300</color>
     <color name="chartBarSelected">#FFE082</color>
+    <color name="grapefruit">#3EA6FF</color>
 
     <color name="bgDynamic">#F5F5F5</color> 
     <color name="cardDynamic">#FFFFFF</color> 
