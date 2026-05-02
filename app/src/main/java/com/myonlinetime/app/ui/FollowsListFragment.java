@@ -47,8 +47,6 @@ public class FollowsListFragment extends Fragment {
 
         RecyclerView recyclerView = view.findViewById(R.id.follows_results_list);
         statusText = view.findViewById(R.id.follows_status_text);
-        
-        // Убедись, что в layout_follows_list.xml добавлен ProgressBar с ID follows_loading_spinner
         loadingSpinner = view.findViewById(R.id.follows_loading_spinner); 
 
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
@@ -56,7 +54,6 @@ public class FollowsListFragment extends Fragment {
         adapter = new UserListAdapter((MainActivity) getActivity(), clickedUser -> {
             MainActivity activity = (MainActivity) getActivity();
             if (activity != null && activity.navigator != null) {
-                // Передаем правильный заголовок!
                 String title = listType.equals("followers") ? "Подписчики" : "Подписки";
                 activity.navigator.openSubScreen(ProfileFragment.newInstance(clickedUser.uid, title));
             }
@@ -75,33 +72,46 @@ public class FollowsListFragment extends Fragment {
         statusText.setVisibility(View.GONE);
         if (loadingSpinner != null) loadingSpinner.setVisibility(View.VISIBLE);
 
-        GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
-        if (acct != null) {
-            VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
-                @Override
-                public void onSuccess(String token) {
-                    VpsApi.getList(token, targetUid, listType, new VpsApi.SearchCallback() {
-                        @Override public void onFound(List<User> users) {
-                            if (!isAdded()) return;
-                            if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-                            
-                            if (users == null || users.isEmpty()) {
-                                statusText.setVisibility(View.VISIBLE);
-                                statusText.setText(getString(R.string.empty_list));
-                            } else {
-                                statusText.setVisibility(View.GONE);
-                                adapter.setUsers(users);
-                            }
-                        }
-                    });
-                }
-                @Override public void onError(String error) {
-                    if (!isAdded()) return;
-                    if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-                    statusText.setVisibility(View.VISIBLE);
-                    statusText.setText(getString(R.string.err_loading));
-                }
-            });
+        if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
+            fetchList(activity, activity.vpsToken);
+        } else {
+            GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
+            if (acct != null) {
+                VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
+                    @Override
+                    public void onSuccess(String token) {
+                        activity.vpsToken = token;
+                        fetchList(activity, token);
+                    }
+                    @Override public void onError(String error) { showError(); }
+                });
+            } else {
+                showError();
+            }
         }
+    }
+
+    private void fetchList(MainActivity activity, String token) {
+        VpsApi.getList(token, targetUid, listType, new VpsApi.SearchCallback() {
+            @Override public void onFound(List<User> users) {
+                if (!isAdded()) return;
+                if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+                
+                if (users == null || users.isEmpty()) {
+                    statusText.setVisibility(View.VISIBLE);
+                    statusText.setText(getString(R.string.empty_list));
+                } else {
+                    statusText.setVisibility(View.GONE);
+                    adapter.setUsers(users);
+                }
+            }
+        });
+    }
+
+    private void showError() {
+        if (!isAdded()) return;
+        if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+        statusText.setVisibility(View.VISIBLE);
+        statusText.setText(getString(R.string.err_loading));
     }
 }
