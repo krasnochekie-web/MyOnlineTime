@@ -48,7 +48,15 @@ public class FollowsListFragment extends Fragment {
         statusText = view.findViewById(R.id.follows_status_text);
 
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-        adapter = new UserListAdapter((MainActivity) getActivity());
+        
+        // === ИСПРАВЛЕНИЕ: Добавлен слушатель клика для открытия профиля ===
+        adapter = new UserListAdapter((MainActivity) getActivity(), clickedUser -> {
+            MainActivity activity = (MainActivity) getActivity();
+            if (activity != null && activity.navigator != null) {
+                activity.navigator.openSubScreen(ProfileFragment.newInstance(clickedUser.uid));
+            }
+        });
+        
         recyclerView.setAdapter(adapter);
 
         loadData();
