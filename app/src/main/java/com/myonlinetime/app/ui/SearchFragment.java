@@ -45,7 +45,8 @@ public class SearchFragment extends Fragment {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.resetHeader();
             
-            // Просто ставим фон на паузу/прячем
+            // ВАЖНО: Убрано activity.clearPreviewBackground();
+            // Теперь мы просто мягко ставим плеер на паузу!
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
             }, 400);
