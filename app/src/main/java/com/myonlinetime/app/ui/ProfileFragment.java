@@ -54,7 +54,7 @@ public class ProfileFragment extends Fragment {
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
-    private Runnable fetchProfileDataRunnable; // ВЕРНУЛ ЗАГРУЗКУ С СЕРВЕРА
+    private Runnable fetchProfileDataRunnable; 
 
     private final android.content.BroadcastReceiver profileUpdateReceiver = new android.content.BroadcastReceiver() {
         @Override
@@ -88,6 +88,12 @@ public class ProfileFragment extends Fragment {
 
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.resetHeader();
+
+        // === ИСПРАВЛЕНИЕ АНИМАЦИИ 1: При старте включаем свой фон, а чужой (превью) убиваем с задержкой ===
+        activity.updateGlobalBackground(true);
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (isAdded() && !isHidden()) activity.clearPreviewBackground();
+        }, 400);
 
         prefs = activity.getSharedPreferences("MyOnlineTime_Cache_" + myUid, Context.MODE_PRIVATE);
 
@@ -136,7 +142,6 @@ public class ProfileFragment extends Fragment {
             ));
         });
 
-        // ВОССТАНОВИЛИ СИНХРОНИЗАЦИЮ ПРОФИЛЯ
         fetchProfileDataRunnable = () -> {
             VpsApi.getUser(activity, activity.vpsToken, myUid, new VpsApi.UserCallback() {
                 @Override
@@ -299,9 +304,13 @@ public class ProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!isHidden()) {
                 updateUiFromPrefs(activity);
-                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
+                
+                // === ИСПРАВЛЕНИЕ АНИМАЦИИ 2: Задержка перед уничтожением чужого фона при возврате ===
                 activity.updateGlobalBackground(true);
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (isAdded() && !isHidden()) activity.clearPreviewBackground();
+                }, 400);
             }
         }
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
@@ -324,13 +333,20 @@ public class ProfileFragment extends Fragment {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.headerManager.resetHeader();
                 updateUiFromPrefs(activity);
-                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
+                
+                // === ИСПРАВЛЕНИЕ АНИМАЦИИ 3: Задержка перед уничтожением чужого фона при возврате ===
                 activity.updateGlobalBackground(true);
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (isAdded() && !isHidden()) activity.clearPreviewBackground();
+                }, 400);
             } else {
-                if (activity.navigator != null && activity.navigator.getCurrentTabIndex() != 4) {
-                    activity.updateGlobalBackground(false);
-                }
+                // === ИСПРАВЛЕНИЕ АНИМАЦИИ 4: Ждем окончания анимации перед отключением своего фона ===
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (isAdded() && isHidden() && activity.navigator != null && activity.navigator.getCurrentTabIndex() != 4) {
+                        activity.updateGlobalBackground(false);
+                    }
+                }, 400);
             }
         }
     }
