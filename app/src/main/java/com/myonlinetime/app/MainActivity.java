@@ -209,7 +209,10 @@ public class MainActivity extends AppCompatActivity {
         updateGlobalBackground(true);
 
         int tabToOpen = 0; 
-        if (savedInstanceState != null) {
+        if (appPrefs.contains("open_tab_after_login")) {
+            tabToOpen = appPrefs.getInt("open_tab_after_login", 0);
+            appPrefs.edit().remove("open_tab_after_login").apply();
+        } else if (savedInstanceState != null) {
             tabToOpen = savedInstanceState.getInt("SAVED_TAB", 0);
         }
 
@@ -283,7 +286,6 @@ public class MainActivity extends AppCompatActivity {
                 resetAccountState();
                 clearAllFragments(); 
                 
-                // ИСПРАВЛЕНИЕ 1: Остаемся в настройках (Индекс 5), а не переходим в Ленту (Индекс 0)
                 updateNavState(5);
                 navigator.switchScreen(5, null);
                 loadUserAvatarToBottomNav();
@@ -426,6 +428,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // === ИСПРАВЛЕНИЕ: ПРЯМОЙ ПРИКАЗ СЕРВЕРУ НА УДАЛЕНИЕ ФОНА ===
     public void deleteMyBackgroundLocal() {
         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
         if (acct == null) return;
@@ -445,12 +448,24 @@ public class MainActivity extends AppCompatActivity {
             .remove("custom_bg_path_" + uid)
             .remove("custom_bg_is_video_" + uid)
             .remove("synced_bg_url_" + uid)
+            .remove("my_bg_base64") // Обязательно выжигаем ссылку!
             .apply();
 
         currentBgBase64 = null;
         currentBgPath = null;
         
         updateGlobalBackground(true);
+
+        if (vpsToken != null) {
+            VpsApi.deleteBackground(vpsToken, new VpsApi.Callback() {
+                @Override public void onSuccess(String result) {
+                    // Сервер подтвердил удаление
+                }
+                @Override public void onError(String error) {
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, getString(R.string.err_server) + " " + error, Toast.LENGTH_SHORT).show());
+                }
+            });
+        }
     }
 
     private String resolveBackgroundPath(String path) {
@@ -888,7 +903,6 @@ public class MainActivity extends AppCompatActivity {
                         vpsToken = ourServerToken;
                         StatsHelper.syncUserProfile(MainActivity.this);
 
-                        // Бесшовный переход (Без мерцаний и морганий)
                         runOnUiThread(() -> {
                             updateNavState(4);
                             navigator.switchScreen(4, acct.getId());
