@@ -3,16 +3,16 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bgDynamic"
+    android:paddingTop="@dimen/header_clearance"
     android:nestedScrollingEnabled="true">
 
-    <!-- ВОТ ОНА, НАША КРУТИЛОЧКА -->
     <ProgressBar
         android:id="@+id/follows_loading_spinner"
         android:layout_width="40dp"
         android:layout_height="40dp"
         android:layout_centerInParent="true"
         android:layout_marginBottom="8dp"
-        android:indeterminateTint="@color/grapefruit" /> <!-- Замени цвет на свой синий, если нужно -->
+        android:indeterminateTint="@color/textDynamic" />
 
     <TextView
         android:id="@+id/follows_status_text"
