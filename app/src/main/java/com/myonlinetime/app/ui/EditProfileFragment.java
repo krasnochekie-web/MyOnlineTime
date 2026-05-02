@@ -82,8 +82,11 @@ public class EditProfileFragment extends Fragment {
         }
     }
 
+    // === ИДЕАЛЬНАЯ ЛОГИКА АНТИ-СПАМА ===
     private boolean isActionSpam(boolean isMedia) {
         long now = System.currentTimeMillis();
+        
+        // ЖЕСТКОЕ ПРАВИЛО: Если наказание еще действует, ЛЮБАЯ попытка сбрасывает таймер на 30 сек заново!
         if (now < penaltyEndTime) {
             penaltyEndTime = now + 30000; 
             if (getActivity() != null) Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
@@ -95,14 +98,19 @@ public class EditProfileFragment extends Fragment {
             while (!mediaAttemptTimes.isEmpty() && now - mediaAttemptTimes.getFirst() > 10000) mediaAttemptTimes.removeFirst();
             if (mediaAttemptTimes.size() > 5) {
                 penaltyEndTime = now + 30000;
+                mediaAttemptTimes.clear();
                 if (getActivity() != null) Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
                 return true;
             }
         } else {
             textAttemptTimes.add(now);
-            while (!textAttemptTimes.isEmpty() && now - textAttemptTimes.getFirst() > 10000) textAttemptTimes.removeFirst();
-            if (textAttemptTimes.size() > 10) {
+            // Удаляем старые клики (старше 5 секунд)
+            while (!textAttemptTimes.isEmpty() && now - textAttemptTimes.getFirst() > 5000) textAttemptTimes.removeFirst();
+            
+            // Если за 5 секунд накопилось более 5 попыток проверки/сохранения
+            if (textAttemptTimes.size() > 5) {
                 penaltyEndTime = now + 30000;
+                textAttemptTimes.clear();
                 if (getActivity() != null) Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
                 return true;
             }
@@ -229,10 +237,11 @@ public class EditProfileFragment extends Fragment {
              String uid = acct.getId();
              File finalBgFile = pendingBgFile;
              File finalPhotoFile = pendingPhotoFile;
+             
+             final String oldName = activity.prefs.getString("my_nickname", "...");
+             final String oldAbout = activity.prefs.getString("my_about", "");
 
-             // === ЛОГИКА, КОТОРАЯ СРАБАТЫВАЕТ ЕСЛИ ИМЯ СВОБОДНО (ИЛИ НЕ МЕНЯЛОСЬ) ===
              Runnable performOptimisticSaveAndUpload = () -> {
-                 // 1. ОПТИМИСТИЧНЫЙ ИНТЕРФЕЙС
                  SharedPreferences.Editor editor = activity.prefs.edit();
                  editor.putString("my_nickname", n);
                  editor.putString("my_about", a);
@@ -252,14 +261,12 @@ public class EditProfileFragment extends Fragment {
                  editor.apply();
                  activity.mMemoryCache.remove("avatar_" + uid);
 
-                 // Закрываем экран мгновенно!
                  activity.clearPreviewBackground();
                  activity.updateGlobalBackground(true);
                  activity.updateAvatarInUI();
                  activity.navigator.closeSubScreen();
                  LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
 
-                 // 2. ФОНОВАЯ ОТПРАВКА НА СЕРВЕР ТЯЖЕЛЫХ ФАЙЛОВ
                  Utils.backgroundExecutor.execute(() -> {
                      File readyBg = finalBgFile;
                      File readyPhoto = finalPhotoFile;
@@ -319,7 +326,6 @@ public class EditProfileFragment extends Fragment {
                  });
              };
 
-             // === БЫСТРАЯ ПРОВЕРКА ИМЕНИ ПЕРЕД ЗАКРЫТИЕМ ===
              if (!n.equals(initialName) && activity.vpsToken != null) {
                  VpsApi.checkNickname(activity.vpsToken, n, new VpsApi.Callback() {
                      @Override public void onSuccess(String result) {
