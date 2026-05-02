@@ -38,6 +38,7 @@ public class VpsApi {
     }
     private static class FollowPayload { String targetUid; boolean isFollowing; }
     private static class CheckFollowPayload { String targetUid; }
+    private static class CheckNicknamePayload { String nickname; }
     
     private static class AppVisibilityPayload { String pkgName; boolean isHidden; }
     private static class AppDescriptionPayload { String pkgName; String description; }
@@ -76,10 +77,22 @@ public class VpsApi {
                         postError(callback, context.getString(R.string.err_parse_token));
                     }
                 } else {
-                    postError(callback, context.getString(R.string.err_server_auth) + response.code());
+                    String errBody = "";
+                    try { errBody = response.body().string(); } catch (Exception ignored) {}
+                    postError(callback, errBody.isEmpty() ? String.valueOf(response.code()) : errBody);
                 }
             }
         });
+    }
+
+    // === НОВЫЙ МЕТОД ДЛЯ ПРЕДВАРИТЕЛЬНОЙ ПРОВЕРКИ ИМЕНИ ===
+    public static void checkNickname(String ourServerToken, String nickname, final Callback callback) {
+        CheckNicknamePayload payload = new CheckNicknamePayload();
+        payload.nickname = nickname;
+        Request request = createAuthedRequest("check_nickname", ourServerToken)
+                .post(RequestBody.create(JSON, gson.toJson(payload)))
+                .build();
+        enqueueCall(request, callback);
     }
 
     public static void saveUser(String ourServerToken, String nickname, String about, String photo, long totalTime, Map<String, Long> topApps, final Callback callback) {
@@ -93,7 +106,6 @@ public class VpsApi {
         enqueueCall(request, callback);
     }
 
-    // --- БЕЗ BASE64! МЕТОД ДЛЯ ПРЯМОЙ ОТПРАВКИ ФАЙЛОВ ЧЕРЕЗ MULTIPART ---
     public static void saveUserProfile(String ourServerToken, String nickname, String about, File photoFile, File bgFile, final Callback callback) {
         MultipartBody.Builder builder = new MultipartBody.Builder().setType(MultipartBody.FORM);
 
@@ -117,9 +129,7 @@ public class VpsApi {
         enqueueCall(request, callback);
     }
 
-    // === НОВЫЙ МЕТОД ДЛЯ ПРЯМОГО УДАЛЕНИЯ ФОНА С СЕРВЕРА ===
     public static void deleteBackground(String ourServerToken, final Callback callback) {
-        // Отправляем пустой JSON, чтобы выполнить POST запрос
         RequestBody body = RequestBody.create(JSON, "{}");
         Request request = createAuthedRequest("delete_background", ourServerToken)
                 .post(body)
@@ -277,7 +287,10 @@ public class VpsApi {
                         @Override public void run() { callback.onSuccess(result); }
                     });
                 } else {
-                    postError(callback, response.code() + ": " + response.message());
+                    String errBody = "";
+                    try { errBody = response.body().string(); } catch (Exception ignored) {}
+                    final String finalErr = errBody.isEmpty() ? String.valueOf(response.code()) : errBody;
+                    postError(callback, finalErr);
                 }
             }
         });
