@@ -6,7 +6,6 @@ import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import android.content.Intent;
-import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
@@ -18,6 +17,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import com.bumptech.glide.Glide;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -130,7 +130,7 @@ public class EditProfileFragment extends Fragment {
         View btnChangePhoto = view.findViewById(R.id.btn_change_photo);
         View btnChangeBackground = view.findViewById(R.id.btn_change_background);
         ImageView avatarPreview = view.findViewById(R.id.edit_avatar_preview);
-        View btnSave = view.findViewById(R.id.btn_save_changes);
+        Button btnSave = view.findViewById(R.id.btn_save_changes);
 
         InputFilter exoticFilter = new InputFilter() {
             @Override
@@ -163,7 +163,6 @@ public class EditProfileFragment extends Fragment {
             });
         }
 
-        // Обновляем превьюшку без кэша памяти
         String customAvatarPath = activity.prefs.getString("custom_avatar_path_" + acct.getId(), null);
         if (customAvatarPath != null && new File(customAvatarPath).exists() && avatarPreview != null) {
             Glide.with(activity)
@@ -218,12 +217,16 @@ public class EditProfileFragment extends Fragment {
                  return;
              }
              
+             if (n.isEmpty()) {
+                 Toast.makeText(activity, "Никнейм не может быть пустым", Toast.LENGTH_SHORT).show();
+                 return;
+             }
+
              if (isActionSpam(pendingPhotoFile != null || pendingBgFile != null)) return; 
              
-             // Отключаем кнопку, чтобы не было двойных нажатий
              btnSave.setEnabled(false); 
+             btnSave.setText("Сохранение..."); // Даем визуальный фидбек, что ждем сервер
 
-             // === ВЫНОСИМ ТЯЖЕЛУЮ РАБОТУ В ФОНОВЫЙ ПОТОК (ЧТОБЫ UI НЕ ЗАВИСАЛ!) ===
              String uid = acct.getId();
              File finalBgFile = pendingBgFile;
              File finalPhotoFile = pendingPhotoFile;
@@ -232,46 +235,21 @@ public class EditProfileFragment extends Fragment {
                  File readyBg = finalBgFile;
                  File readyPhoto = finalPhotoFile;
 
+                 // Локально подготавливаем файлы к отправке
                  try {
                      if (finalBgFile != null) {
                          boolean isVideo = finalBgFile.getName().endsWith(".mp4");
                          boolean isGif = finalBgFile.getName().endsWith(".gif");
                          String ext = isVideo ? ".mp4" : (isGif ? ".gif" : ".jpg");
-                         
-                         File dir = activity.getFilesDir();
-                         File[] files = dir.listFiles();
-                         if (files != null) {
-                             for (File f : files) if (f.getName().startsWith("my_bg_" + uid)) f.delete();
-                         }
-
-                         File permBg = new File(activity.getFilesDir(), "my_bg_" + uid + "_" + System.currentTimeMillis() + ext);
+                         File permBg = new File(activity.getFilesDir(), "temp_upload_bg_" + uid + ext);
                          copyFile(finalBgFile, permBg);
-                         
-                         activity.prefs.edit()
-                             .putString("custom_bg_path_" + uid, permBg.getAbsolutePath())
-                             .putBoolean("custom_bg_is_video_" + uid, isVideo)
-                             .apply();
-                             
-                         activity.currentBgBase64 = permBg.getAbsolutePath(); 
                          readyBg = permBg;
                      }
-                     
                      if (finalPhotoFile != null) {
-                         // БОЛЬШЕ НЕ ЛОМАЕМ GIF ДЛЯ АВАТАРОК!
                          boolean isAvatarGif = finalPhotoFile.getName().endsWith(".gif");
                          String avatarExt = isAvatarGif ? ".gif" : ".png";
-                         
-                         File dir = activity.getFilesDir();
-                         File[] files = dir.listFiles();
-                         if (files != null) {
-                             for (File f : files) if (f.getName().startsWith("avatar_" + uid)) f.delete();
-                         }
-
-                         File permAvatar = new File(activity.getFilesDir(), "avatar_" + uid + "_" + System.currentTimeMillis() + avatarExt);
+                         File permAvatar = new File(activity.getFilesDir(), "temp_upload_avatar_" + uid + avatarExt);
                          copyFile(finalPhotoFile, permAvatar);
-                         activity.mMemoryCache.remove("avatar_" + uid);
-                         
-                         activity.prefs.edit().putString("custom_avatar_path_" + uid, permAvatar.getAbsolutePath()).apply();
                          readyPhoto = permAvatar;
                      }
                  } catch (Exception e) { e.printStackTrace(); }
@@ -279,45 +257,85 @@ public class EditProfileFragment extends Fragment {
                  File uploadBg = readyBg;
                  File uploadPhoto = readyPhoto;
 
-                 // ВОЗВРАЩАЕМСЯ В MAIN THREAD ДЛЯ ОБНОВЛЕНИЯ ИНТЕРФЕЙСА СРАЗУ
-                 activity.runOnUiThread(() -> {
-                     activity.prefs.edit().putString("my_nickname", n).putString("my_about", a).apply();
-                     activity.clearPreviewBackground();
-                     activity.updateGlobalBackground(true);
-                     activity.updateAvatarInUI();
-                     activity.navigator.closeSubScreen();
-
-                     // === ГЛОБАЛЬНЫЙ СИГНАЛ ВСЕМ ФРАГМЕНТАМ: "ПЕРЕРИСУЙТЕ АВАТАР И ПРОФИЛЬ!" ===
-                     LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
-                 });
-
-                 // === 2. ФОНОВАЯ ОТПРАВКА НА СЕРВЕР ===
+                 // === ИСПРАВЛЕНИЕ: ЖДЕМ ОТВЕТА СЕРВЕРА ПЕРЕД СОХРАНЕНИЕМ В ПАМЯТЬ ===
                  if (activity.vpsToken != null) {
                      VpsApi.saveUserProfile(activity.vpsToken, n, a, uploadPhoto, uploadBg, new VpsApi.Callback() {
-                         @Override public void onSuccess(String result) {
+                         @Override 
+                         public void onSuccess(String result) {
                              try {
                                  JSONObject json = new JSONObject(result);
                                  String newPhotoUrl = json.optString("photoUrl", null);
                                  String newBgUrl = json.optString("backgroundUrl", null);
 
-                                 if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null")) {
-                                     activity.prefs.edit()
-                                         .putString("my_photo_base64", newPhotoUrl)
-                                         .putString("synced_photo_url_" + uid, newPhotoUrl)
-                                         .apply();
-                                 }
-                                 if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null")) {
-                                     activity.prefs.edit()
-                                         .putString("my_bg_base64", newBgUrl)
-                                         .putString("synced_bg_url_" + uid, newBgUrl) 
-                                         .apply();
-                                 }
+                                 // ТОЛЬКО ЕСЛИ СЕРВЕР СКАЗАЛ ОК - СОХРАНЯЕМ ЛОКАЛЬНО
+                                 activity.runOnUiThread(() -> {
+                                     SharedPreferences.Editor editor = activity.prefs.edit();
+                                     editor.putString("my_nickname", n);
+                                     editor.putString("my_about", a);
+
+                                     if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null")) {
+                                         editor.putString("my_photo_base64", newPhotoUrl);
+                                         editor.putString("synced_photo_url_" + uid, newPhotoUrl);
+                                         if (uploadPhoto != null) {
+                                             String pPath = new File(activity.getFilesDir(), "avatar_" + uid + "_" + System.currentTimeMillis() + (uploadPhoto.getName().endsWith(".gif") ? ".gif" : ".png")).getAbsolutePath();
+                                             uploadPhoto.renameTo(new File(pPath));
+                                             editor.putString("custom_avatar_path_" + uid, pPath);
+                                         }
+                                     }
+                                     
+                                     if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null")) {
+                                         editor.putString("my_bg_base64", newBgUrl);
+                                         editor.putString("synced_bg_url_" + uid, newBgUrl);
+                                         if (uploadBg != null) {
+                                              String bPath = new File(activity.getFilesDir(), "my_bg_" + uid + "_" + System.currentTimeMillis() + (uploadBg.getName().endsWith(".mp4") ? ".mp4" : ".jpg")).getAbsolutePath();
+                                              uploadBg.renameTo(new File(bPath));
+                                              editor.putString("custom_bg_path_" + uid, bPath);
+                                              editor.putBoolean("custom_bg_is_video_" + uid, uploadBg.getName().endsWith(".mp4"));
+                                         }
+                                     }
+                                     
+                                     editor.apply();
+                                     activity.mMemoryCache.remove("avatar_" + uid);
+
+                                     // Обновляем интерфейс
+                                     activity.clearPreviewBackground();
+                                     activity.updateGlobalBackground(true);
+                                     activity.updateAvatarInUI();
+                                     activity.navigator.closeSubScreen();
+
+                                     LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
+                                 });
 
                                  if (pendingPhotoFile != null && pendingPhotoFile.exists()) pendingPhotoFile.delete();
                                  if (pendingBgFile != null && pendingBgFile.exists()) pendingBgFile.delete();
-                             } catch (Exception e) {}
+                             } catch (Exception e) {
+                                 activity.runOnUiThread(() -> {
+                                     btnSave.setEnabled(true);
+                                     btnSave.setText(R.string.btn_save);
+                                     Toast.makeText(activity, "Ошибка обработки ответа", Toast.LENGTH_SHORT).show();
+                                 });
+                             }
                          }
-                         @Override public void onError(String error) {}
+                         
+                         @Override 
+                         public void onError(String error) {
+                             // СЕРВЕР ОТВЕРГ ИМЯ (ИЛИ СЛУЧИЛАСЬ ДРУГАЯ ОШИБКА)
+                             activity.runOnUiThread(() -> {
+                                 btnSave.setEnabled(true);
+                                 btnSave.setText(R.string.btn_save);
+                                 
+                                 // Извлекаем чистый текст ошибки (если сервер прислал JSON)
+                                 String displayError = error;
+                                 try {
+                                     if (error.contains("{")) {
+                                         JSONObject errObj = new JSONObject(error.substring(error.indexOf("{")));
+                                         if (errObj.has("error")) displayError = errObj.getString("error");
+                                     }
+                                 } catch (Exception ignored) {}
+                                 
+                                 Toast.makeText(activity, displayError, Toast.LENGTH_LONG).show();
+                             });
+                         }
                      });
                  }
              });
@@ -351,8 +369,6 @@ public class EditProfileFragment extends Fragment {
 
                 String mimeType = activity.getContentResolver().getType(uri);
                 boolean isVideoBg = !isPhoto && mimeType != null && mimeType.startsWith("video/");
-                
-                // Исправлено: Теперь мы не запрещаем гифки для аватарок!
                 boolean isGif = mimeType != null && mimeType.contains("gif"); 
                 
                 String prefix = isPhoto ? "temp_avatar_" : "temp_bg_";
