@@ -56,10 +56,20 @@ public class SearchFragment extends Fragment {
 
         resultsList.setLayoutManager(new LinearLayoutManager(activity));
         
-        // === ИСПРАВЛЕНИЕ: Вызываем OtherProfileFragment вместо ProfileFragment ===
+        // Получаем твой UID для проверки
+        GoogleSignInAccount acct = activity != null ? GoogleSignIn.getLastSignedInAccount(activity) : null;
+        final String myUid = acct != null ? acct.getId() : "";
+
+        // === ИСПРАВЛЕНИЕ: ЗАЩИТА ОТ КЛИКА НА СВОЙ ПРОФИЛЬ ===
         adapter = new UserListAdapter(activity, clickedUser -> {
             if (activity != null && activity.navigator != null) {
-                activity.navigator.openSubScreen(OtherProfileFragment.newInstance(clickedUser.uid, activity.getString(R.string.title_search)));
+                if (clickedUser.uid != null && clickedUser.uid.equals(myUid)) {
+                    // Если кликнул на себя - переходим на вкладку своего профиля
+                    activity.navigator.switchScreen(4, myUid);
+                } else {
+                    // Если чужой - открываем OtherProfileFragment
+                    activity.navigator.openSubScreen(OtherProfileFragment.newInstance(clickedUser.uid, activity.getString(R.string.title_search)));
+                }
             }
         });
         
