@@ -9,6 +9,9 @@
     <string name="time">Время</string>
 	<string name="notif_max_count">99+</string>	
 	<string name="toast_compressing_video">Сжатие видео… Пожалуйста, подождите.</string>
+	<string name="err_empty_nickname">Никнейм не может быть пустым</string>
+<string name="err_server_response">Ошибка обработки ответа сервера</string>
+<string name="video_compressing_warning">Подождите, идет сжатие видео...</string>
 <string name="toast_video_ready">Видео успешно подготовлено!</string>
 <string name="err_video_compress">Ошибка при сжатии видео</string>
 <string name="err_wait_compressing">Дождитесь окончания сжатия видео!</string>
