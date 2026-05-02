@@ -89,7 +89,7 @@ public class ProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.resetHeader();
 
-        // Сразу врубаем наш фон. Чужой превью-фон убьется после анимации.
+        // === ИДЕАЛЬНАЯ АНИМАЦИЯ: Мгновенно врубаем свой фон, а чужой (превью) убиваем после выезда (400 мс) ===
         activity.updateGlobalBackground(true);
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (isAdded() && !isHidden()) activity.clearPreviewBackground();
@@ -307,6 +307,7 @@ public class ProfileFragment extends Fragment {
                 if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
                 
+                // Врубаем свой фон мгновенно, чужой убиваем после выезда
                 activity.updateGlobalBackground(true);
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     if (isAdded() && !isHidden()) activity.clearPreviewBackground();
@@ -336,13 +337,13 @@ public class ProfileFragment extends Fragment {
                 if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
                 
+                // === ИДЕАЛЬНАЯ АНИМАЦИЯ ПРИ ВОЗВРАТЕ ===
                 activity.updateGlobalBackground(true);
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     if (isAdded() && !isHidden()) activity.clearPreviewBackground();
                 }, 400);
             } else {
-                // Если мы уходим на другую ВЛАДКУ навигатора (например, в Поиск) — плавно гасим фон.
-                // Если мы открываем подписчиков — фон остается гореть (getCurrentTabIndex == 4)
+                // Если мы уходим В ПОИСК, наш фон должен погаснуть ТОЛЬКО ПОСЛЕ того, как поиск выедет.
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     if (isAdded() && isHidden() && activity.navigator != null && activity.navigator.getCurrentTabIndex() != 4) {
                         activity.updateGlobalBackground(false);
