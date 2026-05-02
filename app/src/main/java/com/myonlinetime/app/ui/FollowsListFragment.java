@@ -51,15 +51,21 @@ public class FollowsListFragment extends Fragment {
 
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         
-        // Передаем заголовок текущего списка в OtherProfileFragment
-        adapter = new UserListAdapter((MainActivity) getActivity(), clickedUser -> {
-            MainActivity activity = (MainActivity) getActivity();
+        // Получаем текущий UID, чтобы понимать, где наш профиль
+        MainActivity activity = (MainActivity) getActivity();
+        GoogleSignInAccount acct = activity != null ? GoogleSignIn.getLastSignedInAccount(activity) : null;
+        final String myUid = acct != null ? acct.getId() : "";
+
+        adapter = new UserListAdapter(activity, clickedUser -> {
             if (activity != null && activity.navigator != null) {
-                String currentTitle = listType.equals("followers") ? 
-                        getString(R.string.followers) : getString(R.string.following);
-                
-                // Переходим на чужой профиль и говорим ему: "Рядом со стрелкой пиши текущий заголовок"
-                activity.navigator.openSubScreen(OtherProfileFragment.newInstance(clickedUser.uid, currentTitle));
+                // === ИСПРАВЛЕНИЕ: Защита от клика по себе ===
+                if (clickedUser.uid != null && clickedUser.uid.equals(myUid)) {
+                    activity.navigator.switchScreen(4, myUid);
+                } else {
+                    String currentTitle = listType.equals("followers") ? 
+                            getString(R.string.followers) : getString(R.string.following);
+                    activity.navigator.openSubScreen(OtherProfileFragment.newInstance(clickedUser.uid, currentTitle));
+                }
             }
         });
         
@@ -75,11 +81,8 @@ public class FollowsListFragment extends Fragment {
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
-            // Определяем текст на основе типа списка
             String title = listType.equals("followers") ? 
                     getString(R.string.followers) : getString(R.string.following);
-            
-            // Ставим стрелочку и ВАШ текст
             activity.headerManager.showBackButton(title, v -> activity.onBackPressed());
         }
     }
