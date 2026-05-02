@@ -8,6 +8,9 @@
     <string name="feed">Feed</string>
     <string name="find">Find</string>
 	<string name="toast_compressing_video">Compressing video… Please wait.</string>
+	<string name="err_empty_nickname">The nickname cannot be empty</string>
+<string name="err_server_response">Server response processing error</string>
+<string name="video_compressing_warning">Wait, the video is being compressed...</string>
 <string name="toast_video_ready">Video successfully prepared!</string>
 <string name="err_video_compress">Error compressing video</string>
 <string name="err_wait_compressing">Please wait for the video to finish compressing!</string>
