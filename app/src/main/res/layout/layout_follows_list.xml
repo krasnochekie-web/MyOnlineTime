@@ -5,11 +5,21 @@
     android:background="@color/bgDynamic"
     android:nestedScrollingEnabled="true">
 
+    <!-- ВОТ ОНА, НАША КРУТИЛОЧКА -->
+    <ProgressBar
+        android:id="@+id/follows_loading_spinner"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_centerInParent="true"
+        android:layout_marginBottom="8dp"
+        android:indeterminateTint="@color/grapefruit" /> <!-- Замени цвет на свой синий, если нужно -->
+
     <TextView
         android:id="@+id/follows_status_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_centerInParent="true"
+        android:layout_below="@id/follows_loading_spinner"
+        android:layout_centerHorizontal="true"
         android:textColor="@color/textGrayDynamic"
         android:textSize="12sp"
         android:visibility="gone" />
