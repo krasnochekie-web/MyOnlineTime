@@ -89,7 +89,7 @@ public class ProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.resetHeader();
 
-        // === ИСПРАВЛЕНИЕ АНИМАЦИИ 1: При старте включаем свой фон, а чужой (превью) убиваем с задержкой ===
+        // Гарантируем, что глобальный фон включен. Чужой фон исчезнет после анимации.
         activity.updateGlobalBackground(true);
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (isAdded() && !isHidden()) activity.clearPreviewBackground();
@@ -304,9 +304,9 @@ public class ProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!isHidden()) {
                 updateUiFromPrefs(activity);
+                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
                 
-                // === ИСПРАВЛЕНИЕ АНИМАЦИИ 2: Задержка перед уничтожением чужого фона при возврате ===
                 activity.updateGlobalBackground(true);
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     if (isAdded() && !isHidden()) activity.clearPreviewBackground();
@@ -333,21 +333,16 @@ public class ProfileFragment extends Fragment {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.headerManager.resetHeader();
                 updateUiFromPrefs(activity);
+                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
                 
-                // === ИСПРАВЛЕНИЕ АНИМАЦИИ 3: Задержка перед уничтожением чужого фона при возврате ===
                 activity.updateGlobalBackground(true);
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     if (isAdded() && !isHidden()) activity.clearPreviewBackground();
                 }, 400);
-            } else {
-                // === ИСПРАВЛЕНИЕ АНИМАЦИИ 4: Ждем окончания анимации перед отключением своего фона ===
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    if (isAdded() && isHidden() && activity.navigator != null && activity.navigator.getCurrentTabIndex() != 4) {
-                        activity.updateGlobalBackground(false);
-                    }
-                }, 400);
             }
+            // МЫ НИЧЕГО НЕ ДЕЛАЕМ ПРИ СВОРАЧИВАНИИ (hidden == true).
+            // Это решает проблему "перезапуска видео".
         }
     }
 
