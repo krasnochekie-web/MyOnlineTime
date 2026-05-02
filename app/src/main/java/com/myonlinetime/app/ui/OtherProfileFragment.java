@@ -36,6 +36,7 @@ public class OtherProfileFragment extends Fragment {
     private String targetUid = "";
     private String backTitle = "";
 
+    // === ЖЕЛЕЗОБЕТОННЫЙ КЭШ ФОНА ===
     private String loadedBgUrl = null;
     private boolean isLoadedBgVideo = false;
 
@@ -71,7 +72,8 @@ public class OtherProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
 
-        // Если открываем поверх нашего профиля, держим наш фон включенным для мягкой анимации
+        // МЫ БОЛЬШЕ НЕ ВЫКЛЮЧАЕМ ТВОЙ ГЛОБАЛЬНЫЙ ФОН МГНОВЕННО!
+        // Пусть он играет под превью-фоном, чтобы при возврате не было перезапуска видео.
         if (activity.navigator != null && activity.navigator.getCurrentTabIndex() == 4) {
             activity.updateGlobalBackground(true);
         }
@@ -131,7 +133,7 @@ public class OtherProfileFragment extends Fragment {
                             activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
                         } else {
                             loadedBgUrl = null;
-                            // Если фона нет, мягко гасим старый превью-фон, чтобы не было "черной стены"
+                            // Если фона нет, мягко гасим старый превью-фон
                             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                                 if (isAdded() && !isHidden()) activity.clearPreviewBackground();
                             }, 400);
@@ -265,7 +267,8 @@ public class OtherProfileFragment extends Fragment {
                 if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
             }, 400);
         }
-        // ВАЖНО: Мы ничего не делаем при hidden == true. Фон остается висеть под верхним экраном!
+        // === ВАЖНО: НИКАКОГО УДАЛЕНИЯ ФОНА ПРИ СВОРАЧИВАНИИ ИЛИ ЗАКРЫТИИ ===
+        // Чужой фон будет висеть под верхним экраном (Search / Profile), пока тот его сам не удалит после анимации!
     }
 
     @Override
@@ -284,6 +287,7 @@ public class OtherProfileFragment extends Fragment {
         }
     }
 
+    // === ПУЛЕНЕПРОБИВАЕМЫЙ ПАРСИНГ ПРИЛОЖЕНИЙ ===
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
         if (container != null) {
             container.setLayoutTransition(null);
