@@ -51,18 +51,50 @@ public class FollowsListFragment extends Fragment {
 
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         
+        // Клик теперь открывает OtherProfileFragment
         adapter = new UserListAdapter((MainActivity) getActivity(), clickedUser -> {
             MainActivity activity = (MainActivity) getActivity();
             if (activity != null && activity.navigator != null) {
-                String title = listType.equals("followers") ? "Подписчики" : "Подписки";
-                activity.navigator.openSubScreen(ProfileFragment.newInstance(clickedUser.uid, title));
+                String title = listType.equals("followers") ? 
+                        getString(R.string.followers) : getString(R.string.following);
+                activity.navigator.openSubScreen(OtherProfileFragment.newInstance(clickedUser.uid, title));
             }
         });
         
         recyclerView.setAdapter(adapter);
+        
+        updateHeader();
         loadData();
 
         return view;
+    }
+
+    private void updateHeader() {
+        MainActivity activity = (MainActivity) getActivity();
+        if (activity != null) {
+            activity.mainHeader.setVisibility(View.VISIBLE);
+            String title = listType.equals("followers") ? 
+                    getString(R.string.followers) : getString(R.string.following);
+            
+            // Тот самый способ управления стрелочкой, который у тебя работал
+            activity.headerManager.showBackButton(getString(R.string.profile), v -> activity.onBackPressed());
+        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (!isHidden()) {
+            updateHeader();
+        }
+    }
+
+    @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        if (!hidden) {
+            updateHeader();
+        }
     }
 
     private void loadData() {
@@ -85,9 +117,7 @@ public class FollowsListFragment extends Fragment {
                     }
                     @Override public void onError(String error) { showError(); }
                 });
-            } else {
-                showError();
-            }
+            } else { showError(); }
         }
     }
 
