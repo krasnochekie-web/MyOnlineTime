@@ -9,6 +9,7 @@ import androidx.fragment.app.FragmentTransaction;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.ui.FeedFragment;
 import com.myonlinetime.app.ui.ProfileFragment;
+import com.myonlinetime.app.ui.OtherProfileFragment; // === ДОБАВЛЕН ИМПОРТ ===
 import com.myonlinetime.app.ui.SearchFragment;
 import com.myonlinetime.app.ui.SettingsFragment; 
 import com.myonlinetime.app.ui.StatsHostFragment; 
@@ -85,12 +86,12 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
         
-        // === ИСПРАВЛЕНИЕ: РАЗНАЯ АНИМАЦИЯ ДЛЯ ПРОФИЛЯ И ОСТАЛЬНЫХ ЭКРАНОВ ===
-        if (fragment instanceof ProfileFragment) {
+        // === ИСПРАВЛЕНИЕ: ПРОВЕРЯЕМ OTHER PROFILE FRAGMENT ===
+        if (fragment instanceof OtherProfileFragment) {
             // Чужой профиль выезжает справа
             ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left, R.anim.slide_in_left, R.anim.slide_out_right);
         } else {
-            // Все остальные экраны выезжают снизу (как было)
+            // Все остальные экраны выезжают снизу
             ft.setCustomAnimations(R.anim.slide_in_up, android.R.anim.fade_out, android.R.anim.fade_in, R.anim.slide_out_down);
         }
         
@@ -113,9 +114,9 @@ public class AppNavigator {
         
         Fragment topFragment = stack.get(stack.size() - 1);
         
-        // === ИСПРАВЛЕНИЕ: РАЗНАЯ АНИМАЦИЯ ЗАКРЫТИЯ ===
-        if (topFragment instanceof ProfileFragment) {
-            // Если закрываем профиль, он уезжает вправо
+        // === ИСПРАВЛЕНИЕ: ПРОВЕРЯЕМ OTHER PROFILE FRAGMENT ===
+        if (topFragment instanceof OtherProfileFragment) {
+            // Если закрываем чужой профиль, он уезжает вправо
             ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
         } else {
             // Остальные плавно уезжают вниз
