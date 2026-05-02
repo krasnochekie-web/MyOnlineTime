@@ -1,5 +1,6 @@
 package com.myonlinetime.app.ui;
 
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -8,9 +9,6 @@ import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.SpannableString;
-import android.text.Spanned;
-import android.text.style.ImageSpan;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,8 +19,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
-import com.google.android.gms.auth.api.signin.GoogleSignIn;
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
@@ -40,8 +36,6 @@ public class OtherProfileFragment extends Fragment {
     private ImageView avatarView;
     private String targetUid = "";
     private String backTitle = "";
-
-    private Runnable fetchProfileDataRunnable;
 
     private static class AppUiData {
         String pkgName;
@@ -69,15 +63,22 @@ public class OtherProfileFragment extends Fragment {
         final MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return view;
 
+        // ЖЕСТКАЯ ЗАЛИВКА ФОНА, ЧТОБЫ НЕ БЫЛО ПРОСВЕЧИВАНИЙ
+        view.setBackgroundColor(ContextCompat.getColor(activity, R.color.bgDynamic));
+
         targetUid = getArguments() != null ? getArguments().getString("TARGET_UID", "") : "";
         backTitle = getArguments() != null ? getArguments().getString("BACK_TITLE", activity.getString(R.string.title_search)) : activity.getString(R.string.title_search);
 
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
-        
-        // Гасим любой глобальный фон и готовимся показать чужой
-        activity.clearPreviewBackground();
-        activity.updateGlobalBackground(false);
+
+        // Аккуратно прячем твой фон после начала анимации, чтобы не моргало
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (isAdded() && getActivity() != null) {
+                activity.clearPreviewBackground();
+                activity.updateGlobalBackground(false);
+            }
+        }, 150);
 
         final TextView nameView = view.findViewById(R.id.profile_name);
         final TextView aboutView = view.findViewById(R.id.profile_about);
@@ -116,7 +117,8 @@ public class OtherProfileFragment extends Fragment {
         followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "followers")));
         followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "following")));
 
-        fetchProfileDataRunnable = () -> {
+        // ЗАГРУЗКА ТОЛЬКО ОДИН РАЗ, БЕЗ ON_RESUME
+        if (activity.vpsToken != null) {
             VpsApi.getUser(activity, activity.vpsToken, targetUid, new VpsApi.UserCallback() {
                 @Override
                 public void onLoaded(User user) {
@@ -177,22 +179,6 @@ public class OtherProfileFragment extends Fragment {
                      });
                  }
             });
-        };
-
-        if (activity.vpsToken != null) {
-            fetchProfileDataRunnable.run();
-        } else {
-            GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
-            if (acct != null) {
-                VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
-                    @Override
-                    public void onSuccess(final String token) {
-                        activity.vpsToken = token;
-                        fetchProfileDataRunnable.run();
-                    }
-                    @Override public void onError(String error) {}
-                });
-            }
         }
 
         return view;
@@ -248,12 +234,8 @@ public class OtherProfileFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        if (getActivity() instanceof MainActivity) {
-            MainActivity activity = (MainActivity) getActivity();
-            if (!isHidden()) {
-                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
-                refreshCounts(activity);
-            }
+        if (getActivity() instanceof MainActivity && !isHidden()) {
+            refreshCounts((MainActivity) getActivity());
         }
     }
 
@@ -265,7 +247,6 @@ public class OtherProfileFragment extends Fragment {
             if (!hidden) {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
-                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
             } else {
                 activity.clearPreviewBackground();
@@ -282,6 +263,7 @@ public class OtherProfileFragment extends Fragment {
         }
     }
 
+    // БЕЗОПАСНЫЙ ПАРСИНГ СПИСКА ПРИЛОЖЕНИЙ
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
         if (container != null) {
             container.setLayoutTransition(null);
@@ -307,8 +289,11 @@ public class OtherProfileFragment extends Fragment {
             SharedPreferences dbNames = activity.getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
 
             int limit = 0;
+            
+            // Защита от ClassCastException, если сервер отдал Double
+            Map<String, ?> safeTopApps = (Map<String, ?>) topApps;
 
-            for (Map.Entry<String, Long> entry : topApps.entrySet()) {
+            for (Map.Entry<String, ?> entry : safeTopApps.entrySet()) {
                 String pkgName = entry.getKey().replaceAll("\\s+", "");
 
                 if (hiddenAppsList != null && hiddenAppsList.contains(pkgName)) continue;
@@ -316,7 +301,14 @@ public class OtherProfileFragment extends Fragment {
 
                 AppUiData data = new AppUiData();
                 data.pkgName = pkgName;
-                data.time = ((Number) entry.getValue()).longValue(); 
+                
+                Object val = entry.getValue();
+                if (val instanceof Number) {
+                    data.time = ((Number) val).longValue();
+                } else if (val instanceof String) {
+                    try { data.time = Long.parseLong((String) val); } catch (Exception ignored) {}
+                }
+                
                 if (appDescriptions != null) data.description = appDescriptions.get(pkgName);
                 data.isDeleted = false;
 
