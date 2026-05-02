@@ -100,13 +100,11 @@ public class VpsApi {
         if (nickname != null) builder.addFormDataPart("nickname", nickname);
         if (about != null) builder.addFormDataPart("about", about);
 
-        // Прикрепляем файл аватарки, если он есть
         if (photoFile != null && photoFile.exists()) {
             builder.addFormDataPart("photo", photoFile.getName(),
                     RequestBody.create(MediaType.parse("application/octet-stream"), photoFile));
         }
 
-        // Прикрепляем файл фона, если он есть
         if (bgFile != null && bgFile.exists()) {
             builder.addFormDataPart("background", bgFile.getName(),
                     RequestBody.create(MediaType.parse("application/octet-stream"), bgFile));
@@ -116,6 +114,16 @@ public class VpsApi {
                 .post(builder.build())
                 .build();
                 
+        enqueueCall(request, callback);
+    }
+
+    // === НОВЫЙ МЕТОД ДЛЯ ПРЯМОГО УДАЛЕНИЯ ФОНА С СЕРВЕРА ===
+    public static void deleteBackground(String ourServerToken, final Callback callback) {
+        // Отправляем пустой JSON, чтобы выполнить POST запрос
+        RequestBody body = RequestBody.create(JSON, "{}");
+        Request request = createAuthedRequest("delete_background", ourServerToken)
+                .post(body)
+                .build();
         enqueueCall(request, callback);
     }
 
