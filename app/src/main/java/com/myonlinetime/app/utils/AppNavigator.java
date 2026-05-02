@@ -85,10 +85,15 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
         
-        // 1. ВОЗВРАЩАЕМ ПЛАВНУЮ АНИМАЦИЮ (Элементы больше не будут "отваливаться" резко)
-        ft.setCustomAnimations(R.anim.slide_in_up, android.R.anim.fade_out, android.R.anim.fade_in, R.anim.slide_out_down);
+        // === ИСПРАВЛЕНИЕ: РАЗНАЯ АНИМАЦИЯ ДЛЯ ПРОФИЛЯ И ОСТАЛЬНЫХ ЭКРАНОВ ===
+        if (fragment instanceof ProfileFragment) {
+            // Чужой профиль выезжает справа
+            ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left, R.anim.slide_in_left, R.anim.slide_out_right);
+        } else {
+            // Все остальные экраны выезжают снизу (как было)
+            ft.setCustomAnimations(R.anim.slide_in_up, android.R.anim.fade_out, android.R.anim.fade_in, R.anim.slide_out_down);
+        }
         
-        // 2. ВОЗВРАЩАЕМ ПРЯТКИ (Никакого наслоения экранов и UI каши!)
         hideAll(ft);
 
         ft.add(containerId, fragment, "SUB_" + currentTabIndex + "_" + stack.size());
@@ -106,16 +111,23 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
         
-        // ВОЗВРАЩАЕМ ПЛАВНОЕ ПОЯВЛЕНИЕ ПРЕДЫДУЩЕГО ЭКРАНА
-        ft.setCustomAnimations(android.R.anim.fade_in, R.anim.slide_out_down);
+        Fragment topFragment = stack.get(stack.size() - 1);
         
-        Fragment topFragment = stack.remove(stack.size() - 1);
+        // === ИСПРАВЛЕНИЕ: РАЗНАЯ АНИМАЦИЯ ЗАКРЫТИЯ ===
+        if (topFragment instanceof ProfileFragment) {
+            // Если закрываем профиль, он уезжает вправо
+            ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
+        } else {
+            // Остальные плавно уезжают вниз
+            ft.setCustomAnimations(android.R.anim.fade_in, R.anim.slide_out_down);
+        }
+        
+        stack.remove(stack.size() - 1);
         ft.remove(topFragment); 
         
         if (stack.isEmpty()) {
             showMainTab(currentTabIndex, ft);
         } else {
-            // ЭТОТ МЕТОД ft.show() ТЕПЕРЬ САМ АВТОМАТИЧЕСКИ ПОЧИНИТ ВАШУ ШАПКУ
             ft.show(stack.get(stack.size() - 1));
         }
         
@@ -213,20 +225,14 @@ public class AppNavigator {
         return stack != null && !stack.isEmpty();
     }
 
-    // =========================================================================
-    // ТИХАЯ ПРЕДЗАГРУЗКА ПРОФИЛЯ
-    // =========================================================================
     public void preloadProfile(String uid) {
         if (profileFragment == null) {
             profileFragment = ProfileFragment.newInstance(uid);
             
-            // 1. Добавляем фрагмент. Он начнет грузить XML.
             fm.beginTransaction()
               .add(containerId, profileFragment, "PROFILE")
               .commitAllowingStateLoss();
               
-            // 2. Ждем ровно 1 цикл отрисовки, чтобы Android гарантированно 
-            // прожевал layout_profile.xml, и прячем его обратно!
             new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
                 try {
                     fm.beginTransaction().hide(profileFragment).commitAllowingStateLoss();
@@ -235,9 +241,6 @@ public class AppNavigator {
         }
     }
 
-    // =========================================================================
-    // ТИХАЯ ПРЕДЗАГРУЗКА ЭКРАНА ВРЕМЕНИ И ГРАФИКОВ
-    // =========================================================================
     public void preloadStats() {
         if (statsFragment == null) {
             statsFragment = new StatsHostFragment();
@@ -253,4 +256,4 @@ public class AppNavigator {
             });
         }
     }
-                }
+}
