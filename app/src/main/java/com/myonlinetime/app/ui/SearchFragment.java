@@ -45,12 +45,9 @@ public class SearchFragment extends Fragment {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.resetHeader();
             
-            // Ждем окончания анимации перед отключением предыдущих фонов
+            // Просто ставим фон на паузу/прячем
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                if (isAdded() && !isHidden()) {
-                    activity.clearPreviewBackground();
-                    activity.updateGlobalBackground(false);
-                }
+                if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
             }, 400);
         }
 
@@ -108,12 +105,8 @@ public class SearchFragment extends Fragment {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.resetHeader();
             
-            // Возвращаемся в Поиск: плавно гасим чужой фон после окончания выезда
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                if (isAdded() && !isHidden()) {
-                    activity.clearPreviewBackground();
-                    activity.updateGlobalBackground(false);
-                }
+                if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
             }, 400);
         }
     }
@@ -163,10 +156,7 @@ public class SearchFragment extends Fragment {
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                if (isAdded() && !isHidden()) {
-                    activity.clearPreviewBackground();
-                    activity.updateGlobalBackground(false);
-                }
+                if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
             }, 400);
         }
     }
