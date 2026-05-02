@@ -36,7 +36,6 @@ public class OtherProfileFragment extends Fragment {
     private String targetUid = "";
     private String backTitle = "";
 
-    // === ЖЕЛЕЗОБЕТОННЫЙ КЭШ ФОНА ===
     private String loadedBgUrl = null;
     private boolean isLoadedBgVideo = false;
 
@@ -72,9 +71,10 @@ public class OtherProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
 
-        // МЫ БОЛЬШЕ НЕ ВЫКЛЮЧАЕМ ТВОЙ ГЛОБАЛЬНЫЙ ФОН!
-        // Пусть он играет под превью-фоном, чтобы при возврате не было перезапуска видео.
-        activity.updateGlobalBackground(true);
+        // Если открываем поверх нашего профиля, держим наш фон включенным для мягкой анимации
+        if (activity.navigator != null && activity.navigator.getCurrentTabIndex() == 4) {
+            activity.updateGlobalBackground(true);
+        }
 
         final TextView nameView = view.findViewById(R.id.profile_name);
         final TextView aboutView = view.findViewById(R.id.profile_about);
@@ -123,9 +123,7 @@ public class OtherProfileFragment extends Fragment {
                         aboutView.setText(user.about != null ? user.about : "");
                         StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
-                        if (user.photo != null && user.photo.length() > 10) {
-                            handleMediaLoading(activity, user.photo);
-                        }
+                        if (user.photo != null && user.photo.length() > 10) handleMediaLoading(activity, user.photo);
 
                         if (user.background != null && user.background.length() > 10) {
                             loadedBgUrl = user.background;
@@ -133,7 +131,7 @@ public class OtherProfileFragment extends Fragment {
                             activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
                         } else {
                             loadedBgUrl = null;
-                            // Если фона нет, очищаем превью с задержкой, чтобы твой фон остался
+                            // Если фона нет, мягко гасим старый превью-фон, чтобы не было "черной стены"
                             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                                 if (isAdded() && !isHidden()) activity.clearPreviewBackground();
                             }, 400);
@@ -179,6 +177,11 @@ public class OtherProfileFragment extends Fragment {
                  }
             });
         }
+
+        // Строго отключаем глобальный фон после выезда, чтобы он не просвечивал вечно
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
+        }, 400);
 
         return view;
     }
@@ -236,15 +239,12 @@ public class OtherProfileFragment extends Fragment {
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null && !isHidden()) {
             refreshCounts(activity);
-            activity.updateGlobalBackground(true);
             
-            if (loadedBgUrl != null) {
-                activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
-            } else {
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    if (isAdded() && !isHidden()) activity.clearPreviewBackground();
-                }, 400);
-            }
+            if (loadedBgUrl != null) activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
+            
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
+            }, 400);
         }
     }
 
@@ -253,21 +253,19 @@ public class OtherProfileFragment extends Fragment {
         super.onHiddenChanged(hidden);
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
+        
         if (!hidden) {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
             refreshCounts(activity);
             
-            activity.updateGlobalBackground(true);
-            if (loadedBgUrl != null) {
-                activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
-            } else {
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    if (isAdded() && !isHidden()) activity.clearPreviewBackground();
-                }, 400);
-            }
+            if (loadedBgUrl != null) activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
+            
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
+            }, 400);
         }
-        // НИКАКОГО УДАЛЕНИЯ ФОНА ПРИ СВОРАЧИВАНИИ!
+        // ВАЖНО: Мы ничего не делаем при hidden == true. Фон остается висеть под верхним экраном!
     }
 
     @Override
@@ -275,12 +273,17 @@ public class OtherProfileFragment extends Fragment {
         super.onDestroyView();
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
-            // При полном уничтожении чистим чужой фон
-            activity.clearPreviewBackground();
+            // Если возвращаемся на свой профиль, врубаем глобальный фон мгновенно для анимации
+            if (activity.navigator != null && activity.navigator.getCurrentTabIndex() == 4) {
+                activity.updateGlobalBackground(true);
+            }
+            // А чужой фон гасим с задержкой
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                activity.clearPreviewBackground();
+            }, 400);
         }
     }
 
-    // === ПУЛЕНЕПРОБИВАЕМЫЙ ПАРСИНГ ПРИЛОЖЕНИЙ ===
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
         if (container != null) {
             container.setLayoutTransition(null);
@@ -289,7 +292,17 @@ public class OtherProfileFragment extends Fragment {
         }
         if (activity == null) return;
 
+        // Если приложений нет — выводим сообщение. Так мы поймем, что проблема на сервере.
         if (topApps == null || topApps.isEmpty()) {
+            new Handler(Looper.getMainLooper()).post(() -> {
+                if (!isAdded() || container == null) return;
+                TextView emptyText = new TextView(activity);
+                emptyText.setText("Нет данных об активности");
+                emptyText.setTextColor(activity.getResources().getColor(R.color.textGrayDynamic));
+                emptyText.setPadding(0, 30, 0, 30);
+                container.addView(emptyText);
+            });
+            
             long minutes = serverTotalTime / 1000 / 60;
             long hours = minutes / 60;
             long mins = minutes % 60;
@@ -308,10 +321,11 @@ public class OtherProfileFragment extends Fragment {
                 SharedPreferences dbNames = activity.getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
 
                 int limit = 0;
-                
-                for (Object keyObj : topApps.keySet()) {
-                    if (keyObj == null) continue;
-                    String pkgName = String.valueOf(keyObj).replaceAll("\\s+", "");
+                Map<String, ?> safeTopApps = (Map<String, ?>) topApps;
+
+                for (Map.Entry<String, ?> entry : safeTopApps.entrySet()) {
+                    if (entry.getKey() == null) continue;
+                    String pkgName = entry.getKey().replaceAll("\\s+", "");
 
                     if (hiddenAppsList != null && hiddenAppsList.contains(pkgName)) continue;
                     if (limit >= 10) break;
@@ -319,15 +333,12 @@ public class OtherProfileFragment extends Fragment {
                     AppUiData data = new AppUiData();
                     data.pkgName = pkgName;
                     
-                    // БЕЗОПАСНОЕ ИЗВЛЕЧЕНИЕ ВРЕМЕНИ
                     long appTime = 0;
-                    Object val = topApps.get(keyObj);
+                    Object val = entry.getValue();
                     if (val instanceof Number) {
                         appTime = ((Number) val).longValue();
                     } else if (val != null) {
-                        try {
-                            appTime = (long) Double.parseDouble(String.valueOf(val));
-                        } catch (Exception e) {}
+                        try { appTime = (long) Double.parseDouble(String.valueOf(val)); } catch (Exception e) {}
                     }
                     data.time = appTime;
                     
@@ -350,7 +361,11 @@ public class OtherProfileFragment extends Fragment {
                     String cachedName = dbNames.getString(pkgName, null);
                     if (cachedName != null) data.appName = cachedName;
                     else if (appInfo != null) data.appName = pm.getApplicationLabel(appInfo).toString();
-                    else data.appName = formatDeletedAppName(pkgName);
+                    else {
+                        String[] parts = pkgName.split("\\.");
+                        String name = parts[parts.length - 1]; 
+                        data.appName = name.substring(0, 1).toUpperCase() + name.substring(1); 
+                    }
 
                     if (appInfo != null) {
                         try { data.icon = pm.getApplicationIcon(appInfo); } catch (Exception ignored) {}
@@ -360,11 +375,8 @@ public class OtherProfileFragment extends Fragment {
                     totalVisibleTime[0] += data.time;
                     limit++;
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            } catch (Exception e) { e.printStackTrace(); }
 
-            // Рендер на UI-потоке
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
 
