@@ -89,7 +89,7 @@ public class ProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.resetHeader();
 
-        // Гарантируем, что глобальный фон включен. Чужой фон исчезнет после анимации.
+        // Сразу врубаем наш фон. Чужой превью-фон убьется после анимации.
         activity.updateGlobalBackground(true);
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (isAdded() && !isHidden()) activity.clearPreviewBackground();
@@ -340,9 +340,15 @@ public class ProfileFragment extends Fragment {
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     if (isAdded() && !isHidden()) activity.clearPreviewBackground();
                 }, 400);
+            } else {
+                // Если мы уходим на другую ВЛАДКУ навигатора (например, в Поиск) — плавно гасим фон.
+                // Если мы открываем подписчиков — фон остается гореть (getCurrentTabIndex == 4)
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (isAdded() && isHidden() && activity.navigator != null && activity.navigator.getCurrentTabIndex() != 4) {
+                        activity.updateGlobalBackground(false);
+                    }
+                }, 400);
             }
-            // МЫ НИЧЕГО НЕ ДЕЛАЕМ ПРИ СВОРАЧИВАНИИ (hidden == true).
-            // Это решает проблему "перезапуска видео".
         }
     }
 
