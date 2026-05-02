@@ -51,13 +51,15 @@ public class FollowsListFragment extends Fragment {
 
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         
-        // Клик теперь открывает OtherProfileFragment
+        // Передаем заголовок текущего списка в OtherProfileFragment
         adapter = new UserListAdapter((MainActivity) getActivity(), clickedUser -> {
             MainActivity activity = (MainActivity) getActivity();
             if (activity != null && activity.navigator != null) {
-                String title = listType.equals("followers") ? 
+                String currentTitle = listType.equals("followers") ? 
                         getString(R.string.followers) : getString(R.string.following);
-                activity.navigator.openSubScreen(OtherProfileFragment.newInstance(clickedUser.uid, title));
+                
+                // Переходим на чужой профиль и говорим ему: "Рядом со стрелкой пиши текущий заголовок"
+                activity.navigator.openSubScreen(OtherProfileFragment.newInstance(clickedUser.uid, currentTitle));
             }
         });
         
@@ -73,34 +75,30 @@ public class FollowsListFragment extends Fragment {
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
+            // Определяем текст на основе типа списка
             String title = listType.equals("followers") ? 
                     getString(R.string.followers) : getString(R.string.following);
             
-            // Тот самый способ управления стрелочкой, который у тебя работал
-            activity.headerManager.showBackButton(getString(R.string.profile), v -> activity.onBackPressed());
+            // Ставим стрелочку и ВАШ текст
+            activity.headerManager.showBackButton(title, v -> activity.onBackPressed());
         }
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        if (!isHidden()) {
-            updateHeader();
-        }
+        if (!isHidden()) updateHeader();
     }
 
     @Override
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
-        if (!hidden) {
-            updateHeader();
-        }
+        if (!hidden) updateHeader();
     }
 
     private void loadData() {
         final MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
-
         statusText.setVisibility(View.GONE);
         if (loadingSpinner != null) loadingSpinner.setVisibility(View.VISIBLE);
 
@@ -110,11 +108,7 @@ public class FollowsListFragment extends Fragment {
             GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
             if (acct != null) {
                 VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
-                    @Override
-                    public void onSuccess(String token) {
-                        activity.vpsToken = token;
-                        fetchList(activity, token);
-                    }
+                    @Override public void onSuccess(String token) { activity.vpsToken = token; fetchList(activity, token); }
                     @Override public void onError(String error) { showError(); }
                 });
             } else { showError(); }
@@ -126,7 +120,6 @@ public class FollowsListFragment extends Fragment {
             @Override public void onFound(List<User> users) {
                 if (!isAdded()) return;
                 if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-                
                 if (users == null || users.isEmpty()) {
                     statusText.setVisibility(View.VISIBLE);
                     statusText.setText(getString(R.string.empty_list));
