@@ -42,4 +42,14 @@
             android:scrollbars="none"/>
 
     </LinearLayout>
+
+    <!-- ВОТ ОНА, НАША КРУТИЛОЧКА -->
+    <ProgressBar
+        android:id="@+id/search_loading_spinner"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="center"
+        android:indeterminateTint="@color/grapefruit"
+        android:visibility="gone" />
+
 </FrameLayout>
