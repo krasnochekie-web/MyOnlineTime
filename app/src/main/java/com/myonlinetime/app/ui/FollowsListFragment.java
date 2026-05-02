@@ -4,9 +4,9 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -24,9 +24,10 @@ import java.util.List;
 public class FollowsListFragment extends Fragment {
 
     private String targetUid;
-    private String listType; // "followers" или "following"
+    private String listType; 
     private UserListAdapter adapter;
     private TextView statusText;
+    private ProgressBar loadingSpinner;
 
     public static FollowsListFragment newInstance(String uid, String type) {
         FollowsListFragment f = new FollowsListFragment();
@@ -46,19 +47,22 @@ public class FollowsListFragment extends Fragment {
 
         RecyclerView recyclerView = view.findViewById(R.id.follows_results_list);
         statusText = view.findViewById(R.id.follows_status_text);
+        
+        // Убедись, что в layout_follows_list.xml добавлен ProgressBar с ID follows_loading_spinner
+        loadingSpinner = view.findViewById(R.id.follows_loading_spinner); 
 
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         
-        // === ИСПРАВЛЕНИЕ: Добавлен слушатель клика для открытия профиля ===
         adapter = new UserListAdapter((MainActivity) getActivity(), clickedUser -> {
             MainActivity activity = (MainActivity) getActivity();
             if (activity != null && activity.navigator != null) {
-                activity.navigator.openSubScreen(ProfileFragment.newInstance(clickedUser.uid));
+                // Передаем правильный заголовок!
+                String title = listType.equals("followers") ? "Подписчики" : "Подписки";
+                activity.navigator.openSubScreen(ProfileFragment.newInstance(clickedUser.uid, title));
             }
         });
         
         recyclerView.setAdapter(adapter);
-
         loadData();
 
         return view;
@@ -68,8 +72,8 @@ public class FollowsListFragment extends Fragment {
         final MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
 
-        statusText.setVisibility(View.VISIBLE);
-        statusText.setText(getString(R.string.loading));
+        statusText.setVisibility(View.GONE);
+        if (loadingSpinner != null) loadingSpinner.setVisibility(View.VISIBLE);
 
         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
         if (acct != null) {
@@ -79,6 +83,8 @@ public class FollowsListFragment extends Fragment {
                     VpsApi.getList(token, targetUid, listType, new VpsApi.SearchCallback() {
                         @Override public void onFound(List<User> users) {
                             if (!isAdded()) return;
+                            if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+                            
                             if (users == null || users.isEmpty()) {
                                 statusText.setVisibility(View.VISIBLE);
                                 statusText.setText(getString(R.string.empty_list));
@@ -91,12 +97,11 @@ public class FollowsListFragment extends Fragment {
                 }
                 @Override public void onError(String error) {
                     if (!isAdded()) return;
+                    if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
                     statusText.setVisibility(View.VISIBLE);
                     statusText.setText(getString(R.string.err_loading));
                 }
             });
         }
     }
-
-    // МЕТОД onResume И hideBgRunnable УДАЛЕНЫ ПОЛНОСТЬЮ — ФОНОМ УПРАВЛЯЕТ FollowsFragment!
 }
