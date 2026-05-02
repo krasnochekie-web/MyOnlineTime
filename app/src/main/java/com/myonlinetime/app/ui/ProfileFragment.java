@@ -32,6 +32,7 @@ import com.google.gson.reflect.TypeToken;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
+import com.myonlinetime.app.models.User;
 import com.myonlinetime.app.utils.StatsHelper;
 import com.myonlinetime.app.utils.Utils;
 
@@ -53,6 +54,7 @@ public class ProfileFragment extends Fragment {
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
+    private Runnable fetchProfileDataRunnable; // ВЕРНУЛ ЗАГРУЗКУ С СЕРВЕРА
 
     private final android.content.BroadcastReceiver profileUpdateReceiver = new android.content.BroadcastReceiver() {
         @Override
@@ -134,11 +136,70 @@ public class ProfileFragment extends Fragment {
             ));
         });
 
+        // ВОССТАНОВИЛИ СИНХРОНИЗАЦИЮ ПРОФИЛЯ
+        fetchProfileDataRunnable = () -> {
+            VpsApi.getUser(activity, activity.vpsToken, myUid, new VpsApi.UserCallback() {
+                @Override
+                public void onLoaded(User user) {
+                    if (!isAdded()) return;
+                    if (user != null) {
+                        if (user.nickname != null) activity.prefs.edit().putString("my_nickname", user.nickname).apply();
+                        if (user.about != null) activity.prefs.edit().putString("my_about", user.about).apply();
+
+                        if (user.photo != null && user.photo.length() > 10) {
+                            activity.prefs.edit().putString("my_photo_base64", user.photo).apply();
+                            activity.updateAvatarInUI();
+                        }
+
+                        if (user.background != null && user.background.length() > 10) {
+                            activity.prefs.edit().putString("my_bg_base64", user.background).apply();
+                            activity.syncMyBackground(user.background);
+                        }
+
+                        if (user.createdAt != null) {
+                            try {
+                                java.text.SimpleDateFormat serverFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
+                                serverFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                                java.text.SimpleDateFormat appFormat = new java.text.SimpleDateFormat("dd MMMM yyyy", new java.util.Locale("ru"));
+                                java.util.Date date = serverFormat.parse(user.createdAt);
+                                activity.prefs.edit().putString("my_created_at", appFormat.format(date)).apply();
+                            } catch (Exception e) {}
+                        }
+
+                        boolean cacheChanged = false;
+                        if (user.hiddenApps != null) {
+                            Set<String> newHidden = new HashSet<>(user.hiddenApps);
+                            if (!localHiddenApps.equals(newHidden)) {
+                                localHiddenApps.clear();
+                                localHiddenApps.addAll(newHidden);
+                                prefs.edit().putStringSet("hidden_apps", localHiddenApps).apply();
+                                cacheChanged = true;
+                            }
+                        }
+                        if (user.appDescriptions != null) {
+                            if (!localDescriptions.equals(user.appDescriptions)) {
+                                localDescriptions.clear();
+                                localDescriptions.putAll(user.appDescriptions);
+                                prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
+                                cacheChanged = true;
+                            }
+                        }
+
+                        updateUiFromPrefs(activity);
+                        if (cacheChanged) requestLoadMyStats();
+                    }
+                }
+                @Override public void onError(String e) {}
+            });
+        };
+
         loadLocalCacheAsync(() -> {
             if (isAdded()) requestLoadMyStats();
         });
 
         updateUiFromPrefs(activity);
+        
+        if (activity.vpsToken != null) fetchProfileDataRunnable.run();
         refreshCounts(activity);
 
         return view;
@@ -238,6 +299,7 @@ public class ProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!isHidden()) {
                 updateUiFromPrefs(activity);
+                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
                 activity.updateGlobalBackground(true);
             }
@@ -262,6 +324,7 @@ public class ProfileFragment extends Fragment {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.headerManager.resetHeader();
                 updateUiFromPrefs(activity);
+                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
                 activity.updateGlobalBackground(true);
             } else {
