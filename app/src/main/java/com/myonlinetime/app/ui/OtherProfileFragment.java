@@ -27,6 +27,8 @@ import com.myonlinetime.app.utils.Utils;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -72,8 +74,7 @@ public class OtherProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
 
-        // МЫ БОЛЬШЕ НЕ ВЫКЛЮЧАЕМ ТВОЙ ГЛОБАЛЬНЫЙ ФОН МГНОВЕННО!
-        // Пусть он играет под превью-фоном, чтобы при возврате не было перезапуска видео.
+        // Если открываем поверх нашего профиля, держим наш фон включенным для мягкой анимации
         if (activity.navigator != null && activity.navigator.getCurrentTabIndex() == 4) {
             activity.updateGlobalBackground(true);
         }
@@ -133,13 +134,13 @@ public class OtherProfileFragment extends Fragment {
                             activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
                         } else {
                             loadedBgUrl = null;
-                            // Если фона нет, мягко гасим старый превью-фон
+                            // Если фона нет, мягко гасим старый превью-фон, чтобы не было "черной стены"
                             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                                 if (isAdded() && !isHidden()) activity.clearPreviewBackground();
                             }, 400);
                         }
 
-                        renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
+                        renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse, tabTopApps);
                     } else {
                         nameView.setText(activity.getString(R.string.new_user));
                     }
@@ -287,25 +288,157 @@ public class OtherProfileFragment extends Fragment {
         }
     }
 
-    // === ПУЛЕНЕПРОБИВАЕМЫЙ ПАРСИНГ ПРИЛОЖЕНИЙ ===
-    private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
+    // === ПУЛЕНЕПРОБИВАЕМЫЙ ПАРСИНГ ПРИЛОЖЕНИЙ С СОРТИРОВКОЙ И СКРЫТИЕМ ПУСТЫХ ===
+    private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse, TextView tabTopApps) {
         if (container != null) {
             container.setLayoutTransition(null);
             container.removeAllViews();
-            container.setVisibility(View.VISIBLE); 
         }
         if (activity == null) return;
 
-        // Если приложений нет — выводим сообщение. Так мы поймем, что проблема на сервере.
-        if (topApps == null || topApps.isEmpty()) {
-            new Handler(Looper.getMainLooper()).post(() -> {
-                if (!isAdded() || container == null) return;
-                TextView emptyText = new TextView(activity);
-                emptyText.setText("Нет данных об активности");
-                emptyText.setTextColor(activity.getResources().getColor(R.color.textGrayDynamic));
-                emptyText.setPadding(0, 30, 0, 30);
-                container.addView(emptyText);
+        final long[] totalVisibleTime = {0};
+        final List<AppUiData> preloadedData = new ArrayList<>();
+
+        if (topApps != null && !topApps.isEmpty()) {
+            Utils.backgroundExecutor.execute(() -> {
+                try {
+                    PackageManager pm = activity.getPackageManager();
+                    SharedPreferences dbNames = activity.getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
+
+                    Map<String, ?> safeTopApps = (Map<String, ?>) topApps;
+
+                    for (Map.Entry<String, ?> entry : safeTopApps.entrySet()) {
+                        if (entry.getKey() == null) continue;
+                        String pkgName = entry.getKey().replaceAll("\\s+", "");
+
+                        if (hiddenAppsList != null && hiddenAppsList.contains(pkgName)) continue;
+
+                        AppUiData data = new AppUiData();
+                        data.pkgName = pkgName;
+                        
+                        long appTime = 0;
+                        Object val = entry.getValue();
+                        if (val instanceof Number) {
+                            appTime = ((Number) val).longValue();
+                        } else if (val != null) {
+                            try { appTime = (long) Double.parseDouble(String.valueOf(val)); } catch (Exception e) {}
+                        }
+                        data.time = appTime;
+                        
+                        if (appDescriptions != null) data.description = appDescriptions.get(pkgName);
+                        data.isDeleted = false;
+
+                        ApplicationInfo appInfo = null;
+                        try {
+                            appInfo = pm.getApplicationInfo(pkgName, 0);
+                        } catch (PackageManager.NameNotFoundException e) {
+                            try {
+                                int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
+                                appInfo = pm.getApplicationInfo(pkgName, flag);
+                                boolean isInstalled = (appInfo.flags & ApplicationInfo.FLAG_INSTALLED) != 0;
+                                boolean isSystemApp = (appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+                                if (!isInstalled && !isSystemApp) data.isDeleted = true; 
+                            } catch (PackageManager.NameNotFoundException ignored) { data.isDeleted = true; }
+                        }
+
+                        String cachedName = dbNames.getString(pkgName, null);
+                        if (cachedName != null) data.appName = cachedName;
+                        else if (appInfo != null) data.appName = pm.getApplicationLabel(appInfo).toString();
+                        else {
+                            String[] parts = pkgName.split("\\.");
+                            String name = parts[parts.length - 1]; 
+                            data.appName = name.substring(0, 1).toUpperCase() + name.substring(1); 
+                        }
+
+                        if (appInfo != null) {
+                            try { data.icon = pm.getApplicationIcon(appInfo); } catch (Exception ignored) {}
+                        }
+
+                        preloadedData.add(data);
+                        totalVisibleTime[0] += data.time;
+                    }
+                    
+                    // === СОРТИРОВКА ОТ БОЛЬШЕГО К МЕНЬШЕМУ ===
+                    Collections.sort(preloadedData, new Comparator<AppUiData>() {
+                        @Override
+                        public int compare(AppUiData o1, AppUiData o2) {
+                            return Long.compare(o2.time, o1.time);
+                        }
+                    });
+                    
+                    // Оставляем только топ-10
+                    if (preloadedData.size() > 10) {
+                        preloadedData.subList(10, preloadedData.size()).clear();
+                    }
+                    
+                } catch (Exception e) { e.printStackTrace(); }
+
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    if (!isAdded()) return;
+
+                    // === ТОТАЛЬНОЕ СКРЫТИЕ, ЕСЛИ СПИСОК ПУСТ ===
+                    if (preloadedData.isEmpty()) {
+                        if (container != null) container.setVisibility(View.GONE);
+                        if (tabTopApps != null) tabTopApps.setVisibility(View.GONE);
+                    } else {
+                        if (container != null) container.setVisibility(View.VISIBLE);
+                        if (tabTopApps != null) tabTopApps.setVisibility(View.VISIBLE);
+                        
+                        for (AppUiData data : preloadedData) {
+                            View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, container, false);
+                            
+                            ImageView iconView = view.findViewById(R.id.app_icon);
+                            TextView nameView = view.findViewById(R.id.app_name);
+                            TextView timeView = view.findViewById(R.id.app_time);
+                            TextView descView = view.findViewById(R.id.app_custom_description);
+                            ImageView lockView = view.findViewById(R.id.app_lock_icon);
+                            ImageView optionsBtn = view.findViewById(R.id.btn_app_options);
+                            ImageView iconDeleted = view.findViewById(R.id.icon_deleted);
+
+                            if (optionsBtn != null) optionsBtn.setVisibility(View.GONE);
+                            if (lockView != null) lockView.setVisibility(View.GONE);
+
+                            if (data.description != null && !data.description.isEmpty() && descView != null) {
+                                descView.setText(data.description);
+                                descView.setVisibility(View.VISIBLE);
+                            }
+
+                            nameView.setText(data.appName);
+                            if (data.icon != null) iconView.setImageDrawable(data.icon);
+                            else iconView.setImageResource(android.R.drawable.sym_def_app_icon);
+                            
+                            timeView.setText(Utils.formatTime(activity, data.time));
+                            
+                            if (iconDeleted != null) {
+                                if (data.isDeleted) {
+                                    iconDeleted.setVisibility(View.VISIBLE);
+                                    iconDeleted.setOnClickListener(v -> Toast.makeText(activity, R.string.toast_app_deleted, Toast.LENGTH_SHORT).show());
+                                } else {
+                                    iconDeleted.setVisibility(View.GONE);
+                                    iconDeleted.setOnClickListener(null);
+                                }
+                            }
+                            if (container != null) container.addView(view);
+                        }
+                    }
+
+                    long timeToShow = Math.max(serverTotalTime, totalVisibleTime[0]);
+                    long minutes = timeToShow / 1000 / 60;
+                    long hours = minutes / 60;
+                    long mins = minutes % 60;
+
+                    if (weekTimeText != null) {
+                        weekTimeText.setText(hours > 0 ? activity.getString(R.string.format_hours_mins, hours, mins) : activity.getString(R.string.format_mins, mins));
+                        weekTimeText.setOnClickListener(null); 
+                    }
+
+                    StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
+                });
             });
+        } else {
+            // Если topApps изначально пустой
+            if (container != null) container.setVisibility(View.GONE);
+            if (tabTopApps != null) tabTopApps.setVisibility(View.GONE);
             
             long minutes = serverTotalTime / 1000 / 60;
             long hours = minutes / 60;
@@ -313,130 +446,7 @@ public class OtherProfileFragment extends Fragment {
             if (weekTimeText != null) {
                 weekTimeText.setText(hours > 0 ? activity.getString(R.string.format_hours_mins, hours, mins) : activity.getString(R.string.format_mins, mins));
             }
-            return;
         }
-
-        final long[] totalVisibleTime = {0};
-        final List<AppUiData> preloadedData = new ArrayList<>();
-
-        Utils.backgroundExecutor.execute(() -> {
-            try {
-                PackageManager pm = activity.getPackageManager();
-                SharedPreferences dbNames = activity.getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
-
-                int limit = 0;
-                Map<String, ?> safeTopApps = (Map<String, ?>) topApps;
-
-                for (Map.Entry<String, ?> entry : safeTopApps.entrySet()) {
-                    if (entry.getKey() == null) continue;
-                    String pkgName = entry.getKey().replaceAll("\\s+", "");
-
-                    if (hiddenAppsList != null && hiddenAppsList.contains(pkgName)) continue;
-                    if (limit >= 10) break;
-
-                    AppUiData data = new AppUiData();
-                    data.pkgName = pkgName;
-                    
-                    long appTime = 0;
-                    Object val = entry.getValue();
-                    if (val instanceof Number) {
-                        appTime = ((Number) val).longValue();
-                    } else if (val != null) {
-                        try { appTime = (long) Double.parseDouble(String.valueOf(val)); } catch (Exception e) {}
-                    }
-                    data.time = appTime;
-                    
-                    if (appDescriptions != null) data.description = appDescriptions.get(pkgName);
-                    data.isDeleted = false;
-
-                    ApplicationInfo appInfo = null;
-                    try {
-                        appInfo = pm.getApplicationInfo(pkgName, 0);
-                    } catch (PackageManager.NameNotFoundException e) {
-                        try {
-                            int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
-                            appInfo = pm.getApplicationInfo(pkgName, flag);
-                            boolean isInstalled = (appInfo.flags & ApplicationInfo.FLAG_INSTALLED) != 0;
-                            boolean isSystemApp = (appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
-                            if (!isInstalled && !isSystemApp) data.isDeleted = true; 
-                        } catch (PackageManager.NameNotFoundException ignored) { data.isDeleted = true; }
-                    }
-
-                    String cachedName = dbNames.getString(pkgName, null);
-                    if (cachedName != null) data.appName = cachedName;
-                    else if (appInfo != null) data.appName = pm.getApplicationLabel(appInfo).toString();
-                    else {
-                        String[] parts = pkgName.split("\\.");
-                        String name = parts[parts.length - 1]; 
-                        data.appName = name.substring(0, 1).toUpperCase() + name.substring(1); 
-                    }
-
-                    if (appInfo != null) {
-                        try { data.icon = pm.getApplicationIcon(appInfo); } catch (Exception ignored) {}
-                    }
-
-                    preloadedData.add(data);
-                    totalVisibleTime[0] += data.time;
-                    limit++;
-                }
-            } catch (Exception e) { e.printStackTrace(); }
-
-            new Handler(Looper.getMainLooper()).post(() -> {
-                if (!isAdded()) return;
-
-                for (AppUiData data : preloadedData) {
-                    View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, container, false);
-                    
-                    ImageView iconView = view.findViewById(R.id.app_icon);
-                    TextView nameView = view.findViewById(R.id.app_name);
-                    TextView timeView = view.findViewById(R.id.app_time);
-                    TextView descView = view.findViewById(R.id.app_custom_description);
-                    ImageView lockView = view.findViewById(R.id.app_lock_icon);
-                    ImageView optionsBtn = view.findViewById(R.id.btn_app_options);
-                    ImageView iconDeleted = view.findViewById(R.id.icon_deleted);
-
-                    if (optionsBtn != null) optionsBtn.setVisibility(View.GONE);
-                    if (lockView != null) lockView.setVisibility(View.GONE);
-
-                    if (data.description != null && !data.description.isEmpty() && descView != null) {
-                        descView.setText(data.description);
-                        descView.setVisibility(View.VISIBLE);
-                    }
-
-                    nameView.setText(data.appName);
-                    if (data.icon != null) iconView.setImageDrawable(data.icon);
-                    else iconView.setImageResource(android.R.drawable.sym_def_app_icon);
-                    
-                    timeView.setText(Utils.formatTime(activity, data.time));
-                    
-                    if (iconDeleted != null) {
-                        if (data.isDeleted) {
-                            iconDeleted.setVisibility(View.VISIBLE);
-                            iconDeleted.setOnClickListener(v -> Toast.makeText(activity, R.string.toast_app_deleted, Toast.LENGTH_SHORT).show());
-                        } else {
-                            iconDeleted.setVisibility(View.GONE);
-                            iconDeleted.setOnClickListener(null);
-                        }
-                    }
-                    if (container != null) {
-                        container.addView(view);
-                        container.setVisibility(View.VISIBLE); 
-                    }
-                }
-
-                long timeToShow = Math.max(serverTotalTime, totalVisibleTime[0]);
-                long minutes = timeToShow / 1000 / 60;
-                long hours = minutes / 60;
-                long mins = minutes % 60;
-
-                if (weekTimeText != null) {
-                    weekTimeText.setText(hours > 0 ? activity.getString(R.string.format_hours_mins, hours, mins) : activity.getString(R.string.format_mins, mins));
-                    weekTimeText.setOnClickListener(null); 
-                }
-
-                StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
-            });
-        });
     }
 
     private void updateFollowButton(android.widget.Button btnFollow, boolean isFollowing) {
