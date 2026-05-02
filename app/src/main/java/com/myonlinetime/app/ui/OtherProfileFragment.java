@@ -36,7 +36,7 @@ public class OtherProfileFragment extends Fragment {
     private String targetUid = "";
     private String backTitle = "";
 
-    // === КЭШ ФОНА ===
+    // === ЖЕЛЕЗОБЕТОННЫЙ КЭШ ФОНА ===
     private String loadedBgUrl = null;
     private boolean isLoadedBgVideo = false;
 
@@ -72,10 +72,9 @@ public class OtherProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
 
-        // === ИСПРАВЛЕНИЕ АНИМАЦИИ: Не сносим твой фон мгновенно ===
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
-        }, 400);
+        // МЫ БОЛЬШЕ НЕ ВЫКЛЮЧАЕМ ТВОЙ ГЛОБАЛЬНЫЙ ФОН!
+        // Пусть он играет под превью-фоном, чтобы при возврате не было перезапуска видео.
+        activity.updateGlobalBackground(true);
 
         final TextView nameView = view.findViewById(R.id.profile_name);
         final TextView aboutView = view.findViewById(R.id.profile_about);
@@ -88,6 +87,9 @@ public class OtherProfileFragment extends Fragment {
         final TextView weekTimeText = view.findViewById(R.id.profile_week_time);
         View followersClick = view.findViewById(R.id.container_followers);
         View followingClick = view.findViewById(R.id.container_following);
+
+        TextView tabTopApps = view.findViewById(R.id.tab_top_apps);
+        if (tabTopApps != null) tabTopApps.setSelected(true);
 
         final ImageView btnExpand = view.findViewById(R.id.btn_expand_apps);
         final ImageView btnCollapse = view.findViewById(R.id.btn_collapse_apps);
@@ -131,7 +133,10 @@ public class OtherProfileFragment extends Fragment {
                             activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
                         } else {
                             loadedBgUrl = null;
-                            activity.clearPreviewBackground();
+                            // Если фона нет, очищаем превью с задержкой, чтобы твой фон остался
+                            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                                if (isAdded() && !isHidden()) activity.clearPreviewBackground();
+                            }, 400);
                         }
 
                         renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
@@ -217,18 +222,29 @@ public class OtherProfileFragment extends Fragment {
         });
     }
 
+    private String formatDeletedAppName(String pkg) {
+        try {
+            String[] parts = pkg.split("\\.");
+            String name = parts[parts.length - 1]; 
+            return name.substring(0, 1).toUpperCase() + name.substring(1); 
+        } catch (Exception e) { return pkg; }
+    }
+
     @Override
     public void onResume() {
         super.onResume();
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null && !isHidden()) {
             refreshCounts(activity);
+            activity.updateGlobalBackground(true);
+            
             if (loadedBgUrl != null) {
                 activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
+            } else {
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (isAdded() && !isHidden()) activity.clearPreviewBackground();
+                }, 400);
             }
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
-            }, 400);
         }
     }
 
@@ -242,18 +258,29 @@ public class OtherProfileFragment extends Fragment {
             activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
             refreshCounts(activity);
             
-            // === ВОССТАНАВЛИВАЕМ ФОН ИЗ КЭША ===
-            if (loadedBgUrl != null) activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
-            
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
-            }, 400);
+            activity.updateGlobalBackground(true);
+            if (loadedBgUrl != null) {
+                activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
+            } else {
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (isAdded() && !isHidden()) activity.clearPreviewBackground();
+                }, 400);
+            }
         }
-        // === ИСПРАВЛЕНИЕ: НИКАКОГО УДАЛЕНИЯ ФОНА ПРИ СКРЫТИИ ===
-        // Мы оставляем фон висеть под открывающимся списком подписчиков.
+        // НИКАКОГО УДАЛЕНИЯ ФОНА ПРИ СВОРАЧИВАНИИ!
     }
 
-    // === БРОНЕБОЙНЫЙ ПАРСИНГ СПИСКА ПРИЛОЖЕНИЙ ===
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        MainActivity activity = (MainActivity) getActivity();
+        if (activity != null) {
+            // При полном уничтожении чистим чужой фон
+            activity.clearPreviewBackground();
+        }
+    }
+
+    // === ПУЛЕНЕПРОБИВАЕМЫЙ ПАРСИНГ ПРИЛОЖЕНИЙ ===
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
         if (container != null) {
             container.setLayoutTransition(null);
@@ -281,11 +308,10 @@ public class OtherProfileFragment extends Fragment {
                 SharedPreferences dbNames = activity.getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
 
                 int limit = 0;
-                Map<String, ?> safeTopApps = (Map<String, ?>) topApps;
-
-                for (Map.Entry<String, ?> entry : safeTopApps.entrySet()) {
-                    if (entry.getKey() == null) continue;
-                    String pkgName = entry.getKey().replaceAll("\\s+", "");
+                
+                for (Object keyObj : topApps.keySet()) {
+                    if (keyObj == null) continue;
+                    String pkgName = String.valueOf(keyObj).replaceAll("\\s+", "");
 
                     if (hiddenAppsList != null && hiddenAppsList.contains(pkgName)) continue;
                     if (limit >= 10) break;
@@ -293,15 +319,15 @@ public class OtherProfileFragment extends Fragment {
                     AppUiData data = new AppUiData();
                     data.pkgName = pkgName;
                     
-                    // Бронебойный парсинг времени
+                    // БЕЗОПАСНОЕ ИЗВЛЕЧЕНИЕ ВРЕМЕНИ
                     long appTime = 0;
-                    Object val = entry.getValue();
-                    if (val != null) {
+                    Object val = topApps.get(keyObj);
+                    if (val instanceof Number) {
+                        appTime = ((Number) val).longValue();
+                    } else if (val != null) {
                         try {
                             appTime = (long) Double.parseDouble(String.valueOf(val));
-                        } catch (Exception e) {
-                            try { appTime = Long.parseLong(String.valueOf(val)); } catch (Exception ignored) {}
-                        }
+                        } catch (Exception e) {}
                     }
                     data.time = appTime;
                     
@@ -324,11 +350,7 @@ public class OtherProfileFragment extends Fragment {
                     String cachedName = dbNames.getString(pkgName, null);
                     if (cachedName != null) data.appName = cachedName;
                     else if (appInfo != null) data.appName = pm.getApplicationLabel(appInfo).toString();
-                    else {
-                        String[] parts = pkgName.split("\\.");
-                        String name = parts[parts.length - 1]; 
-                        data.appName = name.substring(0, 1).toUpperCase() + name.substring(1); 
-                    }
+                    else data.appName = formatDeletedAppName(pkgName);
 
                     if (appInfo != null) {
                         try { data.icon = pm.getApplicationIcon(appInfo); } catch (Exception ignored) {}
@@ -340,64 +362,64 @@ public class OtherProfileFragment extends Fragment {
                 }
             } catch (Exception e) {
                 e.printStackTrace();
-            } finally {
-                // Выполняем UI-отрисовку в любом случае
-                new Handler(Looper.getMainLooper()).post(() -> {
-                    if (!isAdded()) return;
-
-                    for (AppUiData data : preloadedData) {
-                        View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, container, false);
-                        
-                        ImageView iconView = view.findViewById(R.id.app_icon);
-                        TextView nameView = view.findViewById(R.id.app_name);
-                        TextView timeView = view.findViewById(R.id.app_time);
-                        TextView descView = view.findViewById(R.id.app_custom_description);
-                        ImageView lockView = view.findViewById(R.id.app_lock_icon);
-                        ImageView optionsBtn = view.findViewById(R.id.btn_app_options);
-                        ImageView iconDeleted = view.findViewById(R.id.icon_deleted);
-
-                        if (optionsBtn != null) optionsBtn.setVisibility(View.GONE);
-                        if (lockView != null) lockView.setVisibility(View.GONE);
-
-                        if (data.description != null && !data.description.isEmpty() && descView != null) {
-                            descView.setText(data.description);
-                            descView.setVisibility(View.VISIBLE);
-                        }
-
-                        nameView.setText(data.appName);
-                        if (data.icon != null) iconView.setImageDrawable(data.icon);
-                        else iconView.setImageResource(android.R.drawable.sym_def_app_icon);
-                        
-                        timeView.setText(Utils.formatTime(activity, data.time));
-                        
-                        if (iconDeleted != null) {
-                            if (data.isDeleted) {
-                                iconDeleted.setVisibility(View.VISIBLE);
-                                iconDeleted.setOnClickListener(v -> Toast.makeText(activity, R.string.toast_app_deleted, Toast.LENGTH_SHORT).show());
-                            } else {
-                                iconDeleted.setVisibility(View.GONE);
-                                iconDeleted.setOnClickListener(null);
-                            }
-                        }
-                        if (container != null) {
-                            container.addView(view);
-                            container.setVisibility(View.VISIBLE); 
-                        }
-                    }
-
-                    long timeToShow = Math.max(serverTotalTime, totalVisibleTime[0]);
-                    long minutes = timeToShow / 1000 / 60;
-                    long hours = minutes / 60;
-                    long mins = minutes % 60;
-
-                    if (weekTimeText != null) {
-                        weekTimeText.setText(hours > 0 ? activity.getString(R.string.format_hours_mins, hours, mins) : activity.getString(R.string.format_mins, mins));
-                        weekTimeText.setOnClickListener(null); 
-                    }
-
-                    StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
-                });
             }
+
+            // Рендер на UI-потоке
+            new Handler(Looper.getMainLooper()).post(() -> {
+                if (!isAdded()) return;
+
+                for (AppUiData data : preloadedData) {
+                    View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, container, false);
+                    
+                    ImageView iconView = view.findViewById(R.id.app_icon);
+                    TextView nameView = view.findViewById(R.id.app_name);
+                    TextView timeView = view.findViewById(R.id.app_time);
+                    TextView descView = view.findViewById(R.id.app_custom_description);
+                    ImageView lockView = view.findViewById(R.id.app_lock_icon);
+                    ImageView optionsBtn = view.findViewById(R.id.btn_app_options);
+                    ImageView iconDeleted = view.findViewById(R.id.icon_deleted);
+
+                    if (optionsBtn != null) optionsBtn.setVisibility(View.GONE);
+                    if (lockView != null) lockView.setVisibility(View.GONE);
+
+                    if (data.description != null && !data.description.isEmpty() && descView != null) {
+                        descView.setText(data.description);
+                        descView.setVisibility(View.VISIBLE);
+                    }
+
+                    nameView.setText(data.appName);
+                    if (data.icon != null) iconView.setImageDrawable(data.icon);
+                    else iconView.setImageResource(android.R.drawable.sym_def_app_icon);
+                    
+                    timeView.setText(Utils.formatTime(activity, data.time));
+                    
+                    if (iconDeleted != null) {
+                        if (data.isDeleted) {
+                            iconDeleted.setVisibility(View.VISIBLE);
+                            iconDeleted.setOnClickListener(v -> Toast.makeText(activity, R.string.toast_app_deleted, Toast.LENGTH_SHORT).show());
+                        } else {
+                            iconDeleted.setVisibility(View.GONE);
+                            iconDeleted.setOnClickListener(null);
+                        }
+                    }
+                    if (container != null) {
+                        container.addView(view);
+                        container.setVisibility(View.VISIBLE); 
+                    }
+                }
+
+                long timeToShow = Math.max(serverTotalTime, totalVisibleTime[0]);
+                long minutes = timeToShow / 1000 / 60;
+                long hours = minutes / 60;
+                long mins = minutes % 60;
+
+                if (weekTimeText != null) {
+                    weekTimeText.setText(hours > 0 ? activity.getString(R.string.format_hours_mins, hours, mins) : activity.getString(R.string.format_mins, mins));
+                    weekTimeText.setOnClickListener(null); 
+                }
+
+                StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
+            });
         });
     }
 
