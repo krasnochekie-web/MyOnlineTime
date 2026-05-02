@@ -31,16 +31,11 @@ public class SearchFragment extends Fragment {
     private RecyclerView resultsList; 
     private UserListAdapter adapter;  
     
-    // Переменная для отложенной задачи выключения фона
     private Runnable hideBgRunnable;
-
-    // Таймер для задержки запроса (защита от спама на сервер)
     private Handler searchHandler = new Handler(Looper.getMainLooper());
     private Runnable searchRunnable;
 
-    public SearchFragment() {
-        // Обязательный пустой конструктор
-    }
+    public SearchFragment() {}
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -55,33 +50,32 @@ public class SearchFragment extends Fragment {
         EditText searchInput = view.findViewById(R.id.search_input);
         resultsList = view.findViewById(R.id.search_results_list);
 
-        // Настройка списка
         resultsList.setLayoutManager(new LinearLayoutManager(activity));
-        adapter = new UserListAdapter(activity);
-        resultsList.setAdapter(adapter);
         
-        // Убираем визуальный разрыв при скролле (эффект оттягивания)
+        // === ИСПРАВЛЕНИЕ: ПЕРЕДАЕМ ПРАВИЛЬНЫЙ КОЛЛБЭК ДЛЯ КЛИКА ПО ЮЗЕРУ ===
+        adapter = new UserListAdapter(activity, clickedUser -> {
+            if (activity != null && activity.navigator != null) {
+                // Открываем профиль ПОВЕРХ поиска, передавая UID нужного человека
+                activity.navigator.openSubScreen(ProfileFragment.newInstance(clickedUser.uid));
+            }
+        });
+        
+        resultsList.setAdapter(adapter);
         resultsList.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
-        // Восстановление поиска
         if (lastSearchQuery.length() > 0) {
             searchInput.setText(lastSearchQuery);
             searchInput.setSelection(lastSearchQuery.length());
             performSearch(lastSearchQuery, activity);
         }
 
-        // Слушатель ввода
         searchInput.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
                 lastSearchQuery = s.toString();
                 
-                // Отменяем предыдущий запланированный запрос, если пользователь продолжает печатать
-                if (searchRunnable != null) {
-                    searchHandler.removeCallbacks(searchRunnable);
-                }
+                if (searchRunnable != null) searchHandler.removeCallbacks(searchRunnable);
                 
-                // Планируем новый запрос через 400 мс (Debounce)
                 searchRunnable = () -> performSearch(s.toString(), activity);
                 searchHandler.postDelayed(searchRunnable, 400);
             }
@@ -122,11 +116,9 @@ public class SearchFragment extends Fragment {
 
     private void performSearch(final String query, final MainActivity activity) {
         if(query.trim().length() > 0) {
-            // Если токен сервера уже есть, не делаем лишний запрос авторизации!
             if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
                 executeSearchApi(activity.vpsToken, query);
             } else {
-                // Токена нет, запрашиваем новый с защитой от протухания (silentSignIn)
                 if (activity.mGoogleSignInClient != null) {
                     activity.mGoogleSignInClient.silentSignIn().addOnSuccessListener(freshAccount -> {
                         VpsApi.authenticateWithGoogle(activity, freshAccount.getIdToken(), new VpsApi.LoginCallback() {
@@ -138,7 +130,6 @@ public class SearchFragment extends Fragment {
                             @Override public void onError(String e) {}
                         });
                     }).addOnFailureListener(e -> {
-                        // Фолбэк, если тихое обновление не удалось
                         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
                         if(acct != null) {
                             VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
@@ -154,7 +145,6 @@ public class SearchFragment extends Fragment {
                 }
             }
         } else {
-            // ИСПРАВЛЕНИЕ ВЫЛЕТА: очищаем список правильно, без null
             adapter.setUsers(new ArrayList<>());
         }
     }
@@ -168,9 +158,6 @@ public class SearchFragment extends Fragment {
         });
     }
 
-    // ========================================================
-    // НАШ ПРЕДОХРАНИТЕЛЬ: Гасим фон с задержкой при входе
-    // ========================================================
     @Override
     public void onResume() {
         super.onResume();
