@@ -7,16 +7,16 @@
     android:layout_marginVertical="4dp"
     app:cardBackgroundColor="@color/cardDynamic"
     app:cardCornerRadius="16dp"
-    app:cardElevation="0dp">
+    app:cardElevation="0dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?android:attr/selectableItemBackground">
 
-    <!-- Сам LinearLayout теперь берет только системный ripple, а CardView снаружи аккуратно срезает ему углы -->
+    <!-- Внутренний контейнер теперь просто держит элементы и не ворует клики -->
     <LinearLayout
         android:id="@+id/search_card_root"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="?android:attr/selectableItemBackground"
-        android:clickable="true"
-        android:focusable="true"
+        android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="12dp"
