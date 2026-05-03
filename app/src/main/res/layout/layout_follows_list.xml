@@ -5,7 +5,7 @@
     android:background="@color/bgDynamic"
     android:nestedScrollingEnabled="true">
 
-    <!-- Крутилка теперь не мешает разметке -->
+    <!-- Интегрированный спиннер загрузки (никак не сдвигает остальные элементы) -->
     <ProgressBar
         android:id="@+id/follows_loading_spinner"
         android:layout_width="40dp"
@@ -23,11 +23,11 @@
         android:textSize="12sp"
         android:visibility="gone" />
 
+    <!-- Отступы сохранены строго как в старом файле (без paddingTop) -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/follows_results_list"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
-        android:paddingTop="@dimen/header_clearance"
         android:paddingBottom="@dimen/bottom_nav_clearance" />
 </RelativeLayout>
