@@ -12,24 +12,48 @@
         android:clipToPadding="false"
         android:nestedScrollingEnabled="true">
 
-        <EditText
-            android:id="@+id/search_input"
+        <!-- Оборачиваем поле ввода и крестик, чтобы наложить их друг на друга -->
+        <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/hint_search_friends"
-            android:textColorHint="@color/textGrayDynamic"
-            android:textColor="@color/textDynamic"
-            android:background="@drawable/bg_input_field"
-            android:paddingLeft="16dp"
-            android:paddingRight="16dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp"
             android:layout_marginLeft="16dp"
-            android:layout_marginRight="16dp"
-            android:drawableLeft="@drawable/ic_nav_search"
-            android:drawableTint="@color/textDynamic"
-            android:drawablePadding="10dp"
-            android:singleLine="true"/>
+            android:layout_marginRight="16dp">
+
+            <EditText
+                android:id="@+id/search_input"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/hint_search_friends"
+                android:textColorHint="@color/textGrayDynamic"
+                android:textColor="@color/textDynamic"
+                android:background="@drawable/bg_input_field"
+                android:paddingLeft="16dp"
+                android:paddingRight="45dp" <!-- УВЕЛИЧЕНО: чтобы текст не залезал под крест -->
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                android:drawableLeft="@drawable/ic_nav_search"
+                android:drawableTint="@color/textDynamic"
+                android:drawablePadding="10dp"
+                android:singleLine="true"/>
+
+            <!-- Тот самый крестик с идеальной круглой волной (selectableItemBackgroundBorderless) -->
+            <ImageView
+                android:id="@+id/search_clear_btn"
+                android:layout_width="25dp"
+                android:layout_height="25dp"
+                android:layout_alignParentRight="true"
+                android:layout_centerVertical="true"
+                android:layout_marginRight="10dp"
+                android:background="@drawable/bg_close_circle"
+                android:padding="3.5dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                android:tint="@color/textDynamic"
+                android:visibility="gone" /> <!-- По умолчанию скрыт, пока нет текста -->
+
+        </RelativeLayout>
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/search_results_list"
