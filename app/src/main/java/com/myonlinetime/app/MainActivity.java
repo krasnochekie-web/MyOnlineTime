@@ -683,7 +683,7 @@ public class MainActivity extends AppCompatActivity {
                     isSyncingBg = false;
                     prefs.edit()
                          .putString("synced_bg_url_" + uid, bgUrl)
-                         .putString("custom_bg_path_" + localFile.getAbsolutePath())
+                         .putString("custom_bg_path_" + uid, localFile.getAbsolutePath()) // ИСПРАВЛЕНА ОПЕЧАТКА!
                          .putBoolean("custom_bg_is_video_" + uid, isVideo)
                          .apply();
                          
