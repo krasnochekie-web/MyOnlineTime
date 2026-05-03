@@ -75,7 +75,7 @@ public class MainActivity extends AppCompatActivity {
     private ImageView globalImageView;
     private String currentBgPath = null;
     
-    // === СОХРАНЕНИЕ ПОЗИЦИИ ВИДЕО ===
+    // Сохранение секунд видео для возврата без сброса
     private java.util.HashMap<String, Long> mediaPositions = new java.util.HashMap<>();
     
     private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
@@ -389,13 +389,13 @@ public class MainActivity extends AppCompatActivity {
         exoPlayer.setRepeatMode(Player.REPEAT_MODE_ALL);
         exoPlayer.setVolume(0f);
         exoPlayer.setVideoScalingMode(androidx.media3.common.C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING);
+        playerView.setShutterBackgroundColor(android.graphics.Color.TRANSPARENT);
     }
 
-    // === ИДЕАЛЬНОЕ УПРАВЛЕНИЕ МЕДИА БЕЗ ВСПЫШЕК И ПЕРЕЗАПУСКОВ ===
     private void switchMedia(String newPath, boolean isVideo) {
         if (newPath == null) return;
 
-        // 1. Если это тот же самый фон - просто снимаем с паузы и показываем!
+        // Если медиа то же самое - снимаем с паузы МГНОВЕННО, без загрузок!
         if (newPath.equals(currentBgPath)) {
             if (isVideo) {
                 if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
@@ -409,14 +409,12 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // 2. Если фон меняется, сохраняем секунду старого видео
         if (currentBgPath != null && exoPlayer != null) {
             mediaPositions.put(currentBgPath, exoPlayer.getCurrentPosition());
         }
 
         currentBgPath = newPath;
 
-        // 3. Загружаем новый фон
         if (isVideo) {
             if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
             if (playerView != null) playerView.setVisibility(View.VISIBLE);
@@ -428,7 +426,6 @@ public class MainActivity extends AppCompatActivity {
             if (exoPlayer != null) {
                 exoPlayer.setMediaItem(mediaItem);
                 exoPlayer.prepare();
-                // Восстанавливаем сохраненную позицию!
                 Long savedPos = mediaPositions.get(newPath);
                 if (savedPos != null) {
                     exoPlayer.seekTo(savedPos);
@@ -438,13 +435,14 @@ public class MainActivity extends AppCompatActivity {
         } else {
             if (playerView != null) playerView.setVisibility(View.INVISIBLE);
             if (exoPlayer != null) exoPlayer.pause();
+            
             if (globalImageView != null) {
                 globalImageView.setVisibility(View.VISIBLE);
-                // .dontAnimate() убивает вспышку при переключении картинок
+                // .dontAnimate() - убивает мерцания и вспышки фото
                 if (newPath.startsWith("http")) {
-                    Glide.with(this).load(newPath).dontAnimate().centerCrop().into(globalImageView);
+                    Glide.with(MainActivity.this).load(newPath).dontAnimate().centerCrop().into(globalImageView);
                 } else {
-                    Glide.with(this).load(new File(newPath)).dontAnimate().centerCrop().into(globalImageView);
+                    Glide.with(MainActivity.this).load(new File(newPath)).dontAnimate().centerCrop().into(globalImageView);
                 }
             }
         }
@@ -469,10 +467,17 @@ public class MainActivity extends AppCompatActivity {
         switchMedia(path, isVideo);
     }
 
+    // === ИСПРАВЛЕНИЕ: Мы больше не заменяем чужой фон на свой, если переходим на Поиск/Настройки ===
     public void clearPreviewBackground() {
         if (previewBgPath != null) {
             previewBgPath = null;
-            updateGlobalBackground(true);
+            // Если мы переходим на свой профиль - грузим свой фон.
+            // Иначе - просто ставим текущий фон (чужой) на паузу!
+            if (currentTab == 4) {
+                updateGlobalBackground(true);
+            } else {
+                updateGlobalBackground(false);
+            }
         }
     }
 
@@ -943,6 +948,7 @@ public class MainActivity extends AppCompatActivity {
     private void updateNavState(int index) {
         currentTab = index;
         
+        // Переход по вкладкам. Мягко отключаем превью (без зачистки пути плеера).
         clearPreviewBackground();
         
         mainHeader.setVisibility(View.VISIBLE);
