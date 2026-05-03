@@ -114,6 +114,8 @@ public class OtherProfileFragment extends Fragment {
         followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "followers")));
         followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "following")));
 
+        final long openTime = System.currentTimeMillis();
+
         if (activity.vpsToken != null) {
             VpsApi.getUser(activity, activity.vpsToken, targetUid, new VpsApi.UserCallback() {
                 @Override
@@ -127,15 +129,22 @@ public class OtherProfileFragment extends Fragment {
                         if (user.photo != null && user.photo.length() > 10) handleMediaLoading(activity, user.photo);
                         renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
 
-                        // === МГНОВЕННОЕ ВКЛЮЧЕНИЕ ФОНА ===
-                        isBgLoaded = true;
-                        if (user.background != null && user.background.length() > 10) {
-                            loadedBgUrl = user.background;
-                            activity.previewBackground(loadedBgUrl);
-                        } else {
-                            loadedBgUrl = null;
-                            activity.previewBackground("none"); 
-                        }
+                        // Ждем завершения анимации перехода (350мс), чтобы наш фон не перебивался раньше времени
+                        long elapsed = System.currentTimeMillis() - openTime;
+                        long delay = Math.max(0, 350 - elapsed);
+                        
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            if (!isAdded()) return;
+                            isBgLoaded = true;
+                            if (user.background != null && user.background.length() > 10) {
+                                loadedBgUrl = user.background;
+                                activity.previewBackground(loadedBgUrl);
+                            } else {
+                                loadedBgUrl = null;
+                                activity.previewBackground("none"); 
+                            }
+                        }, delay);
+
                     } else {
                         nameView.setText(activity.getString(R.string.new_user));
                     }
@@ -218,14 +227,6 @@ public class OtherProfileFragment extends Fragment {
         });
     }
 
-    private String formatDeletedAppName(String pkg) {
-        try {
-            String[] parts = pkg.split("\\.");
-            String name = parts[parts.length - 1]; 
-            return name.substring(0, 1).toUpperCase() + name.substring(1); 
-        } catch (Exception e) { return pkg; }
-    }
-
     @Override
     public void onResume() {
         super.onResume();
@@ -233,6 +234,7 @@ public class OtherProfileFragment extends Fragment {
         if (activity != null && !isHidden()) {
             refreshCounts(activity);
             
+            // Если фон уже загружался, восстанавливаем его мгновенно
             if (isBgLoaded) {
                 if (loadedBgUrl != null) {
                     activity.previewBackground(loadedBgUrl);
