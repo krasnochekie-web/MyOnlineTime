@@ -412,7 +412,7 @@ public class EditProfileFragment extends Fragment {
                                 
                                 activity.runOnUiThread(() -> {
                                     pendingBgFile = compressedFile;
-                                    activity.previewBackground(compressedFile.getAbsolutePath(), true);
+                                    activity.previewBackground(compressedFile.getAbsolutePath());
                                 });
                             }
                             @Override public void onTranscodeCanceled() { isCompressing = false; }
@@ -430,7 +430,7 @@ public class EditProfileFragment extends Fragment {
                         if (avatarPreview != null) Glide.with(this).load(tempFile).circleCrop().into(avatarPreview);
                     } else {
                         pendingBgFile = tempFile;
-                        activity.previewBackground(tempFile.getAbsolutePath(), false);
+                        activity.previewBackground(tempFile.getAbsolutePath());
                     }
                 });
             } catch (Exception e) {}
