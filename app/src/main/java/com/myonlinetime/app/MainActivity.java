@@ -63,9 +63,11 @@ public class MainActivity extends AppCompatActivity {
 
     private View permissionOverlay;
 
+    // Слой: Наш глобальный фон (Фото/GIF)
     private ImageView globalImageView;
     private String currentBgPath = null;
     
+    // Слой: Чужой фон (используется ТОЛЬКО для EditProfileFragment)
     private ImageView previewImageView;
 
     private boolean isSyncingBg = false; 
@@ -168,29 +170,35 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        // === ИСПРАВЛЕНИЕ: БЛОКИРОВКА ПОВТОРНЫХ НАЖАТИЙ ===
         findViewById(R.id.nav_feed).setOnClickListener(v -> {
+            if (currentTab == 0) return;
             updateNavState(0);
             navigator.switchScreen(0, null);
             syncHeaderState(); 
         });
 
         findViewById(R.id.nav_search).setOnClickListener(v -> { 
+            if (currentTab == 1) return;
             updateNavState(1); 
             checkAuthAndLoad(1); 
         });
         
         findViewById(R.id.nav_profile).setOnClickListener(v -> { 
+            if (currentTab == 4) return;
             updateNavState(4); 
             checkAuthAndLoad(4); 
         });
 
         findViewById(R.id.nav_usage).setOnClickListener(v -> {
+            if (currentTab == 3) return;
             updateNavState(3);
             navigator.switchScreen(3, null);
             syncHeaderState(); 
         });
 
         findViewById(R.id.nav_settings).setOnClickListener(v -> {
+            if (currentTab == 5) return;
             updateNavState(5);
             navigator.switchScreen(5, null);
             syncHeaderState(); 
@@ -367,52 +375,21 @@ public class MainActivity extends AppCompatActivity {
         parent.addView(previewImageView, insertIndex);
     }
 
-    // === ИДЕАЛЬНОЕ ВОССТАНОВЛЕНИЕ ПАМЯТИ ===
+    // === ЗАГЛУШКИ ДЛЯ EDIT PROFILE И СТАРЫХ ФРАГМЕНТОВ ===
     public void previewBackground(String path) {
         if (path == null) return;
-
         if (path.equals("none")) {
             previewBgPath = "none";
-            if (previewImageView != null && previewImageView.getVisibility() == View.VISIBLE) {
-                previewImageView.animate().cancel();
-                previewImageView.animate().alpha(0f).setDuration(350).withEndAction(() -> {
-                    previewImageView.setVisibility(View.INVISIBLE);
-                    previewImageView.setAlpha(1f);
-                }).start();
-            }
-            if (globalImageView != null) {
-                globalImageView.animate().cancel();
-                globalImageView.setVisibility(View.INVISIBLE);
-            }
-            return;
-        }
-
-        // Если мы вернулись на этот же профиль - мгновенно снимаем с паузы и показываем!
-        if (path.equals(previewBgPath)) {
-            if (previewImageView != null) {
-                previewImageView.animate().cancel();
-                previewImageView.setVisibility(View.VISIBLE);
-                previewImageView.setAlpha(1f);
-            }
-            if (globalImageView != null) {
-                globalImageView.animate().cancel();
-                globalImageView.setVisibility(View.INVISIBLE);
-            }
+            if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
+            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
             return;
         }
 
         previewBgPath = path;
-        currentBgPath = path; 
-
-        if (globalImageView != null) {
-            globalImageView.animate().cancel();
-            globalImageView.setVisibility(View.INVISIBLE);
-        }
+        if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
         
         if (previewImageView != null) {
-            previewImageView.animate().cancel();
             previewImageView.setVisibility(View.VISIBLE);
-            previewImageView.setAlpha(1f);
             if (path.startsWith("http")) {
                 Glide.with(this).load(path).centerCrop().into(previewImageView);
             } else {
@@ -420,20 +397,14 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
-
+    
     public void clearPreviewBackground() {
-        if (previewBgPath != null) {
-            // МЫ НЕ СТИРАЕМ previewBgPath, чтобы приложение помнило чужой фон!
-            
-            // Плавно растворяем чужой фон (350мс), чтобы голый фрагмент не уезжал
-            if (previewImageView != null && previewImageView.getVisibility() == View.VISIBLE) {
-                previewImageView.animate().cancel();
-                previewImageView.animate().alpha(0f).setDuration(350).withEndAction(() -> {
-                    previewImageView.setVisibility(View.INVISIBLE);
-                    previewImageView.setAlpha(1f); // восстанавливаем прозрачность на будущее
-                }).start();
-            }
+        clearPreviewBackground(false);
+    }
 
+    public void clearPreviewBackground(boolean instant) {
+        if (previewBgPath != null) {
+            previewBgPath = null;
             if (currentTab == 4) {
                 updateGlobalBackground(true);
             } else {
@@ -515,46 +486,43 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // === УПРАВЛЕНИЕ НАШИМ ФОНОМ (МГНОВЕННО) ===
     public void updateGlobalBackground(boolean show) {
         if (!show) {
-            if (globalImageView != null && globalImageView.getVisibility() == View.VISIBLE) {
-                globalImageView.animate().cancel();
-                globalImageView.animate().alpha(0f).setDuration(350).withEndAction(() -> {
-                    globalImageView.setVisibility(View.INVISIBLE);
-                    globalImageView.setAlpha(1f);
-                }).start();
-            }
+            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+            if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
             return;
         }
 
+        if (previewBgPath != null) {
+            if ("none".equals(previewBgPath)) {
+                if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+                if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
+            } else {
+                previewBackground(previewBgPath);
+            }
+            return;
+        }
+        
         String targetPath = resolveMyBackground();
 
         if (targetPath == null || targetPath.isEmpty()) {
             currentBgPath = null;
-            if (globalImageView != null && globalImageView.getVisibility() == View.VISIBLE) {
-                globalImageView.animate().cancel();
-                globalImageView.animate().alpha(0f).setDuration(350).withEndAction(() -> {
-                    globalImageView.setVisibility(View.INVISIBLE);
-                    globalImageView.setAlpha(1f);
-                }).start();
-            }
+            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+            if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
             return;
         }
 
-        if (targetPath.equals(currentBgPath)) {
-            if (globalImageView != null) {
-                globalImageView.animate().cancel();
-                globalImageView.setVisibility(View.VISIBLE);
-                globalImageView.setAlpha(1f);
-            }
+        if (targetPath.equals(currentBgPath) && globalImageView.getVisibility() == View.VISIBLE) {
+            if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
             return;
         }
 
         currentBgPath = targetPath;
+        if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
+        
         if (globalImageView != null) {
-            globalImageView.animate().cancel();
             globalImageView.setVisibility(View.VISIBLE);
-            globalImageView.setAlpha(1f);
             Glide.with(this).load(targetPath).centerCrop().into(globalImageView);
         }
     }   
@@ -630,7 +598,6 @@ public class MainActivity extends AppCompatActivity {
         loadUserAvatarToBottomNav(); 
         updateNotificationBadge(); 
         
-        // Восстанавливаем чужой фон, только если на экране открыт чужой профиль
         if (previewBgPath != null && navigator != null && navigator.hasSubScreen()) {
             previewBackground(previewBgPath);
         } else {
@@ -756,9 +723,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleBackNavigation() {
         if (navigator.closeSubScreen()) {
-            if (!navigator.hasSubScreen()) {
-                clearPreviewBackground(); 
-            }
             syncHeaderState(); 
             return; 
         }
@@ -886,8 +850,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateNavState(int index) {
         currentTab = index;
-        
-        clearPreviewBackground();
         
         mainHeader.setVisibility(View.VISIBLE);
         mainHeader.bringToFront(); 
