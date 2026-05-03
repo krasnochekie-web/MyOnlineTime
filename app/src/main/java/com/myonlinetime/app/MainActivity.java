@@ -46,6 +46,7 @@ public class MainActivity extends AppCompatActivity {
     public String currentBgBase64 = null; 
     public ImageView headerBackBtn;
     
+    // === АРХИТЕКТУРА ДВУХ ФОНОВ (ТОЛЬКО ИЗОБРАЖЕНИЯ / GIF) ===
     public String previewBgPath = null;
     
     private ImageView iconFeed, iconSearch, iconUsage, iconProfile, iconSettings;
@@ -63,15 +64,14 @@ public class MainActivity extends AppCompatActivity {
 
     private View permissionOverlay;
 
+    // Слой 1: Наш глобальный фон (Фото/GIF)
     private ImageView globalImageView;
     private String currentBgPath = null;
     
+    // Слой 2: Чужой фон (Превью) (Фото/GIF)
     private ImageView previewImageView;
 
     private boolean isSyncingBg = false; 
-
-    private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-    private Runnable hideBgRunnable;
 
     private final SharedPreferences.OnSharedPreferenceChangeListener notifListener = (sharedPrefs, key) -> {
         if ("notif_history_array".equals(key)) {
@@ -367,6 +367,7 @@ public class MainActivity extends AppCompatActivity {
         parent.addView(previewImageView, insertIndex);
     }
 
+    // === УПРАВЛЕНИЕ ЧУЖИМ ФОНОМ (МГНОВЕННО) ===
     public void previewBackground(String path) {
         if (path == null) return;
         
@@ -390,7 +391,6 @@ public class MainActivity extends AppCompatActivity {
         
         if (previewImageView != null) {
             previewImageView.setVisibility(View.VISIBLE);
-            // Убрали dontAnimate(), чтобы GIF гарантированно запускались и играли
             if (path.startsWith("http")) {
                 Glide.with(this).load(path).centerCrop().into(previewImageView);
             } else {
@@ -399,26 +399,14 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void clearPreviewBackground(boolean instant) {
+    // Для совместимости со старыми вызовами
+    public void clearPreviewBackground() {
         if (previewBgPath != null) {
             previewBgPath = null;
-            bgHandler.removeCallbacks(hideBgRunnable);
-            
-            Runnable task = () -> {
-                if (currentTab == 4) {
-                    updateGlobalBackground(true);
-                } else {
-                    updateGlobalBackground(false);
-                }
-            };
-            
-            // Если переключаем вкладку внизу (instant) - очищаем фон мгновенно
-            // Если нажимаем "Назад" с чужого профиля (!instant) - ждем конца анимации 350мс
-            if (instant) {
-                task.run();
+            if (currentTab == 4) {
+                updateGlobalBackground(true);
             } else {
-                hideBgRunnable = task;
-                bgHandler.postDelayed(hideBgRunnable, 350);
+                updateGlobalBackground(false);
             }
         }
     }
@@ -496,6 +484,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // === УПРАВЛЕНИЕ НАШИМ ФОНОМ (МГНОВЕННО) ===
     public void updateGlobalBackground(boolean show) {
         if (!show) {
             if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
@@ -503,7 +492,6 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Если мы на чужом профиле (превью активно) - не трогаем глобальный фон
         if (previewBgPath != null) {
             if ("none".equals(previewBgPath)) {
                 if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
@@ -523,17 +511,21 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        if (targetPath.equals(currentBgPath)) {
+        if (targetPath.equals(currentBgPath) && globalImageView.getVisibility() == View.VISIBLE) {
             if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
-            if (globalImageView != null) globalImageView.setVisibility(View.VISIBLE);
             return;
         }
 
         currentBgPath = targetPath;
         if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
+        
         if (globalImageView != null) {
             globalImageView.setVisibility(View.VISIBLE);
-            Glide.with(this).load(targetPath).centerCrop().into(globalImageView);
+            if (targetPath.startsWith("http")) {
+                Glide.with(this).load(targetPath).centerCrop().into(globalImageView);
+            } else {
+                Glide.with(this).load(new File(targetPath)).centerCrop().into(globalImageView);
+            }
         }
     }   
     
@@ -733,9 +725,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleBackNavigation() {
         if (navigator.closeSubScreen()) {
-            // Если мы закрыли ПОСЛЕДНИЙ саб-экран, тогда мы реально возвращаемся
             if (!navigator.hasSubScreen()) {
-                clearPreviewBackground(false); 
+                clearPreviewBackground(); 
             }
             syncHeaderState(); 
             return; 
@@ -865,8 +856,7 @@ public class MainActivity extends AppCompatActivity {
     private void updateNavState(int index) {
         currentTab = index;
         
-        // Мгновенная смена вкладок в нижнем меню
-        clearPreviewBackground(true);
+        clearPreviewBackground(); 
         
         mainHeader.setVisibility(View.VISIBLE);
         mainHeader.bringToFront(); 
