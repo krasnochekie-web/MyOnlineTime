@@ -241,20 +241,18 @@ public class EditProfileFragment extends Fragment {
                  editor.putString("my_nickname", n);
                  editor.putString("my_about", a);
 
-                 // СОЗДАЕМ ФИНАЛЬНЫЕ ПУТИ ДЛЯ ОТПРАВКИ, КОТОРЫЕ НЕ УДАЛЯТСЯ
-                 final String[] safeAvatarPath = {null};
-                 final String[] safeBgPath = {null};
-
+                 // 1. Создаем локальные файлы для мгновенного отображения (UI)
                  if (finalPhotoFile != null) {
-                     String pPath = new File(activity.getFilesDir(), "avatar_" + uid + "_" + System.currentTimeMillis() + (finalPhotoFile.getName().endsWith(".gif") ? ".gif" : ".png")).getAbsolutePath();
-                     try { copyFile(finalPhotoFile, new File(pPath)); safeAvatarPath[0] = pPath; } catch (Exception ignored) {}
+                     String pPath = new File(activity.getFilesDir(), "avatar_" + uid + ".png").getAbsolutePath();
+                     try { copyFile(finalPhotoFile, new File(pPath)); } catch (Exception ignored) {}
                      editor.putString("custom_avatar_path_" + uid, pPath);
                  }
                  if (finalBgFile != null) {
-                     String bPath = new File(activity.getFilesDir(), "my_bg_" + uid + "_" + System.currentTimeMillis() + (finalBgFile.getName().endsWith(".mp4") ? ".mp4" : ".jpg")).getAbsolutePath();
-                     try { copyFile(finalBgFile, new File(bPath)); safeBgPath[0] = bPath; } catch (Exception ignored) {}
+                     String ext = finalBgFile.getName().endsWith(".mp4") ? ".mp4" : ".jpg";
+                     String bPath = new File(activity.getFilesDir(), "my_bg_" + uid + ext).getAbsolutePath();
+                     try { copyFile(finalBgFile, new File(bPath)); } catch (Exception ignored) {}
                      editor.putString("custom_bg_path_" + uid, bPath);
-                     editor.putBoolean("custom_bg_is_video_" + uid, finalBgFile.getName().endsWith(".mp4"));
+                     editor.putBoolean("custom_bg_is_video_" + uid, ext.equals(".mp4"));
                  }
                  
                  editor.apply();
@@ -262,52 +260,70 @@ public class EditProfileFragment extends Fragment {
 
                  EditProfileFragment.isProfileUploading = true;
 
-                 // ЗДЕСЬ УДАЛЯЕТСЯ ВРЕМЕННЫЙ ФАЙЛ (поэтому раньше отправка ломалась)
+                 // Мгновенно обновляем интерфейс
                  activity.clearPreviewBackground();
                  activity.updateGlobalBackground(true);
                  activity.updateAvatarInUI();
                  activity.navigator.closeSubScreen();
-                 
                  LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
 
+                 // 2. Изолированный поток для отправки на сервер
                  Utils.backgroundExecutor.execute(() -> {
-                     // БЕРЕМ БЕЗОПАСНЫЕ КОПИИ, А НЕ УДАЛЕННЫЕ ВРЕМЕННЫЕ ФАЙЛЫ!
-                     File uploadPhoto = safeAvatarPath[0] != null ? new File(safeAvatarPath[0]) : null;
-                     File uploadBg = safeBgPath[0] != null ? new File(safeBgPath[0]) : null;
+                     File serverUploadPhoto = null;
+                     File serverUploadBg = null;
+
+                     // Создаем ПОЛНОСТЬЮ НЕЗАВИСИМЫЕ копии файлов, чтобы плеер/интерфейс их не заблокировал
+                     try {
+                         if (finalPhotoFile != null) {
+                             serverUploadPhoto = new File(activity.getCacheDir(), "server_upload_avatar_" + uid + (finalPhotoFile.getName().endsWith(".gif") ? ".gif" : ".png"));
+                             copyFile(finalPhotoFile, serverUploadPhoto);
+                         }
+                         if (finalBgFile != null) {
+                             serverUploadBg = new File(activity.getCacheDir(), "server_upload_bg_" + uid + (finalBgFile.getName().endsWith(".mp4") ? ".mp4" : ".jpg"));
+                             copyFile(finalBgFile, serverUploadBg);
+                         }
+                     } catch (Exception e) { e.printStackTrace(); }
+
+                     final File isolatedPhoto = serverUploadPhoto;
+                     final File isolatedBg = serverUploadBg;
 
                      if (activity.vpsToken != null) {
-                         VpsApi.saveUserProfile(activity.vpsToken, n, a, uploadPhoto, uploadBg, new VpsApi.Callback() {
+                         VpsApi.saveUserProfile(activity.vpsToken, n, a, isolatedPhoto, isolatedBg, new VpsApi.Callback() {
                              @Override 
                              public void onSuccess(String result) {
                                  try {
                                      JSONObject json = new JSONObject(result);
-                                     String newPhotoUrl = json.optString("photoUrl", null);
-                                     String newBgUrl = json.optString("backgroundUrl", null);
+                                     // Расширенный парсинг (ищем ключи с Url и без, на случай разных форматов)
+                                     String newPhotoUrl = json.has("photoUrl") ? json.optString("photoUrl") : json.optString("photo", null);
+                                     String newBgUrl = json.has("backgroundUrl") ? json.optString("backgroundUrl") : json.optString("background", null);
 
                                      activity.runOnUiThread(() -> {
                                          SharedPreferences.Editor successEditor = activity.prefs.edit();
                                          if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null")) {
                                              successEditor.putString("my_photo_base64", newPhotoUrl);
-                                             successEditor.putString("synced_photo_url_" + uid, newPhotoUrl);
                                          }
                                          if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null")) {
                                              successEditor.putString("my_bg_base64", newBgUrl);
-                                             successEditor.putString("synced_bg_url_" + uid, newBgUrl);
                                          }
                                          successEditor.apply();
                                          
                                          EditProfileFragment.isProfileUploading = false;
                                          LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
                                      });
-
-                                     if (pendingPhotoFile != null && pendingPhotoFile.exists()) pendingPhotoFile.delete();
-                                     if (pendingBgFile != null && pendingBgFile.exists()) pendingBgFile.delete();
                                  } catch (Exception ignored) {
                                      EditProfileFragment.isProfileUploading = false;
+                                 } finally {
+                                     // Удаляем временные серверные копии строго ПОСЛЕ ответа
+                                     if (isolatedPhoto != null && isolatedPhoto.exists()) isolatedPhoto.delete();
+                                     if (isolatedBg != null && isolatedBg.exists()) isolatedBg.delete();
+                                     if (pendingPhotoFile != null && pendingPhotoFile.exists()) pendingPhotoFile.delete();
+                                     if (pendingBgFile != null && pendingBgFile.exists()) pendingBgFile.delete();
                                  }
                              }
                              @Override public void onError(String error) {
                                  EditProfileFragment.isProfileUploading = false;
+                                 if (isolatedPhoto != null && isolatedPhoto.exists()) isolatedPhoto.delete();
+                                 if (isolatedBg != null && isolatedBg.exists()) isolatedBg.delete();
                              }
                          });
                      } else {
