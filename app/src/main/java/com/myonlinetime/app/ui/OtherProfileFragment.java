@@ -12,6 +12,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -38,9 +39,6 @@ public class OtherProfileFragment extends Fragment {
     private String targetUid = "";
     private String backTitle = "";
 
-    private String loadedBgUrl = null;
-    private boolean isBgLoaded = false;
-
     private static class AppUiData {
         String pkgName;
         String appName;
@@ -63,9 +61,27 @@ public class OtherProfileFragment extends Fragment {
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        final View view = inflater.inflate(R.layout.layout_profile, container, false);
         final MainActivity activity = (MainActivity) getActivity();
-        if (activity == null) return view;
+        
+        // Загружаем оригинальную разметку, но пока не привязываем
+        final View originalView = inflater.inflate(R.layout.layout_profile, container, false);
+        if (activity == null) return originalView;
+
+        // === ИДЕАЛЬНЫЙ ЭФФЕКТ КОЛЛАЖА ("СКЛЕЕННЫХ ФОТО") ===
+        // Мы оборачиваем профиль в FrameLayout и подкладываем фон прямо внутрь фрагмента!
+        // Теперь при свайпе/переходе фон будет выезжать ВМЕСТЕ с профилем, как единое целое.
+        FrameLayout wrapper = new FrameLayout(activity);
+        wrapper.setLayoutParams(originalView.getLayoutParams() != null ? originalView.getLayoutParams() : new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        originalView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        ImageView bgImageView = new ImageView(activity);
+        bgImageView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        bgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        // Заливаем черным/тёмным, чтобы сквозь него не просвечивал наш глобальный фон
+        bgImageView.setBackgroundColor(android.graphics.Color.parseColor("#121212")); 
+
+        wrapper.addView(bgImageView);
+        wrapper.addView(originalView);
 
         targetUid = getArguments() != null ? getArguments().getString("TARGET_UID", "") : "";
         backTitle = getArguments() != null ? getArguments().getString("BACK_TITLE", activity.getString(R.string.title_search)) : activity.getString(R.string.title_search);
@@ -73,28 +89,24 @@ public class OtherProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
 
-        if (activity.navigator != null && activity.navigator.getCurrentTabIndex() == 4) {
-            activity.updateGlobalBackground(true);
-        }
-
-        final TextView nameView = view.findViewById(R.id.profile_name);
-        final TextView aboutView = view.findViewById(R.id.profile_about);
-        avatarView = view.findViewById(R.id.profile_avatar);
+        final TextView nameView = originalView.findViewById(R.id.profile_name);
+        final TextView aboutView = originalView.findViewById(R.id.profile_about);
+        avatarView = originalView.findViewById(R.id.profile_avatar);
         
-        final View btnEdit = view.findViewById(R.id.btn_edit_profile);
-        final Button btnFollow = view.findViewById(R.id.btn_follow);
-        final TextView followersCount = view.findViewById(R.id.txt_followers_count);
-        final TextView followingCount = view.findViewById(R.id.txt_following_count);
-        final TextView weekTimeText = view.findViewById(R.id.profile_week_time);
-        View followersClick = view.findViewById(R.id.container_followers);
-        View followingClick = view.findViewById(R.id.container_following);
+        final View btnEdit = originalView.findViewById(R.id.btn_edit_profile);
+        final Button btnFollow = originalView.findViewById(R.id.btn_follow);
+        final TextView followersCount = originalView.findViewById(R.id.txt_followers_count);
+        final TextView followingCount = originalView.findViewById(R.id.txt_following_count);
+        final TextView weekTimeText = originalView.findViewById(R.id.profile_week_time);
+        View followersClick = originalView.findViewById(R.id.container_followers);
+        View followingClick = originalView.findViewById(R.id.container_following);
 
-        TextView tabTopApps = view.findViewById(R.id.tab_top_apps);
+        TextView tabTopApps = originalView.findViewById(R.id.tab_top_apps);
         if (tabTopApps != null) tabTopApps.setSelected(true);
 
-        final ImageView btnExpand = view.findViewById(R.id.btn_expand_apps);
-        final ImageView btnCollapse = view.findViewById(R.id.btn_collapse_apps);
-        final LinearLayout appsContainerLocal = view.findViewById(R.id.profile_apps_container);
+        final ImageView btnExpand = originalView.findViewById(R.id.btn_expand_apps);
+        final ImageView btnCollapse = originalView.findViewById(R.id.btn_collapse_apps);
+        final LinearLayout appsContainerLocal = originalView.findViewById(R.id.profile_apps_container);
 
         btnEdit.setVisibility(View.GONE);
         nameView.setText(activity.getString(R.string.loading));
@@ -114,8 +126,6 @@ public class OtherProfileFragment extends Fragment {
         followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "followers")));
         followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "following")));
 
-        final long openTime = System.currentTimeMillis();
-
         if (activity.vpsToken != null) {
             VpsApi.getUser(activity, activity.vpsToken, targetUid, new VpsApi.UserCallback() {
                 @Override
@@ -129,22 +139,12 @@ public class OtherProfileFragment extends Fragment {
                         if (user.photo != null && user.photo.length() > 10) handleMediaLoading(activity, user.photo);
                         renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
 
-                        // Ждем завершения анимации перехода (350мс), чтобы наш фон не перебивался раньше времени
-                        long elapsed = System.currentTimeMillis() - openTime;
-                        long delay = Math.max(0, 350 - elapsed);
-                        
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            if (!isAdded()) return;
-                            isBgLoaded = true;
-                            if (user.background != null && user.background.length() > 10) {
-                                loadedBgUrl = user.background;
-                                activity.previewBackground(loadedBgUrl);
-                            } else {
-                                loadedBgUrl = null;
-                                activity.previewBackground("none"); 
-                            }
-                        }, delay);
-
+                        // Мгновенная загрузка фона напрямую во фрагмент! (Без участия MainActivity)
+                        if (user.background != null && user.background.length() > 10) {
+                            Glide.with(activity).load(user.background).centerCrop().into(bgImageView);
+                        } else {
+                            bgImageView.setImageDrawable(null); 
+                        }
                     } else {
                         nameView.setText(activity.getString(R.string.new_user));
                     }
@@ -185,7 +185,7 @@ public class OtherProfileFragment extends Fragment {
             });
         }
 
-        return view;
+        return wrapper; // Возвращаем обертку с собственным фоном!
     }
 
     private void refreshCounts(MainActivity activity) {
@@ -231,18 +231,7 @@ public class OtherProfileFragment extends Fragment {
     public void onResume() {
         super.onResume();
         MainActivity activity = (MainActivity) getActivity();
-        if (activity != null && !isHidden()) {
-            refreshCounts(activity);
-            
-            // Если фон уже загружался, восстанавливаем его мгновенно
-            if (isBgLoaded) {
-                if (loadedBgUrl != null) {
-                    activity.previewBackground(loadedBgUrl);
-                } else {
-                    activity.previewBackground("none");
-                }
-            }
-        }
+        if (activity != null && !isHidden()) refreshCounts(activity);
         
         if (getView() != null) {
             TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
@@ -261,24 +250,11 @@ public class OtherProfileFragment extends Fragment {
             activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
             refreshCounts(activity);
             
-            if (isBgLoaded) {
-                if (loadedBgUrl != null) {
-                    activity.previewBackground(loadedBgUrl);
-                } else {
-                    activity.previewBackground("none");
-                }
-            }
-            
             if (getView() != null) {
                 TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
                 if (tabTopApps != null) tabTopApps.setSelected(true);
             }
         }
-    }
-
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
     }
 
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
