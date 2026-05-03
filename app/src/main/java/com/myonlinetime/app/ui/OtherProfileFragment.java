@@ -63,13 +63,9 @@ public class OtherProfileFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         final MainActivity activity = (MainActivity) getActivity();
         
-        // Загружаем оригинальную разметку, но пока не привязываем
         final View originalView = inflater.inflate(R.layout.layout_profile, container, false);
         if (activity == null) return originalView;
 
-        // === ИДЕАЛЬНЫЙ ЭФФЕКТ КОЛЛАЖА ("СКЛЕЕННЫХ ФОТО") ===
-        // Мы оборачиваем профиль в FrameLayout и подкладываем фон прямо внутрь фрагмента!
-        // Теперь при свайпе/переходе фон будет выезжать ВМЕСТЕ с профилем, как единое целое.
         FrameLayout wrapper = new FrameLayout(activity);
         wrapper.setLayoutParams(originalView.getLayoutParams() != null ? originalView.getLayoutParams() : new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         originalView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -77,7 +73,6 @@ public class OtherProfileFragment extends Fragment {
         ImageView bgImageView = new ImageView(activity);
         bgImageView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         bgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        // Заливаем черным/тёмным, чтобы сквозь него не просвечивал наш глобальный фон
         bgImageView.setBackgroundColor(android.graphics.Color.parseColor("#121212")); 
 
         wrapper.addView(bgImageView);
@@ -136,11 +131,10 @@ public class OtherProfileFragment extends Fragment {
                         aboutView.setText(user.about != null ? user.about : "");
                         StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
-                        if (user.photo != null && user.photo.length() > 10) handleMediaLoading(activity, user.photo);
+                        if (user.photo != null && user.photo.length() > 5) handleMediaLoading(activity, user.photo);
                         renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
 
-                        // Мгновенная загрузка фона напрямую во фрагмент! (Без участия MainActivity)
-                        if (user.background != null && user.background.length() > 10) {
+                        if (user.background != null && user.background.length() > 5) {
                             Glide.with(activity).load(user.background).centerCrop().into(bgImageView);
                         } else {
                             bgImageView.setImageDrawable(null); 
@@ -185,7 +179,7 @@ public class OtherProfileFragment extends Fragment {
             });
         }
 
-        return wrapper; // Возвращаем обертку с собственным фоном!
+        return wrapper; 
     }
 
     private void refreshCounts(MainActivity activity) {
@@ -205,26 +199,14 @@ public class OtherProfileFragment extends Fragment {
         });
     }
 
-    private void handleMediaLoading(MainActivity activity, String base64Data) {
+    private void handleMediaLoading(MainActivity activity, String photoUrl) {
         if (!isAdded() || avatarView == null) return;
-        if (base64Data == null || base64Data.isEmpty()) {
+        if (photoUrl == null || photoUrl.isEmpty() || photoUrl.equals("null")) {
             Glide.with(activity).load(R.drawable.bg_edit_circle).circleCrop().into(avatarView);
             return;
         }
-        if (base64Data.startsWith("http")) {
-            Glide.with(activity).load(base64Data).circleCrop().into(avatarView);
-            return;
-        }
-        Utils.backgroundExecutor.execute(() -> {
-            try {
-                byte[] mediaBytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
-                new Handler(Looper.getMainLooper()).post(() -> {
-                    if (!isAdded()) return;
-                    avatarView.setVisibility(View.VISIBLE);
-                    Glide.with(activity).load(mediaBytes).circleCrop().into(avatarView);
-                });
-            } catch (Exception e) {}
-        });
+        // ПРОСТО ГРУЗИМ ССЫЛКУ! НИКАКОГО BASE64!
+        Glide.with(activity).load(photoUrl).circleCrop().error(R.drawable.bg_edit_circle).into(avatarView);
     }
 
     @Override
@@ -412,21 +394,17 @@ public class OtherProfileFragment extends Fragment {
         });
     }
 
-    // ИСПРАВЛЕНО: Белый текст для "Подписаться" + корректная смена волны!
     private void updateFollowButton(android.widget.Button btnFollow, boolean isFollowing) {
         if (isFollowing) {
-            // СОСТОЯНИЕ: ОТПИСАТЬСЯ
             btnFollow.setText(btnFollow.getContext().getString(R.string.btn_unfollow));
             btnFollow.setBackgroundResource(R.drawable.bg_button_gray);
             
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                // Если есть отдельная серая волна, можно вставить её сюда. Иначе оставляем грейпфрутовую
-                btnFollow.setForeground(androidx.core.content.ContextCompat.getDrawable(btnFollow.getContext(), R.drawable.ripple_button_grapefruit));
+                btnFollow.setForeground(androidx.core.content.ContextCompat.getDrawable(btnFollow.getContext(), R.drawable.ripple_button_gray));
             }
             
             btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textGrayDynamic));
         } else {
-            // СОСТОЯНИЕ: ПОДПИСАТЬСЯ
             btnFollow.setText(btnFollow.getContext().getString(R.string.btn_follow));
             btnFollow.setBackgroundResource(R.drawable.bg_button_grapefruit);
             
@@ -434,7 +412,6 @@ public class OtherProfileFragment extends Fragment {
                 btnFollow.setForeground(androidx.core.content.ContextCompat.getDrawable(btnFollow.getContext(), R.drawable.ripple_button_grapefruit));
             }
             
-            // Текст строго белый!
             btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textWhiteStatic));
         }
     }
