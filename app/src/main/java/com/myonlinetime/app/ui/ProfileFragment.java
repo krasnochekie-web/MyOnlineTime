@@ -54,6 +54,7 @@ public class ProfileFragment extends Fragment {
     private ImageView myBgImageView;
     private String myUid = "";
 
+    // Умная память аватарки
     private String currentLoadedAvatar = null;
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
@@ -161,8 +162,6 @@ public class ProfileFragment extends Fragment {
                 public void onLoaded(User user) {
                     if (!isAdded()) return;
 
-                    // === ВОТ ОНА, БЛОКИРОВКА СТАРЫХ ДАННЫХ ===
-                    // Если сейчас идет фоновая выгрузка картинок, мы игнорируем старый серверный ответ
                     if (EditProfileFragment.isProfileUploading) return;
 
                     if (user != null) {
@@ -288,13 +287,15 @@ public class ProfileFragment extends Fragment {
     private void handleMediaLoading(MainActivity activity, String base64Data, boolean useLocalFile, String uid) {
         if (!isAdded() || avatarView == null) return;
 
-        String newAvatarKey = useLocalFile ? "local_" + uid : (base64Data != null ? String.valueOf(base64Data.hashCode()) : "empty");
+        // ИСПРАВЛЕНИЕ: Умный ключ кэша, который видит и локальные изменения, и новые данные с сервера
+        String customAvatarPath = useLocalFile ? activity.prefs.getString("custom_avatar_path_" + uid, null) : null;
+        String b64Hash = base64Data != null ? String.valueOf(base64Data.hashCode()) : "empty";
+        String newAvatarKey = uid + "_" + customAvatarPath + "_" + b64Hash;
         
         if (newAvatarKey.equals(currentLoadedAvatar)) return;
         currentLoadedAvatar = newAvatarKey;
 
         if (useLocalFile) {
-            String customAvatarPath = activity.prefs.getString("custom_avatar_path_" + uid, null);
             if (customAvatarPath != null) {
                 File localCustomFile = new File(customAvatarPath);
                 if (localCustomFile.exists()) {
