@@ -4,15 +4,16 @@
     android:id="@+id/search_card_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginHorizontal="16dp"
     android:layout_marginVertical="4dp"
     android:background="@drawable/bg_app_card"
+    android:clipToOutline="true"
     android:clickable="true"
     android:focusable="true"
     android:foreground="?android:attr/selectableItemBackground"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:padding="12dp">
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="6dp">
 
     <ImageView
         android:id="@+id/search_user_avatar"
