@@ -88,6 +88,7 @@ public class OtherProfileFragment extends Fragment {
         View followersClick = view.findViewById(R.id.container_followers);
         View followingClick = view.findViewById(R.id.container_following);
 
+        // Всегда выделяем оранжевым "Топ за неделю"
         TextView tabTopApps = view.findViewById(R.id.tab_top_apps);
         if (tabTopApps != null) tabTopApps.setSelected(true);
 
@@ -262,15 +263,8 @@ public class OtherProfileFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        MainActivity activity = (MainActivity) getActivity();
-        if (activity != null) {
-            final String bgToClear = loadedBgUrl != null ? loadedBgUrl : "none";
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                if (activity.previewBgPath != null && activity.previewBgPath.equals(bgToClear)) {
-                    activity.clearPreviewBackground();
-                }
-            }, 400);
-        }
+        // Мы больше не пытаемся самостоятельно удалять фон здесь, 
+        // это вызывает гонки потоков при быстрых кликах. Навигатор в MainActivity сделает это лучше.
     }
 
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
@@ -280,9 +274,11 @@ public class OtherProfileFragment extends Fragment {
         }
         if (activity == null) return;
 
+        // Если пусто - скрываем ТОЛЬКО саму рамку контейнера.
         if (topApps == null || topApps.isEmpty()) {
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (container != null) container.setVisibility(View.GONE);
+                
                 long minutes = serverTotalTime / 1000 / 60;
                 long hours = minutes / 60;
                 long mins = minutes % 60;
