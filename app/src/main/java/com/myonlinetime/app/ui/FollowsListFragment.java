@@ -42,8 +42,8 @@ public class FollowsListFragment extends Fragment {
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.layout_follows_list, container, false);
         
-        targetUid = getArguments().getString("UID");
-        listType = getArguments().getString("TYPE");
+        targetUid = getArguments() != null ? getArguments().getString("UID") : "";
+        listType = getArguments() != null ? getArguments().getString("TYPE") : "";
 
         RecyclerView recyclerView = view.findViewById(R.id.follows_results_list);
         statusText = view.findViewById(R.id.follows_status_text);
@@ -58,7 +58,7 @@ public class FollowsListFragment extends Fragment {
 
         adapter = new UserListAdapter(activity, clickedUser -> {
             if (activity != null && activity.navigator != null) {
-                // === ИСПРАВЛЕНИЕ: Защита от клика по себе ===
+                // Защита от открытия собственного профиля через OtherProfileFragment
                 if (clickedUser.uid != null && clickedUser.uid.equals(myUid)) {
                     activity.navigator.switchScreen(4, myUid);
                 } else {
@@ -102,6 +102,7 @@ public class FollowsListFragment extends Fragment {
     private void loadData() {
         final MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
+        
         statusText.setVisibility(View.GONE);
         if (loadingSpinner != null) loadingSpinner.setVisibility(View.VISIBLE);
 
@@ -111,7 +112,10 @@ public class FollowsListFragment extends Fragment {
             GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
             if (acct != null) {
                 VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
-                    @Override public void onSuccess(String token) { activity.vpsToken = token; fetchList(activity, token); }
+                    @Override public void onSuccess(String token) { 
+                        activity.vpsToken = token; 
+                        fetchList(activity, token); 
+                    }
                     @Override public void onError(String error) { showError(); }
                 });
             } else { showError(); }
