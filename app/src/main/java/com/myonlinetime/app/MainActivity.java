@@ -387,15 +387,37 @@ public class MainActivity extends AppCompatActivity {
         exoPlayer.setVideoScalingMode(androidx.media3.common.C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING);
     }
 
-    // === ИСПРАВЛЕНИЕ: Предотвращаем перезапуск чужого фона ===
+    // === ИСПРАВЛЕНИЕ: Бесшовное превью ФОТО и ВИДЕО ===
     public void previewBackground(String path, boolean isVideo) {
-        if (path != null && path.equals(previewBgPath)) {
-            updateGlobalBackground(true);
+        if (path == null) return;
+
+        if (path.equals("none")) {
+            previewBgPath = "none";
+            bgHandler.removeCallbacks(hideBgRunnable);
+            if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
+            if (playerView != null) playerView.setVisibility(View.INVISIBLE);
+            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+            return;
+        }
+
+        if (path.equals(previewBgPath)) {
+            // Если этот фон УЖЕ был установлен - просто снимаем с паузы/восстанавливаем видимость
+            bgHandler.removeCallbacks(hideBgRunnable);
+            if (isVideo) {
+                if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+                if (playerView != null) playerView.setVisibility(View.VISIBLE);
+                if (exoPlayer != null && !exoPlayer.isPlaying()) exoPlayer.play();
+            } else {
+                if (playerView != null) playerView.setVisibility(View.INVISIBLE);
+                if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
+                if (globalImageView != null) globalImageView.setVisibility(View.VISIBLE);
+            }
             return;
         }
 
         previewBgPath = path;
         isPreviewVideo = isVideo;
+        currentBgPath = path; 
 
         bgHandler.removeCallbacks(hideBgRunnable);
 
@@ -426,7 +448,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // === ИСПРАВЛЕНИЕ: Не обнуляем currentBgPath, чтобы свой фон плавно перехватывал эстафету ===
     public void clearPreviewBackground() {
         if (previewBgPath != null) {
             previewBgPath = null;
@@ -463,8 +484,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (vpsToken != null) {
             VpsApi.deleteBackground(vpsToken, new VpsApi.Callback() {
-                @Override public void onSuccess(String result) {
-                }
+                @Override public void onSuccess(String result) {}
                 @Override public void onError(String error) {
                     runOnUiThread(() -> Toast.makeText(MainActivity.this, getString(R.string.err_server) + " " + error, Toast.LENGTH_SHORT).show());
                 }
@@ -491,11 +511,13 @@ public class MainActivity extends AppCompatActivity {
         return path;
     }
 
-    // === ИСПРАВЛЕНИЕ: Мягкая пауза вместо немедленного отключения ===
     public void updateGlobalBackground(boolean show) {
         if (hideBgRunnable == null) {
             hideBgRunnable = () -> {
                 if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
+                // ИСПРАВЛЕНИЕ: Мы НЕ делаем картинку INVISIBLE, если это preview.
+                // Но если это команда на полное отключение (show=false), тогда скрываем.
+                if (playerView != null) playerView.setVisibility(View.INVISIBLE);
                 if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
             };
         }
@@ -508,8 +530,15 @@ public class MainActivity extends AppCompatActivity {
 
         bgHandler.removeCallbacks(hideBgRunnable);
 
-        // Плавно продолжаем превью чужого фона
+        // ИСПРАВЛЕНИЕ: Если висит чужой фон (фото или видео), мы его восстанавливаем
         if (previewBgPath != null) {
+            if ("none".equals(previewBgPath)) {
+                if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
+                if (playerView != null) playerView.setVisibility(View.INVISIBLE);
+                if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+                return;
+            }
+
             if (isPreviewVideo) {
                 if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
                 if (playerView != null) playerView.setVisibility(View.VISIBLE);
@@ -557,7 +586,6 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Если это тот же самый фон, просто снимаем с паузы
         if (path.equals(currentBgPath)) {
             if (isVideo) {
                 if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
@@ -945,8 +973,7 @@ public class MainActivity extends AppCompatActivity {
     private void updateNavState(int index) {
         currentTab = index;
         
-        // === ИСПРАВЛЕНИЕ: Мягкое отключение превью при клике в нижнем меню ===
-        clearPreviewBackground();
+        clearPreviewBackground(); 
         
         mainHeader.setVisibility(View.VISIBLE);
         mainHeader.bringToFront(); 
