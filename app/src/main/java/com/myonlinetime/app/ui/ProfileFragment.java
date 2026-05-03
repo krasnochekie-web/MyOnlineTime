@@ -54,7 +54,6 @@ public class ProfileFragment extends Fragment {
     private ImageView myBgImageView;
     private String myUid = "";
 
-    // === ПАМЯТЬ АВАТАРКИ (Чтобы не моргала) ===
     private String currentLoadedAvatar = null;
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
@@ -161,6 +160,11 @@ public class ProfileFragment extends Fragment {
                 @Override
                 public void onLoaded(User user) {
                     if (!isAdded()) return;
+
+                    // === ВОТ ОНА, БЛОКИРОВКА СТАРЫХ ДАННЫХ ===
+                    // Если сейчас идет фоновая выгрузка картинок, мы игнорируем старый серверный ответ
+                    if (EditProfileFragment.isProfileUploading) return;
+
                     if (user != null) {
                         if (user.nickname != null) activity.prefs.edit().putString("my_nickname", user.nickname).apply();
                         if (user.about != null) activity.prefs.edit().putString("my_about", user.about).apply();
@@ -284,10 +288,8 @@ public class ProfileFragment extends Fragment {
     private void handleMediaLoading(MainActivity activity, String base64Data, boolean useLocalFile, String uid) {
         if (!isAdded() || avatarView == null) return;
 
-        // Формируем уникальный ключ текущей картинки
         String newAvatarKey = useLocalFile ? "local_" + uid : (base64Data != null ? String.valueOf(base64Data.hashCode()) : "empty");
         
-        // ЕСЛИ КАРТИНКА НЕ ИЗМЕНИЛАСЬ — ВООБЩЕ НЕ ТРОГАЕМ ЕЁ
         if (newAvatarKey.equals(currentLoadedAvatar)) return;
         currentLoadedAvatar = newAvatarKey;
 
