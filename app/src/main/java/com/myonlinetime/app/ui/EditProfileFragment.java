@@ -241,17 +241,20 @@ public class EditProfileFragment extends Fragment {
                  editor.putString("my_nickname", n);
                  editor.putString("my_about", a);
 
-                 // 1. Создаем локальные файлы для мгновенного отображения (UI)
+                 // 1. Создаем ЛОКАЛЬНЫЕ БЕЗОПАСНЫЕ ФАЙЛЫ (Они не удаляются!)
+                 final File[] safePhotoFile = {null};
+                 final File[] safeBgFile = {null};
+
                  if (finalPhotoFile != null) {
-                     String pPath = new File(activity.getFilesDir(), "avatar_" + uid + ".png").getAbsolutePath();
-                     try { copyFile(finalPhotoFile, new File(pPath)); } catch (Exception ignored) {}
-                     editor.putString("custom_avatar_path_" + uid, pPath);
+                     File pPath = new File(activity.getFilesDir(), "avatar_" + uid + ".png");
+                     try { copyFile(finalPhotoFile, pPath); safePhotoFile[0] = pPath; } catch (Exception ignored) {}
+                     editor.putString("custom_avatar_path_" + uid, pPath.getAbsolutePath());
                  }
                  if (finalBgFile != null) {
                      String ext = finalBgFile.getName().endsWith(".mp4") ? ".mp4" : ".jpg";
-                     String bPath = new File(activity.getFilesDir(), "my_bg_" + uid + ext).getAbsolutePath();
-                     try { copyFile(finalBgFile, new File(bPath)); } catch (Exception ignored) {}
-                     editor.putString("custom_bg_path_" + uid, bPath);
+                     File bPath = new File(activity.getFilesDir(), "my_bg_" + uid + ext);
+                     try { copyFile(finalBgFile, bPath); safeBgFile[0] = bPath; } catch (Exception ignored) {}
+                     editor.putString("custom_bg_path_" + uid, bPath.getAbsolutePath());
                      editor.putBoolean("custom_bg_is_video_" + uid, ext.equals(".mp4"));
                  }
                  
@@ -260,27 +263,27 @@ public class EditProfileFragment extends Fragment {
 
                  EditProfileFragment.isProfileUploading = true;
 
-                 // Мгновенно обновляем интерфейс
+                 // 2. Очищаем превью (ЗДЕСЬ УДАЛЯЛСЯ ВРЕМЕННЫЙ ФАЙЛ ФОНА)
                  activity.clearPreviewBackground();
                  activity.updateGlobalBackground(true);
                  activity.updateAvatarInUI();
                  activity.navigator.closeSubScreen();
                  LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
 
-                 // 2. Изолированный поток для отправки на сервер
+                 // 3. Отправляем файлы на сервер, используя только БЕЗОПАСНЫЕ КОПИИ
                  Utils.backgroundExecutor.execute(() -> {
                      File serverUploadPhoto = null;
                      File serverUploadBg = null;
 
-                     // Создаем ПОЛНОСТЬЮ НЕЗАВИСИМЫЕ копии файлов, чтобы плеер/интерфейс их не заблокировал
                      try {
-                         if (finalPhotoFile != null) {
-                             serverUploadPhoto = new File(activity.getCacheDir(), "server_upload_avatar_" + uid + (finalPhotoFile.getName().endsWith(".gif") ? ".gif" : ".png"));
-                             copyFile(finalPhotoFile, serverUploadPhoto);
+                         // Читаем из safePhotoFile и safeBgFile, которые гарантированно существуют!
+                         if (safePhotoFile[0] != null && safePhotoFile[0].exists()) {
+                             serverUploadPhoto = new File(activity.getCacheDir(), "server_upload_avatar_" + uid + (safePhotoFile[0].getName().endsWith(".gif") ? ".gif" : ".png"));
+                             copyFile(safePhotoFile[0], serverUploadPhoto);
                          }
-                         if (finalBgFile != null) {
-                             serverUploadBg = new File(activity.getCacheDir(), "server_upload_bg_" + uid + (finalBgFile.getName().endsWith(".mp4") ? ".mp4" : ".jpg"));
-                             copyFile(finalBgFile, serverUploadBg);
+                         if (safeBgFile[0] != null && safeBgFile[0].exists()) {
+                             serverUploadBg = new File(activity.getCacheDir(), "server_upload_bg_" + uid + (safeBgFile[0].getName().endsWith(".mp4") ? ".mp4" : ".jpg"));
+                             copyFile(safeBgFile[0], serverUploadBg);
                          }
                      } catch (Exception e) { e.printStackTrace(); }
 
@@ -293,7 +296,6 @@ public class EditProfileFragment extends Fragment {
                              public void onSuccess(String result) {
                                  try {
                                      JSONObject json = new JSONObject(result);
-                                     // Расширенный парсинг (ищем ключи с Url и без, на случай разных форматов)
                                      String newPhotoUrl = json.has("photoUrl") ? json.optString("photoUrl") : json.optString("photo", null);
                                      String newBgUrl = json.has("backgroundUrl") ? json.optString("backgroundUrl") : json.optString("background", null);
 
@@ -313,7 +315,6 @@ public class EditProfileFragment extends Fragment {
                                  } catch (Exception ignored) {
                                      EditProfileFragment.isProfileUploading = false;
                                  } finally {
-                                     // Удаляем временные серверные копии строго ПОСЛЕ ответа
                                      if (isolatedPhoto != null && isolatedPhoto.exists()) isolatedPhoto.delete();
                                      if (isolatedBg != null && isolatedBg.exists()) isolatedBg.delete();
                                      if (pendingPhotoFile != null && pendingPhotoFile.exists()) pendingPhotoFile.delete();
