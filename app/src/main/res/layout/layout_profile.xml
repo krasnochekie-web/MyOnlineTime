@@ -36,7 +36,7 @@
                     android:tint="@color/textWhiteStatic"
                     android:visibility="gone" />
 
-                <!-- ОЧИЩЕННЫЙ КОНТЕЙНЕР ДЛЯ АВАТАРКИ (Только картинка/GIF) -->
+                <!-- ОЧИЩЕННЫЙ КОНТЕЙНЕР ДЛЯ АВАТАРКИ -->
                 <FrameLayout
                     android:layout_width="90dp"
                     android:layout_height="90dp"
@@ -50,20 +50,30 @@
                         android:scaleType="centerCrop" />
                 </FrameLayout>
 
-                <ImageView
-                    android:id="@+id/btn_edit_profile"
+                <!-- Идеально круглая обрезка волны для кнопки редактирования -->
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/btn_edit_profile_card"
                     android:layout_width="32dp"
                     android:layout_height="32dp"
                     android:layout_alignParentEnd="true"
                     android:layout_alignParentTop="true"
-                    android:layout_marginTop="4dp" 
-                    android:background="@drawable/bg_edit_circle"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="@drawable/ripple_circle"
-                    android:padding="6dp"
-                    android:src="@drawable/ic_edit"
-                    android:tint="@color/textDynamic" />
+                    android:layout_marginTop="4dp"
+                    app:cardCornerRadius="16dp"
+                    app:cardElevation="0dp"
+                    app:cardBackgroundColor="@android:color/transparent">
+
+                    <ImageView
+                        android:id="@+id/btn_edit_profile"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_edit_circle"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?android:attr/selectableItemBackgroundBorderless"
+                        android:padding="6dp"
+                        android:src="@drawable/ic_edit"
+                        android:tint="@color/textDynamic" />
+                </androidx.cardview.widget.CardView>
             </RelativeLayout>
 
             <TextView
@@ -195,22 +205,21 @@
                     android:ellipsize="end" />
             </LinearLayout>
 
-            <!-- КНОПКА ПОДПИСАТЬСЯ: Добавлен эффект волны и обрезка по краям -->
+            <!-- КНОПКА ПОДПИСАТЬСЯ: Кастомная волна и по умолчанию белый текст -->
             <Button
                 android:id="@+id/btn_follow"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:layout_marginHorizontal="16dp"
                 android:layout_marginTop="16dp"
-                android:background="@drawable/bg_button_gray"
+                android:background="@drawable/bg_button_grapefruit"
                 android:text="@string/btn_follow"
-                android:textColor="@color/burgundyRed"
+                android:textColor="@color/textWhiteStatic"
                 android:textStyle="bold"
                 android:visibility="gone"
-                android:foreground="?android:attr/selectableItemBackground"
-                android:clipToOutline="true" />
+                android:foreground="@drawable/ripple_button_grapefruit" />
 
-            <!-- КНОПКА GOOGLE: Добавлен эффект волны и обрезка по краям -->
+            <!-- КНОПКА GOOGLE: Кастомная волна -->
             <Button
                 android:id="@+id/btn_google_sign_in"
                 android:layout_width="match_parent"
@@ -222,8 +231,7 @@
                 android:textColor="@color/burgundyRed"
                 android:textStyle="bold"
                 android:visibility="gone"
-                android:foreground="?android:attr/selectableItemBackground"
-                android:clipToOutline="true" />
+                android:foreground="@drawable/ripple_button_grapefruit" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -284,11 +292,13 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical" />
 
+                <!-- Добавлен clipToOutline для ровной волны -->
                 <ImageView
                     android:id="@+id/btn_expand_apps"
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:background="?android:attr/selectableItemBackground"
+                    android:clipToOutline="true"
                     android:paddingTop="4dp"
                     android:paddingBottom="4dp"
                     android:src="@android:drawable/ic_menu_sort_by_size"
@@ -300,6 +310,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:background="?android:attr/selectableItemBackground"
+                    android:clipToOutline="true"
                     android:paddingTop="4dp"
                     android:paddingBottom="4dp"
                     android:src="@android:drawable/btn_minus"
