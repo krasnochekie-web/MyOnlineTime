@@ -73,9 +73,6 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean isSyncingBg = false; 
 
-    private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-    private Runnable hideBgRunnable;
-
     private final SharedPreferences.OnSharedPreferenceChangeListener notifListener = (sharedPrefs, key) -> {
         if ("notif_history_array".equals(key)) {
             runOnUiThread(this::updateNotificationBadge);
@@ -354,18 +351,18 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // === ИНИЦИАЛИЗАЦИЯ ДВУХ СЛОЕВ ПАМЯТИ (БЕЗ ВИДЕОПЛЕЕРОВ) ===
+    // === ИНИЦИАЛИЗАЦИЯ ДВУХ СЛОЕВ ПАМЯТИ (ТОЛЬКО ИЗОБРАЖЕНИЯ / GIF) ===
     private void initGlobalBackground() {
-        // Старый видеоплеер можно навсегда спрятать
+        // Убираем рудименты видеоплеера из UI
         View oldVideoView = findViewById(R.id.global_background_video);
         if (oldVideoView != null) oldVideoView.setVisibility(View.GONE);
 
         globalImageView = findViewById(R.id.global_background_image);
         
-        // Добавляем второй слой для превью (для чужих профилей)
         ViewGroup parent = (ViewGroup) globalImageView.getParent();
         int insertIndex = parent.indexOfChild(globalImageView) + 1;
         
+        // Добавляем второй слой поверх первого
         previewImageView = new ImageView(this);
         previewImageView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         previewImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -373,45 +370,44 @@ public class MainActivity extends AppCompatActivity {
         parent.addView(previewImageView, insertIndex);
     }
 
-    // === УПРАВЛЕНИЕ ЧУЖИМ ФОНОМ ===
+    // === УПРАВЛЕНИЕ ЧУЖИМ ФОНОМ С ИДЕАЛЬНЫМ CROSSFADE ===
     public void previewBackground(String path) {
         if (path == null) return;
+        if (path.equals(previewBgPath)) return; // Уже показывается этот чужой фон
+
+        previewBgPath = path;
 
         if (path.equals("none")) {
-            previewBgPath = "none";
-            if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
-            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+            fadeOut(previewImageView);
+            fadeOut(globalImageView);
             return;
         }
 
-        if (path.equals(previewBgPath)) {
-            // Если фон уже загружен - просто показываем его (скрывая свой)
-            if (previewImageView != null) previewImageView.setVisibility(View.VISIBLE);
-            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
-            return;
-        }
+        // Мы открываем чужой фон - значит плавно проявляем слой 2, и скрываем слой 1.
+        previewImageView.animate().cancel();
+        globalImageView.animate().cancel();
 
-        // Загрузка нового чужого профиля
-        previewBgPath = path;
-        currentBgPath = path; 
-
-        if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+        previewImageView.setVisibility(View.VISIBLE);
+        previewImageView.setAlpha(0f);
         
-        if (previewImageView != null) {
-            previewImageView.setVisibility(View.VISIBLE);
-            // .dontAnimate() полностью избавляет от вспышек белого или черного при переключении
-            if (path.startsWith("http")) {
-                Glide.with(this).load(path).dontAnimate().centerCrop().into(previewImageView);
-            } else {
-                Glide.with(this).load(new File(path)).dontAnimate().centerCrop().into(previewImageView);
-            }
+        // Убрали dontAnimate(), теперь Glide будет нормально запускать анимацию GIF-ок!
+        if (path.startsWith("http")) {
+            Glide.with(this).load(path).centerCrop().into(previewImageView);
+        } else {
+            Glide.with(this).load(new File(path)).centerCrop().into(previewImageView);
         }
+
+        previewImageView.animate().alpha(1f).setDuration(400).withEndAction(() -> {
+            globalImageView.setVisibility(View.INVISIBLE);
+            globalImageView.setAlpha(1f); // Сброс состояния для будущих показов
+        }).start();
     }
 
-    // === ПЕРЕКЛЮЧЕНИЕ ФОНОВ БЕЗ УНИЧТОЖЕНИЯ ===
+    // === ПЕРЕКЛЮЧЕНИЕ ФОНОВ ПРИ НАВИГАЦИИ ===
     public void clearPreviewBackground() {
         if (previewBgPath != null) {
             previewBgPath = null;
+            // Если переходим обратно в свой профиль (4), загружаем глобальный фон
             if (currentTab == 4) {
                 updateGlobalBackground(true);
             } else {
@@ -435,7 +431,7 @@ public class MainActivity extends AppCompatActivity {
 
         prefs.edit()
             .remove("custom_bg_path_" + uid)
-            .remove("custom_bg_is_video_" + uid) // Очистка старых данных
+            .remove("custom_bg_is_video_" + uid)
             .remove("synced_bg_url_" + uid)
             .remove("my_bg_base64")
             .apply();
@@ -474,83 +470,84 @@ public class MainActivity extends AppCompatActivity {
         return path;
     }
 
-    // === УПРАВЛЕНИЕ НАШИМ ФОНОМ ===
-    public void updateGlobalBackground(boolean show) {
-        if (hideBgRunnable == null) {
-            hideBgRunnable = () -> {
-                if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
-                if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
-            };
+    // === ВНУТРЕННИЙ ПОМОЩНИК ДЛЯ ПЛАВНОГО СКРЫТИЯ ===
+    private void fadeOut(View v) {
+        if (v != null && v.getVisibility() == View.VISIBLE) {
+            v.animate().cancel();
+            v.animate().alpha(0f).setDuration(400).withEndAction(() -> {
+                v.setVisibility(View.INVISIBLE);
+                v.setAlpha(1f);
+            }).start();
         }
+    }
 
-        if (!show) {
-            bgHandler.removeCallbacks(hideBgRunnable);
-            bgHandler.postDelayed(hideBgRunnable, 200);
-            return;
-        }
-
-        bgHandler.removeCallbacks(hideBgRunnable);
-
-        if (previewBgPath != null) {
-            if ("none".equals(previewBgPath)) {
-                bgHandler.postDelayed(hideBgRunnable, 200);
-                return;
-            }
-            previewBackground(previewBgPath);
-            return;
-        }
-
+    private String resolveMyBackground() {
         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
-        if (acct == null) {
-            bgHandler.postDelayed(hideBgRunnable, 200);
-            return;
-        }
-        
+        if (acct == null) return null;
         String uid = acct.getId();
+        
         String myBgUrl = prefs.getString("my_bg_base64", null);
-        if (myBgUrl != null && myBgUrl.startsWith("http")) {
-            syncMyBackground(myBgUrl);
-        }
-
-        String targetPath = null;
+        if (myBgUrl != null && myBgUrl.startsWith("http")) syncMyBackground(myBgUrl);
 
         if (currentTab == 4 && currentBgBase64 != null && !currentBgBase64.isEmpty() && !currentBgBase64.equals("null")) {
-            targetPath = resolveBackgroundPath(currentBgBase64);
+            return resolveBackgroundPath(currentBgBase64);
         } else {
-            targetPath = prefs.getString("custom_bg_path_" + uid, null);
+            String targetPath = prefs.getString("custom_bg_path_" + uid, null);
             if ((targetPath == null || !new File(targetPath).exists()) && myBgUrl != null && myBgUrl.startsWith("http")) {
-                targetPath = resolveBackgroundPath(myBgUrl);
+                return resolveBackgroundPath(myBgUrl);
             }
+            return (targetPath != null && new File(targetPath).exists()) ? targetPath : null;
+        }
+    }
+
+    // === УПРАВЛЕНИЕ НАШИМ ФОНОМ С ИДЕАЛЬНЫМ CROSSFADE ===
+    public void updateGlobalBackground(boolean show) {
+        if (!show) {
+            fadeOut(globalImageView);
+            fadeOut(previewImageView);
+            return;
         }
 
-        if (targetPath == null || targetPath.isEmpty() || (!new File(targetPath).exists() && !targetPath.startsWith("http"))) {
-            bgHandler.postDelayed(hideBgRunnable, 200);
+        if (previewBgPath != null) return; // Мы сейчас на чужом профиле, не перебиваем его
+
+        String targetPath = resolveMyBackground();
+
+        if (targetPath == null || targetPath.isEmpty()) {
             currentBgPath = null;
+            fadeOut(globalImageView);
+            fadeOut(previewImageView);
             return;
         }
 
-        // Наш фон уже загружен - просто показываем его!
-        if (targetPath.equals(currentBgPath)) {
-            if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
-            if (globalImageView != null) globalImageView.setVisibility(View.VISIBLE);
+        // Если наш фон УЖЕ показывается корректно, просто прячем превью (чтобы не перекрывало)
+        if (targetPath.equals(currentBgPath) && globalImageView.getVisibility() == View.VISIBLE) {
+            fadeOut(previewImageView);
             return;
-        }
-
-        if (currentBgPath != null && currentBgPath.startsWith("http") && targetPath != null && !targetPath.startsWith("http")) {
-            String syncedUrl = prefs.getString("synced_bg_url_" + uid, "");
-            if (currentBgPath.equals(syncedUrl) || currentBgPath.equals(currentBgBase64)) return; 
         }
 
         currentBgPath = targetPath;
 
-        if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
-        if (globalImageView != null) {
-            globalImageView.setVisibility(View.VISIBLE);
-            if (targetPath.startsWith("http")) {
-                Glide.with(this).load(targetPath).dontAnimate().centerCrop().into(globalImageView);
-            } else {
-                Glide.with(this).load(new File(targetPath)).dontAnimate().centerCrop().into(globalImageView);
-            }
+        globalImageView.animate().cancel();
+        previewImageView.animate().cancel();
+
+        globalImageView.setVisibility(View.VISIBLE);
+        globalImageView.setAlpha(0f);
+        
+        if (targetPath.startsWith("http")) {
+            Glide.with(this).load(targetPath).centerCrop().into(globalImageView);
+        } else {
+            Glide.with(this).load(new File(targetPath)).centerCrop().into(globalImageView);
+        }
+
+        // Плавно проявляем наш фон (400мс)
+        globalImageView.animate().alpha(1f).setDuration(400).start();
+        
+        // И одновременно плавно растворяем чужой фон
+        if (previewImageView.getVisibility() == View.VISIBLE) {
+            previewImageView.animate().alpha(0f).setDuration(400).withEndAction(() -> {
+                previewImageView.setVisibility(View.INVISIBLE);
+                previewImageView.setAlpha(1f); // Сброс состояния
+            }).start();
         }
     }   
     
@@ -572,7 +569,7 @@ public class MainActivity extends AppCompatActivity {
         Utils.backgroundExecutor.execute(() -> {
             try {
                 boolean isGif = bgUrl.toLowerCase().endsWith(".gif");
-                String ext = isGif ? ".gif" : ".jpg"; // Видео форматы больше не обрабатываются
+                String ext = isGif ? ".gif" : ".jpg"; 
                 
                 File dir = getFilesDir();
                 File[] files = dir.listFiles();
@@ -750,6 +747,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleBackNavigation() {
         if (navigator.closeSubScreen()) {
+            // ИСПРАВЛЕНИЕ: Вызываем очистку превью (фон плавно перетечёт обратно, если нужно)
+            clearPreviewBackground();
             syncHeaderState(); 
             return; 
         }
@@ -878,6 +877,7 @@ public class MainActivity extends AppCompatActivity {
     private void updateNavState(int index) {
         currentTab = index;
         
+        // ИСПРАВЛЕНИЕ: Вызываем очистку превью (оно само плавно затухнет)
         clearPreviewBackground();
         
         mainHeader.setVisibility(View.VISIBLE);
