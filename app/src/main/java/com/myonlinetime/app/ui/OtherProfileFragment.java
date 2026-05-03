@@ -89,7 +89,6 @@ public class OtherProfileFragment extends Fragment {
         View followersClick = view.findViewById(R.id.container_followers);
         View followingClick = view.findViewById(R.id.container_following);
 
-        // === ГАРАНТИЯ ВЫДЕЛЕНИЯ ОРАНЖЕВЫМ ===
         TextView tabTopApps = view.findViewById(R.id.tab_top_apps);
         if (tabTopApps != null) tabTopApps.setSelected(true);
 
@@ -219,6 +218,14 @@ public class OtherProfileFragment extends Fragment {
         });
     }
 
+    private String formatDeletedAppName(String pkg) {
+        try {
+            String[] parts = pkg.split("\\.");
+            String name = parts[parts.length - 1]; 
+            return name.substring(0, 1).toUpperCase() + name.substring(1); 
+        } catch (Exception e) { return pkg; }
+    }
+
     @Override
     public void onResume() {
         super.onResume();
@@ -248,6 +255,7 @@ public class OtherProfileFragment extends Fragment {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
             refreshCounts(activity);
+            
             if (loadedBgUrl != null) {
                 activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
             } else {
@@ -264,15 +272,7 @@ public class OtherProfileFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        MainActivity activity = (MainActivity) getActivity();
-        if (activity != null) {
-            final String bgToClear = loadedBgUrl != null ? loadedBgUrl : "none";
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                if (activity.previewBgPath != null && activity.previewBgPath.equals(bgToClear)) {
-                    activity.clearPreviewBackground();
-                }
-            }, 400);
-        }
+        // Мы больше не пытаемся агрессивно стирать фон, MainActivity сама разберется
     }
 
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
@@ -286,6 +286,7 @@ public class OtherProfileFragment extends Fragment {
         if (topApps == null || topApps.isEmpty()) {
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (container != null) container.setVisibility(View.GONE);
+                
                 long minutes = serverTotalTime / 1000 / 60;
                 long hours = minutes / 60;
                 long mins = minutes % 60;
