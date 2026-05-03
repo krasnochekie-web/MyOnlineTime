@@ -38,7 +38,6 @@ public class OtherProfileFragment extends Fragment {
     private String targetUid = "";
     private String backTitle = "";
 
-    // === СОСТОЯНИЕ ФОНА ===
     private String loadedBgUrl = null;
     private boolean isBgLoaded = false;
 
@@ -73,6 +72,10 @@ public class OtherProfileFragment extends Fragment {
 
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
+
+        if (activity.navigator != null && activity.navigator.getCurrentTabIndex() == 4) {
+            activity.updateGlobalBackground(true);
+        }
 
         final TextView nameView = view.findViewById(R.id.profile_name);
         final TextView aboutView = view.findViewById(R.id.profile_about);
@@ -111,15 +114,12 @@ public class OtherProfileFragment extends Fragment {
         followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "followers")));
         followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "following")));
 
-        final long openTime = System.currentTimeMillis();
-
         if (activity.vpsToken != null) {
             VpsApi.getUser(activity, activity.vpsToken, targetUid, new VpsApi.UserCallback() {
                 @Override
                 public void onLoaded(User user) {
                     if (!isAdded()) return;
                     if (user != null) {
-                        // Тексты обновляем мгновенно
                         nameView.setText(user.nickname != null ? user.nickname : activity.getString(R.string.no_name));
                         aboutView.setText(user.about != null ? user.about : "");
                         StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
@@ -127,24 +127,15 @@ public class OtherProfileFragment extends Fragment {
                         if (user.photo != null && user.photo.length() > 10) handleMediaLoading(activity, user.photo);
                         renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
 
-                        // === ИДЕАЛЬНАЯ ЗАДЕРЖКА ДЛЯ ФОНА ===
-                        // Мы ждем, пока анимация перехода фрагмента (350мс) полностью завершится, 
-                        // и только тогда меняем фон. Никаких "проскакиваний" старых профилей!
-                        long elapsed = System.currentTimeMillis() - openTime;
-                        long delay = Math.max(0, 350 - elapsed);
-                        
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            if (!isAdded()) return;
-                            isBgLoaded = true;
-                            if (user.background != null && user.background.length() > 10) {
-                                loadedBgUrl = user.background;
-                                activity.previewBackground(loadedBgUrl);
-                            } else {
-                                loadedBgUrl = null;
-                                activity.previewBackground("none"); 
-                            }
-                        }, delay);
-
+                        // === МГНОВЕННОЕ ВКЛЮЧЕНИЕ ФОНА ===
+                        isBgLoaded = true;
+                        if (user.background != null && user.background.length() > 10) {
+                            loadedBgUrl = user.background;
+                            activity.previewBackground(loadedBgUrl);
+                        } else {
+                            loadedBgUrl = null;
+                            activity.previewBackground("none"); 
+                        }
                     } else {
                         nameView.setText(activity.getString(R.string.new_user));
                     }
@@ -227,6 +218,14 @@ public class OtherProfileFragment extends Fragment {
         });
     }
 
+    private String formatDeletedAppName(String pkg) {
+        try {
+            String[] parts = pkg.split("\\.");
+            String name = parts[parts.length - 1]; 
+            return name.substring(0, 1).toUpperCase() + name.substring(1); 
+        } catch (Exception e) { return pkg; }
+    }
+
     @Override
     public void onResume() {
         super.onResume();
@@ -234,7 +233,6 @@ public class OtherProfileFragment extends Fragment {
         if (activity != null && !isHidden()) {
             refreshCounts(activity);
             
-            // Восстанавливаем фон только если он уже был загружен
             if (isBgLoaded) {
                 if (loadedBgUrl != null) {
                     activity.previewBackground(loadedBgUrl);
@@ -279,7 +277,6 @@ public class OtherProfileFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        // Мы НЕ обнуляем фон здесь! Это позволяет ему плавно уехать вместе с анимацией фрагмента
     }
 
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
@@ -291,7 +288,7 @@ public class OtherProfileFragment extends Fragment {
 
         if (topApps == null || topApps.isEmpty()) {
             new Handler(Looper.getMainLooper()).post(() -> {
-                if (container != null) container.setVisibility(View.GONE); // Скрывается только полоска!
+                if (container != null) container.setVisibility(View.GONE); 
                 long minutes = serverTotalTime / 1000 / 60;
                 long hours = minutes / 60;
                 long mins = minutes % 60;
