@@ -44,6 +44,9 @@ import java.io.OutputStream;
 
 public class EditProfileFragment extends Fragment {
 
+    // === ФЛАГ ДЛЯ БЛОКИРОВКИ СТАРЫХ ДАННЫХ С СЕРВЕРА ВО ВРЕМЯ ВЫГРУЗКИ ===
+    public static boolean isProfileUploading = false;
+
     private File pendingPhotoFile = null;
     private File pendingBgFile = null;
     
@@ -82,11 +85,9 @@ public class EditProfileFragment extends Fragment {
         }
     }
 
-    // === ИДЕАЛЬНАЯ ЛОГИКА АНТИ-СПАМА ===
     private boolean isActionSpam(boolean isMedia) {
         long now = System.currentTimeMillis();
         
-        // ЖЕСТКОЕ ПРАВИЛО: Если наказание еще действует, ЛЮБАЯ попытка сбрасывает таймер на 30 сек заново!
         if (now < penaltyEndTime) {
             penaltyEndTime = now + 30000; 
             if (getActivity() != null) Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
@@ -104,10 +105,8 @@ public class EditProfileFragment extends Fragment {
             }
         } else {
             textAttemptTimes.add(now);
-            // Удаляем старые клики (старше 5 секунд)
             while (!textAttemptTimes.isEmpty() && now - textAttemptTimes.getFirst() > 5000) textAttemptTimes.removeFirst();
             
-            // Если за 5 секунд накопилось более 5 попыток проверки/сохранения
             if (textAttemptTimes.size() > 5) {
                 penaltyEndTime = now + 30000;
                 textAttemptTimes.clear();
@@ -237,9 +236,6 @@ public class EditProfileFragment extends Fragment {
              String uid = acct.getId();
              File finalBgFile = pendingBgFile;
              File finalPhotoFile = pendingPhotoFile;
-             
-             final String oldName = activity.prefs.getString("my_nickname", "...");
-             final String oldAbout = activity.prefs.getString("my_about", "");
 
              Runnable performOptimisticSaveAndUpload = () -> {
                  SharedPreferences.Editor editor = activity.prefs.edit();
@@ -261,10 +257,15 @@ public class EditProfileFragment extends Fragment {
                  editor.apply();
                  activity.mMemoryCache.remove("avatar_" + uid);
 
+                 // 1. ПОДНИМАЕМ ФЛАГ: Начинаем выгрузку!
+                 EditProfileFragment.isProfileUploading = true;
+
                  activity.clearPreviewBackground();
                  activity.updateGlobalBackground(true);
                  activity.updateAvatarInUI();
                  activity.navigator.closeSubScreen();
+                 
+                 // 2. МГНОВЕННО обновляем интерфейс для пользователя
                  LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
 
                  Utils.backgroundExecutor.execute(() -> {
@@ -312,16 +313,26 @@ public class EditProfileFragment extends Fragment {
                                              successEditor.putString("synced_bg_url_" + uid, newBgUrl);
                                          }
                                          successEditor.apply();
+                                         
+                                         // 3. ОПУСКАЕМ ФЛАГ: Сервер получил данные. Снова сигналим UI обновить кэш.
+                                         EditProfileFragment.isProfileUploading = false;
+                                         LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
                                      });
 
                                      if (pendingPhotoFile != null && pendingPhotoFile.exists()) pendingPhotoFile.delete();
                                      if (pendingBgFile != null && pendingBgFile.exists()) pendingBgFile.delete();
                                      if (uploadBg != null && uploadBg.exists() && uploadBg != finalBgFile) uploadBg.delete();
                                      if (uploadPhoto != null && uploadPhoto.exists() && uploadPhoto != finalPhotoFile) uploadPhoto.delete();
-                                 } catch (Exception ignored) {}
+                                 } catch (Exception ignored) {
+                                     EditProfileFragment.isProfileUploading = false;
+                                 }
                              }
-                             @Override public void onError(String error) {}
+                             @Override public void onError(String error) {
+                                 EditProfileFragment.isProfileUploading = false;
+                             }
                          });
+                     } else {
+                         EditProfileFragment.isProfileUploading = false;
                      }
                  });
              };
