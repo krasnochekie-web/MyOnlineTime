@@ -38,7 +38,9 @@ public class OtherProfileFragment extends Fragment {
     private String targetUid = "";
     private String backTitle = "";
 
+    // === СОСТОЯНИЕ ФОНА ===
     private String loadedBgUrl = null;
+    private boolean isBgLoaded = false;
 
     private static class AppUiData {
         String pkgName;
@@ -72,10 +74,6 @@ public class OtherProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
 
-        if (activity.navigator != null && activity.navigator.getCurrentTabIndex() == 4) {
-            activity.updateGlobalBackground(true);
-        }
-
         final TextView nameView = view.findViewById(R.id.profile_name);
         final TextView aboutView = view.findViewById(R.id.profile_about);
         avatarView = view.findViewById(R.id.profile_avatar);
@@ -88,7 +86,6 @@ public class OtherProfileFragment extends Fragment {
         View followersClick = view.findViewById(R.id.container_followers);
         View followingClick = view.findViewById(R.id.container_following);
 
-        // Всегда выделяем оранжевым "Топ за неделю"
         TextView tabTopApps = view.findViewById(R.id.tab_top_apps);
         if (tabTopApps != null) tabTopApps.setSelected(true);
 
@@ -114,27 +111,40 @@ public class OtherProfileFragment extends Fragment {
         followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "followers")));
         followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "following")));
 
+        final long openTime = System.currentTimeMillis();
+
         if (activity.vpsToken != null) {
             VpsApi.getUser(activity, activity.vpsToken, targetUid, new VpsApi.UserCallback() {
                 @Override
                 public void onLoaded(User user) {
                     if (!isAdded()) return;
                     if (user != null) {
+                        // Тексты обновляем мгновенно
                         nameView.setText(user.nickname != null ? user.nickname : activity.getString(R.string.no_name));
                         aboutView.setText(user.about != null ? user.about : "");
                         StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
                         if (user.photo != null && user.photo.length() > 10) handleMediaLoading(activity, user.photo);
-
-                        if (user.background != null && user.background.length() > 10) {
-                            loadedBgUrl = user.background;
-                            activity.previewBackground(loadedBgUrl);
-                        } else {
-                            loadedBgUrl = null;
-                            activity.previewBackground("none"); 
-                        }
-
                         renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
+
+                        // === ИДЕАЛЬНАЯ ЗАДЕРЖКА ДЛЯ ФОНА ===
+                        // Мы ждем, пока анимация перехода фрагмента (350мс) полностью завершится, 
+                        // и только тогда меняем фон. Никаких "проскакиваний" старых профилей!
+                        long elapsed = System.currentTimeMillis() - openTime;
+                        long delay = Math.max(0, 350 - elapsed);
+                        
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            if (!isAdded()) return;
+                            isBgLoaded = true;
+                            if (user.background != null && user.background.length() > 10) {
+                                loadedBgUrl = user.background;
+                                activity.previewBackground(loadedBgUrl);
+                            } else {
+                                loadedBgUrl = null;
+                                activity.previewBackground("none"); 
+                            }
+                        }, delay);
+
                     } else {
                         nameView.setText(activity.getString(R.string.new_user));
                     }
@@ -223,10 +233,14 @@ public class OtherProfileFragment extends Fragment {
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null && !isHidden()) {
             refreshCounts(activity);
-            if (loadedBgUrl != null) {
-                activity.previewBackground(loadedBgUrl);
-            } else {
-                activity.previewBackground("none");
+            
+            // Восстанавливаем фон только если он уже был загружен
+            if (isBgLoaded) {
+                if (loadedBgUrl != null) {
+                    activity.previewBackground(loadedBgUrl);
+                } else {
+                    activity.previewBackground("none");
+                }
             }
         }
         
@@ -247,10 +261,12 @@ public class OtherProfileFragment extends Fragment {
             activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
             refreshCounts(activity);
             
-            if (loadedBgUrl != null) {
-                activity.previewBackground(loadedBgUrl);
-            } else {
-                activity.previewBackground("none");
+            if (isBgLoaded) {
+                if (loadedBgUrl != null) {
+                    activity.previewBackground(loadedBgUrl);
+                } else {
+                    activity.previewBackground("none");
+                }
             }
             
             if (getView() != null) {
@@ -263,8 +279,7 @@ public class OtherProfileFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        // Мы больше не пытаемся самостоятельно удалять фон здесь, 
-        // это вызывает гонки потоков при быстрых кликах. Навигатор в MainActivity сделает это лучше.
+        // Мы НЕ обнуляем фон здесь! Это позволяет ему плавно уехать вместе с анимацией фрагмента
     }
 
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
@@ -274,11 +289,9 @@ public class OtherProfileFragment extends Fragment {
         }
         if (activity == null) return;
 
-        // Если пусто - скрываем ТОЛЬКО саму рамку контейнера.
         if (topApps == null || topApps.isEmpty()) {
             new Handler(Looper.getMainLooper()).post(() -> {
-                if (container != null) container.setVisibility(View.GONE);
-                
+                if (container != null) container.setVisibility(View.GONE); // Скрывается только полоска!
                 long minutes = serverTotalTime / 1000 / 60;
                 long hours = minutes / 60;
                 long mins = minutes % 60;
