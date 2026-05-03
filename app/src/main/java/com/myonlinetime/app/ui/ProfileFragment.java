@@ -522,4 +522,8 @@ public class ProfileFragment extends Fragment {
         });
         dialog.show();
     }
+    private void requestLoadMyStats() {
+        uiHandler.removeCallbacks(loadMyStatsRunnable);
+        uiHandler.postDelayed(loadMyStatsRunnable, 150);
+    }
 }
