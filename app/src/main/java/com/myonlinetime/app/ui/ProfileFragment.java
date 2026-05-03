@@ -51,14 +51,16 @@ public class ProfileFragment extends Fragment {
     private final Gson gson = new Gson();
     
     private ImageView avatarView;
-    private ImageView myBgImageView; // Наш встроенный фон
+    private ImageView myBgImageView;
     private String myUid = "";
+
+    // === ПАМЯТЬ АВАТАРКИ (Чтобы не моргала) ===
+    private String currentLoadedAvatar = null;
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
     private Runnable fetchProfileDataRunnable; 
 
-    // Убрали загрузку профиля с сервера, чтобы не прерывать выгрузку картинок (исправление Бага 1)
     private final android.content.BroadcastReceiver profileUpdateReceiver = new android.content.BroadcastReceiver() {
         @Override
         public void onReceive(android.content.Context context, android.content.Intent intent) {
@@ -95,7 +97,6 @@ public class ProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.resetHeader();
 
-        // === ЭФФЕКТ СКЛЕЕННЫХ ФОТО ДЛЯ НАШЕГО ПРОФИЛЯ (Исправление Бага 2) ===
         FrameLayout wrapper = new FrameLayout(activity);
         wrapper.setLayoutParams(originalView.getLayoutParams() != null ? originalView.getLayoutParams() : new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         originalView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -238,7 +239,6 @@ public class ProfileFragment extends Fragment {
         String b64 = activity.prefs.getString("my_photo_base64", null);
         handleMediaLoading(activity, b64, true, myUid);
 
-        // ЗАГРУЗКА ФОНА ВНУТРЬ ФРАГМЕНТА
         if (myBgImageView != null) {
             String targetPath = null;
             String myBgUrl = activity.prefs.getString("my_bg_base64", null);
@@ -283,6 +283,13 @@ public class ProfileFragment extends Fragment {
 
     private void handleMediaLoading(MainActivity activity, String base64Data, boolean useLocalFile, String uid) {
         if (!isAdded() || avatarView == null) return;
+
+        // Формируем уникальный ключ текущей картинки
+        String newAvatarKey = useLocalFile ? "local_" + uid : (base64Data != null ? String.valueOf(base64Data.hashCode()) : "empty");
+        
+        // ЕСЛИ КАРТИНКА НЕ ИЗМЕНИЛАСЬ — ВООБЩЕ НЕ ТРОГАЕМ ЕЁ
+        if (newAvatarKey.equals(currentLoadedAvatar)) return;
+        currentLoadedAvatar = newAvatarKey;
 
         if (useLocalFile) {
             String customAvatarPath = activity.prefs.getString("custom_avatar_path_" + uid, null);
@@ -339,6 +346,11 @@ public class ProfileFragment extends Fragment {
                 updateUiFromPrefs(activity);
                 if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
+                
+                activity.updateGlobalBackground(true);
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (isAdded() && !isHidden()) activity.clearPreviewBackground();
+                }, 400);
             }
         }
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
@@ -363,7 +375,18 @@ public class ProfileFragment extends Fragment {
                 updateUiFromPrefs(activity);
                 if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
-            } 
+                
+                activity.updateGlobalBackground(true);
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (isAdded() && !isHidden()) activity.clearPreviewBackground();
+                }, 400);
+            } else {
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (isAdded() && isHidden() && activity.navigator != null && activity.navigator.getCurrentTabIndex() != 4) {
+                        activity.updateGlobalBackground(false);
+                    }
+                }, 400);
+            }
         }
     }
 
