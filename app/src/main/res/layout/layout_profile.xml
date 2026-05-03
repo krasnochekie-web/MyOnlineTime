@@ -195,6 +195,7 @@
                     android:ellipsize="end" />
             </LinearLayout>
 
+            <!-- КНОПКА ПОДПИСАТЬСЯ: Добавлен эффект волны и обрезка по краям -->
             <Button
                 android:id="@+id/btn_follow"
                 android:layout_width="match_parent"
@@ -205,8 +206,11 @@
                 android:text="@string/btn_follow"
                 android:textColor="@color/burgundyRed"
                 android:textStyle="bold"
-                android:visibility="gone" />
+                android:visibility="gone"
+                android:foreground="?android:attr/selectableItemBackground"
+                android:clipToOutline="true" />
 
+            <!-- КНОПКА GOOGLE: Добавлен эффект волны и обрезка по краям -->
             <Button
                 android:id="@+id/btn_google_sign_in"
                 android:layout_width="match_parent"
@@ -217,7 +221,9 @@
                 android:text="@string/btn_sign_in_google"
                 android:textColor="@color/burgundyRed"
                 android:textStyle="bold"
-                android:visibility="gone" />
+                android:visibility="gone"
+                android:foreground="?android:attr/selectableItemBackground"
+                android:clipToOutline="true" />
 
             <LinearLayout
                 android:layout_width="match_parent"
