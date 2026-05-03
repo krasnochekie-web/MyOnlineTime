@@ -412,15 +412,30 @@ public class OtherProfileFragment extends Fragment {
         });
     }
 
+    // ИСПРАВЛЕНО: Белый текст для "Подписаться" + корректная смена волны!
     private void updateFollowButton(android.widget.Button btnFollow, boolean isFollowing) {
         if (isFollowing) {
+            // СОСТОЯНИЕ: ОТПИСАТЬСЯ
             btnFollow.setText(btnFollow.getContext().getString(R.string.btn_unfollow));
             btnFollow.setBackgroundResource(R.drawable.bg_button_gray);
+            
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                // Если есть отдельная серая волна, можно вставить её сюда. Иначе оставляем грейпфрутовую
+                btnFollow.setForeground(androidx.core.content.ContextCompat.getDrawable(btnFollow.getContext(), R.drawable.ripple_button_grapefruit));
+            }
+            
             btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textGrayDynamic));
         } else {
+            // СОСТОЯНИЕ: ПОДПИСАТЬСЯ
             btnFollow.setText(btnFollow.getContext().getString(R.string.btn_follow));
             btnFollow.setBackgroundResource(R.drawable.bg_button_grapefruit);
-            btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textDynamic));
+            
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                btnFollow.setForeground(androidx.core.content.ContextCompat.getDrawable(btnFollow.getContext(), R.drawable.ripple_button_grapefruit));
+            }
+            
+            // Текст строго белый!
+            btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textWhiteStatic));
         }
     }
 }
