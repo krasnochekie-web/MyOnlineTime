@@ -54,7 +54,6 @@ public class ProfileFragment extends Fragment {
     private ImageView myBgImageView;
     private String myUid = "";
 
-    // Умная память аватарки
     private String currentLoadedAvatar = null;
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
@@ -168,12 +167,12 @@ public class ProfileFragment extends Fragment {
                         if (user.nickname != null) activity.prefs.edit().putString("my_nickname", user.nickname).apply();
                         if (user.about != null) activity.prefs.edit().putString("my_about", user.about).apply();
 
-                        if (user.photo != null && user.photo.length() > 10) {
+                        if (user.photo != null && user.photo.length() > 5) {
                             activity.prefs.edit().putString("my_photo_base64", user.photo).apply();
                             activity.updateAvatarInUI();
                         }
 
-                        if (user.background != null && user.background.length() > 10) {
+                        if (user.background != null && user.background.length() > 5) {
                             activity.prefs.edit().putString("my_bg_base64", user.background).apply();
                             activity.syncMyBackground(user.background);
                         }
@@ -239,23 +238,30 @@ public class ProfileFragment extends Fragment {
         aboutView.setText(activity.prefs.getString("my_about", ""));
         StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
-        String b64 = activity.prefs.getString("my_photo_base64", null);
-        handleMediaLoading(activity, b64, true, myUid);
+        String photoUrl = activity.prefs.getString("my_photo_base64", null);
+        handleMediaLoading(activity, photoUrl, true, myUid);
 
+        // === ИДЕАЛЬНАЯ ЗАГРУЗКА ФОНА ПО URL (БЕЗ BASE64 КОСТЫЛЕЙ) ===
         if (myBgImageView != null) {
-            String targetPath = null;
             String myBgUrl = activity.prefs.getString("my_bg_base64", null);
             String customBgPath = activity.prefs.getString("custom_bg_path_" + myUid, null);
 
             if (customBgPath != null && new File(customBgPath).exists()) {
-                targetPath = customBgPath;
-            } else if (myBgUrl != null && myBgUrl.startsWith("http")) {
-                targetPath = myBgUrl;
+                // ЛОКАЛЬНЫЙ ФАЙЛ
+                File bgFile = new File(customBgPath);
+                Glide.with(activity)
+                     .load(bgFile)
+                     .signature(new ObjectKey(bgFile.lastModified()))
+                     .centerCrop()
+                     .into(myBgImageView);
+            } else if (myBgUrl != null && !myBgUrl.isEmpty() && !myBgUrl.equals("null")) {
+                // СЕРВЕРНЫЙ URL: Просто отдаем его Glide! Он сам всё скачает и отрисует.
+                Glide.with(activity)
+                     .load(myBgUrl)
+                     .centerCrop()
+                     .into(myBgImageView);
+                     
                 activity.syncMyBackground(myBgUrl);
-            }
-
-            if (targetPath != null) {
-                Glide.with(activity).load(targetPath).centerCrop().into(myBgImageView);
             } else {
                 myBgImageView.setImageDrawable(null);
             }
@@ -279,18 +285,12 @@ public class ProfileFragment extends Fragment {
         });
     }
 
-    private void requestLoadMyStats() {
-        uiHandler.removeCallbacks(loadMyStatsRunnable);
-        uiHandler.postDelayed(loadMyStatsRunnable, 150);
-    }
-
-    private void handleMediaLoading(MainActivity activity, String base64Data, boolean useLocalFile, String uid) {
+    private void handleMediaLoading(MainActivity activity, String photoUrl, boolean useLocalFile, String uid) {
         if (!isAdded() || avatarView == null) return;
 
-        // ИСПРАВЛЕНИЕ: Умный ключ кэша, который видит и локальные изменения, и новые данные с сервера
         String customAvatarPath = useLocalFile ? activity.prefs.getString("custom_avatar_path_" + uid, null) : null;
-        String b64Hash = base64Data != null ? String.valueOf(base64Data.hashCode()) : "empty";
-        String newAvatarKey = uid + "_" + customAvatarPath + "_" + b64Hash;
+        String urlHash = photoUrl != null ? String.valueOf(photoUrl.hashCode()) : "empty";
+        String newAvatarKey = uid + "_" + customAvatarPath + "_" + urlHash;
         
         if (newAvatarKey.equals(currentLoadedAvatar)) return;
         currentLoadedAvatar = newAvatarKey;
@@ -310,26 +310,13 @@ public class ProfileFragment extends Fragment {
             }
         }
 
-        if (base64Data == null || base64Data.isEmpty()) {
+        if (photoUrl == null || photoUrl.isEmpty() || photoUrl.equals("null")) {
             Glide.with(activity).load(R.drawable.bg_edit_circle).circleCrop().into(avatarView);
             return;
         }
 
-        if (base64Data.startsWith("http")) {
-            Glide.with(activity).load(base64Data).circleCrop().into(avatarView);
-            return;
-        }
-
-        Utils.backgroundExecutor.execute(() -> {
-            try {
-                byte[] mediaBytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
-                new Handler(Looper.getMainLooper()).post(() -> {
-                    if (!isAdded()) return;
-                    avatarView.setVisibility(View.VISIBLE);
-                    Glide.with(activity).load(mediaBytes).circleCrop().into(avatarView);
-                });
-            } catch (Exception e) {}
-        });
+        // Загружаем картинку по нормальной ссылке без Base64!
+        Glide.with(activity).load(photoUrl).circleCrop().error(R.drawable.bg_edit_circle).into(avatarView);
     }
 
     private String formatDeletedAppName(String pkg) {
