@@ -46,7 +46,6 @@ public class MainActivity extends AppCompatActivity {
     public String currentBgBase64 = null; 
     public ImageView headerBackBtn;
     
-    // === АРХИТЕКТУРА ДВУХ ФОНОВ (ТОЛЬКО ИЗОБРАЖЕНИЯ / GIF) ===
     public String previewBgPath = null;
     
     private ImageView iconFeed, iconSearch, iconUsage, iconProfile, iconSettings;
@@ -64,14 +63,15 @@ public class MainActivity extends AppCompatActivity {
 
     private View permissionOverlay;
 
-    // Слой 1: Наш глобальный фон (Фото/GIF)
     private ImageView globalImageView;
     private String currentBgPath = null;
     
-    // Слой 2: Чужой фон (Превью) (Фото/GIF)
     private ImageView previewImageView;
 
     private boolean isSyncingBg = false; 
+
+    private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable hideBgRunnable;
 
     private final SharedPreferences.OnSharedPreferenceChangeListener notifListener = (sharedPrefs, key) -> {
         if ("notif_history_array".equals(key)) {
@@ -351,9 +351,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // === ИНИЦИАЛИЗАЦИЯ ДВУХ СЛОЕВ ПАМЯТИ (ТОЛЬКО ИЗОБРАЖЕНИЯ / GIF) ===
     private void initGlobalBackground() {
-        // Убираем рудименты видеоплеера из UI
         View oldVideoView = findViewById(R.id.global_background_video);
         if (oldVideoView != null) oldVideoView.setVisibility(View.GONE);
 
@@ -362,7 +360,6 @@ public class MainActivity extends AppCompatActivity {
         ViewGroup parent = (ViewGroup) globalImageView.getParent();
         int insertIndex = parent.indexOfChild(globalImageView) + 1;
         
-        // Добавляем второй слой поверх первого
         previewImageView = new ImageView(this);
         previewImageView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         previewImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -370,48 +367,58 @@ public class MainActivity extends AppCompatActivity {
         parent.addView(previewImageView, insertIndex);
     }
 
-    // === УПРАВЛЕНИЕ ЧУЖИМ ФОНОМ С ИДЕАЛЬНЫМ CROSSFADE ===
     public void previewBackground(String path) {
         if (path == null) return;
-        if (path.equals(previewBgPath)) return; // Уже показывается этот чужой фон
-
-        previewBgPath = path;
-
+        
         if (path.equals("none")) {
-            fadeOut(previewImageView);
-            fadeOut(globalImageView);
+            previewBgPath = "none";
+            if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
+            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
             return;
         }
 
-        // Мы открываем чужой фон - значит плавно проявляем слой 2, и скрываем слой 1.
-        previewImageView.animate().cancel();
-        globalImageView.animate().cancel();
-
-        previewImageView.setVisibility(View.VISIBLE);
-        previewImageView.setAlpha(0f);
-        
-        // Убрали dontAnimate(), теперь Glide будет нормально запускать анимацию GIF-ок!
-        if (path.startsWith("http")) {
-            Glide.with(this).load(path).centerCrop().into(previewImageView);
-        } else {
-            Glide.with(this).load(new File(path)).centerCrop().into(previewImageView);
+        if (path.equals(previewBgPath)) {
+            if (previewImageView != null) previewImageView.setVisibility(View.VISIBLE);
+            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+            return;
         }
 
-        previewImageView.animate().alpha(1f).setDuration(400).withEndAction(() -> {
-            globalImageView.setVisibility(View.INVISIBLE);
-            globalImageView.setAlpha(1f); // Сброс состояния для будущих показов
-        }).start();
+        previewBgPath = path;
+        currentBgPath = path; 
+
+        if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+        
+        if (previewImageView != null) {
+            previewImageView.setVisibility(View.VISIBLE);
+            // Убрали dontAnimate(), чтобы GIF гарантированно запускались и играли
+            if (path.startsWith("http")) {
+                Glide.with(this).load(path).centerCrop().into(previewImageView);
+            } else {
+                Glide.with(this).load(new File(path)).centerCrop().into(previewImageView);
+            }
+        }
     }
 
-    // === ПЕРЕКЛЮЧЕНИЕ ФОНОВ ПРИ НАВИГАЦИИ ===
-    public void clearPreviewBackground() {
+    public void clearPreviewBackground(boolean instant) {
         if (previewBgPath != null) {
             previewBgPath = null;
-            // Если переходим обратно в свой профиль (4), загружаем глобальный фон
-            if (currentTab == 4) {
-                updateGlobalBackground(true);
+            bgHandler.removeCallbacks(hideBgRunnable);
+            
+            Runnable task = () -> {
+                if (currentTab == 4) {
+                    updateGlobalBackground(true);
+                } else {
+                    updateGlobalBackground(false);
+                }
+            };
+            
+            // Если переключаем вкладку внизу (instant) - очищаем фон мгновенно
+            // Если нажимаем "Назад" с чужого профиля (!instant) - ждем конца анимации 350мс
+            if (instant) {
+                task.run();
             } else {
-                updateGlobalBackground(false);
+                hideBgRunnable = task;
+                bgHandler.postDelayed(hideBgRunnable, 350);
             }
         }
     }
@@ -470,17 +477,6 @@ public class MainActivity extends AppCompatActivity {
         return path;
     }
 
-    // === ВНУТРЕННИЙ ПОМОЩНИК ДЛЯ ПЛАВНОГО СКРЫТИЯ ===
-    private void fadeOut(View v) {
-        if (v != null && v.getVisibility() == View.VISIBLE) {
-            v.animate().cancel();
-            v.animate().alpha(0f).setDuration(400).withEndAction(() -> {
-                v.setVisibility(View.INVISIBLE);
-                v.setAlpha(1f);
-            }).start();
-        }
-    }
-
     private String resolveMyBackground() {
         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
         if (acct == null) return null;
@@ -500,54 +496,44 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // === УПРАВЛЕНИЕ НАШИМ ФОНОМ С ИДЕАЛЬНЫМ CROSSFADE ===
     public void updateGlobalBackground(boolean show) {
         if (!show) {
-            fadeOut(globalImageView);
-            fadeOut(previewImageView);
+            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+            if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
             return;
         }
 
-        if (previewBgPath != null) return; // Мы сейчас на чужом профиле, не перебиваем его
-
+        // Если мы на чужом профиле (превью активно) - не трогаем глобальный фон
+        if (previewBgPath != null) {
+            if ("none".equals(previewBgPath)) {
+                if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+                if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
+            } else {
+                previewBackground(previewBgPath);
+            }
+            return;
+        }
+        
         String targetPath = resolveMyBackground();
 
         if (targetPath == null || targetPath.isEmpty()) {
             currentBgPath = null;
-            fadeOut(globalImageView);
-            fadeOut(previewImageView);
+            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+            if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
             return;
         }
 
-        // Если наш фон УЖЕ показывается корректно, просто прячем превью (чтобы не перекрывало)
-        if (targetPath.equals(currentBgPath) && globalImageView.getVisibility() == View.VISIBLE) {
-            fadeOut(previewImageView);
+        if (targetPath.equals(currentBgPath)) {
+            if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
+            if (globalImageView != null) globalImageView.setVisibility(View.VISIBLE);
             return;
         }
 
         currentBgPath = targetPath;
-
-        globalImageView.animate().cancel();
-        previewImageView.animate().cancel();
-
-        globalImageView.setVisibility(View.VISIBLE);
-        globalImageView.setAlpha(0f);
-        
-        if (targetPath.startsWith("http")) {
+        if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
+        if (globalImageView != null) {
+            globalImageView.setVisibility(View.VISIBLE);
             Glide.with(this).load(targetPath).centerCrop().into(globalImageView);
-        } else {
-            Glide.with(this).load(new File(targetPath)).centerCrop().into(globalImageView);
-        }
-
-        // Плавно проявляем наш фон (400мс)
-        globalImageView.animate().alpha(1f).setDuration(400).start();
-        
-        // И одновременно плавно растворяем чужой фон
-        if (previewImageView.getVisibility() == View.VISIBLE) {
-            previewImageView.animate().alpha(0f).setDuration(400).withEndAction(() -> {
-                previewImageView.setVisibility(View.INVISIBLE);
-                previewImageView.setAlpha(1f); // Сброс состояния
-            }).start();
         }
     }   
     
@@ -747,8 +733,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleBackNavigation() {
         if (navigator.closeSubScreen()) {
-            // ИСПРАВЛЕНИЕ: Вызываем очистку превью (фон плавно перетечёт обратно, если нужно)
-            clearPreviewBackground();
+            // Если мы закрыли ПОСЛЕДНИЙ саб-экран, тогда мы реально возвращаемся
+            if (!navigator.hasSubScreen()) {
+                clearPreviewBackground(false); 
+            }
             syncHeaderState(); 
             return; 
         }
@@ -877,8 +865,8 @@ public class MainActivity extends AppCompatActivity {
     private void updateNavState(int index) {
         currentTab = index;
         
-        // ИСПРАВЛЕНИЕ: Вызываем очистку превью (оно само плавно затухнет)
-        clearPreviewBackground();
+        // Мгновенная смена вкладок в нижнем меню
+        clearPreviewBackground(true);
         
         mainHeader.setVisibility(View.VISIBLE);
         mainHeader.bringToFront(); 
