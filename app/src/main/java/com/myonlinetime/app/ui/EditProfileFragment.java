@@ -44,7 +44,6 @@ import java.io.OutputStream;
 
 public class EditProfileFragment extends Fragment {
 
-    // === ФЛАГ ДЛЯ БЛОКИРОВКИ СТАРЫХ ДАННЫХ С СЕРВЕРА ВО ВРЕМЯ ВЫГРУЗКИ ===
     public static boolean isProfileUploading = false;
 
     private File pendingPhotoFile = null;
@@ -242,14 +241,18 @@ public class EditProfileFragment extends Fragment {
                  editor.putString("my_nickname", n);
                  editor.putString("my_about", a);
 
+                 // СОЗДАЕМ ФИНАЛЬНЫЕ ПУТИ ДЛЯ ОТПРАВКИ, КОТОРЫЕ НЕ УДАЛЯТСЯ
+                 final String[] safeAvatarPath = {null};
+                 final String[] safeBgPath = {null};
+
                  if (finalPhotoFile != null) {
                      String pPath = new File(activity.getFilesDir(), "avatar_" + uid + "_" + System.currentTimeMillis() + (finalPhotoFile.getName().endsWith(".gif") ? ".gif" : ".png")).getAbsolutePath();
-                     try { copyFile(finalPhotoFile, new File(pPath)); } catch (Exception ignored) {}
+                     try { copyFile(finalPhotoFile, new File(pPath)); safeAvatarPath[0] = pPath; } catch (Exception ignored) {}
                      editor.putString("custom_avatar_path_" + uid, pPath);
                  }
                  if (finalBgFile != null) {
                      String bPath = new File(activity.getFilesDir(), "my_bg_" + uid + "_" + System.currentTimeMillis() + (finalBgFile.getName().endsWith(".mp4") ? ".mp4" : ".jpg")).getAbsolutePath();
-                     try { copyFile(finalBgFile, new File(bPath)); } catch (Exception ignored) {}
+                     try { copyFile(finalBgFile, new File(bPath)); safeBgPath[0] = bPath; } catch (Exception ignored) {}
                      editor.putString("custom_bg_path_" + uid, bPath);
                      editor.putBoolean("custom_bg_is_video_" + uid, finalBgFile.getName().endsWith(".mp4"));
                  }
@@ -257,41 +260,20 @@ public class EditProfileFragment extends Fragment {
                  editor.apply();
                  activity.mMemoryCache.remove("avatar_" + uid);
 
-                 // 1. ПОДНИМАЕМ ФЛАГ: Начинаем выгрузку!
                  EditProfileFragment.isProfileUploading = true;
 
+                 // ЗДЕСЬ УДАЛЯЕТСЯ ВРЕМЕННЫЙ ФАЙЛ (поэтому раньше отправка ломалась)
                  activity.clearPreviewBackground();
                  activity.updateGlobalBackground(true);
                  activity.updateAvatarInUI();
                  activity.navigator.closeSubScreen();
                  
-                 // 2. МГНОВЕННО обновляем интерфейс для пользователя
                  LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
 
                  Utils.backgroundExecutor.execute(() -> {
-                     File readyBg = finalBgFile;
-                     File readyPhoto = finalPhotoFile;
-
-                     try {
-                         if (finalBgFile != null) {
-                             boolean isVideo = finalBgFile.getName().endsWith(".mp4");
-                             boolean isGif = finalBgFile.getName().endsWith(".gif");
-                             String ext = isVideo ? ".mp4" : (isGif ? ".gif" : ".jpg");
-                             File permBg = new File(activity.getFilesDir(), "temp_upload_bg_" + uid + ext);
-                             copyFile(finalBgFile, permBg);
-                             readyBg = permBg;
-                         }
-                         if (finalPhotoFile != null) {
-                             boolean isAvatarGif = finalPhotoFile.getName().endsWith(".gif");
-                             String avatarExt = isAvatarGif ? ".gif" : ".png";
-                             File permAvatar = new File(activity.getFilesDir(), "temp_upload_avatar_" + uid + avatarExt);
-                             copyFile(finalPhotoFile, permAvatar);
-                             readyPhoto = permAvatar;
-                         }
-                     } catch (Exception e) { e.printStackTrace(); }
-
-                     File uploadBg = readyBg;
-                     File uploadPhoto = readyPhoto;
+                     // БЕРЕМ БЕЗОПАСНЫЕ КОПИИ, А НЕ УДАЛЕННЫЕ ВРЕМЕННЫЕ ФАЙЛЫ!
+                     File uploadPhoto = safeAvatarPath[0] != null ? new File(safeAvatarPath[0]) : null;
+                     File uploadBg = safeBgPath[0] != null ? new File(safeBgPath[0]) : null;
 
                      if (activity.vpsToken != null) {
                          VpsApi.saveUserProfile(activity.vpsToken, n, a, uploadPhoto, uploadBg, new VpsApi.Callback() {
@@ -314,15 +296,12 @@ public class EditProfileFragment extends Fragment {
                                          }
                                          successEditor.apply();
                                          
-                                         // 3. ОПУСКАЕМ ФЛАГ: Сервер получил данные. Снова сигналим UI обновить кэш.
                                          EditProfileFragment.isProfileUploading = false;
                                          LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
                                      });
 
                                      if (pendingPhotoFile != null && pendingPhotoFile.exists()) pendingPhotoFile.delete();
                                      if (pendingBgFile != null && pendingBgFile.exists()) pendingBgFile.delete();
-                                     if (uploadBg != null && uploadBg.exists() && uploadBg != finalBgFile) uploadBg.delete();
-                                     if (uploadPhoto != null && uploadPhoto.exists() && uploadPhoto != finalPhotoFile) uploadPhoto.delete();
                                  } catch (Exception ignored) {
                                      EditProfileFragment.isProfileUploading = false;
                                  }
