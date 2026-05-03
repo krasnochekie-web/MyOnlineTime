@@ -39,7 +39,6 @@ public class OtherProfileFragment extends Fragment {
     private String backTitle = "";
 
     private String loadedBgUrl = null;
-    private boolean isLoadedBgVideo = false;
 
     private static class AppUiData {
         String pkgName;
@@ -128,11 +127,10 @@ public class OtherProfileFragment extends Fragment {
 
                         if (user.background != null && user.background.length() > 10) {
                             loadedBgUrl = user.background;
-                            isLoadedBgVideo = user.background.endsWith(".mp4") || user.background.endsWith(".mov");
-                            activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
+                            activity.previewBackground(loadedBgUrl);
                         } else {
                             loadedBgUrl = null;
-                            activity.previewBackground("none", false); 
+                            activity.previewBackground("none"); 
                         }
 
                         renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
@@ -218,14 +216,6 @@ public class OtherProfileFragment extends Fragment {
         });
     }
 
-    private String formatDeletedAppName(String pkg) {
-        try {
-            String[] parts = pkg.split("\\.");
-            String name = parts[parts.length - 1]; 
-            return name.substring(0, 1).toUpperCase() + name.substring(1); 
-        } catch (Exception e) { return pkg; }
-    }
-
     @Override
     public void onResume() {
         super.onResume();
@@ -233,9 +223,9 @@ public class OtherProfileFragment extends Fragment {
         if (activity != null && !isHidden()) {
             refreshCounts(activity);
             if (loadedBgUrl != null) {
-                activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
+                activity.previewBackground(loadedBgUrl);
             } else {
-                activity.previewBackground("none", false);
+                activity.previewBackground("none");
             }
         }
         
@@ -257,9 +247,9 @@ public class OtherProfileFragment extends Fragment {
             refreshCounts(activity);
             
             if (loadedBgUrl != null) {
-                activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
+                activity.previewBackground(loadedBgUrl);
             } else {
-                activity.previewBackground("none", false);
+                activity.previewBackground("none");
             }
             
             if (getView() != null) {
@@ -272,7 +262,15 @@ public class OtherProfileFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        // Мы больше не пытаемся агрессивно стирать фон, MainActivity сама разберется
+        MainActivity activity = (MainActivity) getActivity();
+        if (activity != null) {
+            final String bgToClear = loadedBgUrl != null ? loadedBgUrl : "none";
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (activity.previewBgPath != null && activity.previewBgPath.equals(bgToClear)) {
+                    activity.clearPreviewBackground();
+                }
+            }, 400);
+        }
     }
 
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
@@ -282,11 +280,9 @@ public class OtherProfileFragment extends Fragment {
         }
         if (activity == null) return;
 
-        // Если приложений нет — скрываем ТОЛЬКО саму полоску контейнера. Надписи остаются!
         if (topApps == null || topApps.isEmpty()) {
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (container != null) container.setVisibility(View.GONE);
-                
                 long minutes = serverTotalTime / 1000 / 60;
                 long hours = minutes / 60;
                 long mins = minutes % 60;
