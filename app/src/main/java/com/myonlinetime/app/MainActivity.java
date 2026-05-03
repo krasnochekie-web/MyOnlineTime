@@ -51,11 +51,11 @@ public class MainActivity extends AppCompatActivity {
     public String currentBgBase64 = null; 
     public ImageView headerBackBtn;
     
+    // === АРХИТЕКТУРА ДВУХ ФОНОВ ===
     public String previewBgPath = null;
     public boolean isPreviewVideo = false;
     
     private ImageView iconFeed, iconSearch, iconUsage, iconProfile, iconSettings;
-    
     private int currentTab = 0;
 
     public GoogleSignInClient mGoogleSignInClient;
@@ -70,16 +70,17 @@ public class MainActivity extends AppCompatActivity {
 
     private View permissionOverlay;
 
+    // Слой 1: Наш глобальный фон
     private PlayerView playerView;
     private ExoPlayer exoPlayer;
     private ImageView globalImageView;
     private String currentBgPath = null;
     
-    // Сохранение секунд видео для возврата без сброса
-    private java.util.HashMap<String, Long> mediaPositions = new java.util.HashMap<>();
-    
-    private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-    private Runnable hideBgRunnable;
+    // Слой 2: Чужой фон (Превью)
+    private PlayerView previewPlayerView;
+    private ExoPlayer previewExoPlayer;
+    private ImageView previewImageView;
+
     private boolean isSyncingBg = false; 
 
     private final SharedPreferences.OnSharedPreferenceChangeListener notifListener = (sharedPrefs, key) -> {
@@ -107,7 +108,6 @@ public class MainActivity extends AppCompatActivity {
                         v.setTranslationZ(100f); 
                     }
                 }
-                
                 container.post(() -> enforceLoginOverlays());
             }
         }, false);
@@ -250,7 +250,6 @@ public class MainActivity extends AppCompatActivity {
             StatsHelper.syncUserProfile(MainActivity.this);
             loadUserAvatarToBottomNav(); 
             enforceLoginOverlays();
-            
             try {
                 final GoogleSignInAccount account = task.getResult(ApiException.class);
                 if (account != null && navigator != null) {
@@ -273,9 +272,7 @@ public class MainActivity extends AppCompatActivity {
         fm.popBackStackImmediate(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
         androidx.fragment.app.FragmentTransaction ft = fm.beginTransaction();
         for (Fragment f : fm.getFragments()) {
-            if (f != null) {
-                ft.remove(f);
-            }
+            if (f != null) ft.remove(f);
         }
         ft.commitAllowingStateLoss();
         fm.executePendingTransactions();
@@ -303,7 +300,6 @@ public class MainActivity extends AppCompatActivity {
         currentBgBase64 = null;
         currentBgPath = null;
         previewBgPath = null;
-        mediaPositions.clear();
         
         if (mMemoryCache != null) mMemoryCache.evictAll();
         
@@ -311,22 +307,22 @@ public class MainActivity extends AppCompatActivity {
             exoPlayer.stop();
             exoPlayer.clearMediaItems();
         }
-        if (globalImageView != null) {
-            globalImageView.setImageDrawable(null);
-            globalImageView.setVisibility(View.INVISIBLE);
+        if (previewExoPlayer != null) {
+            previewExoPlayer.stop();
+            previewExoPlayer.clearMediaItems();
         }
-        if (playerView != null) {
-            playerView.setVisibility(View.INVISIBLE);
-        }
+        
+        if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+        if (playerView != null) playerView.setVisibility(View.INVISIBLE);
+        if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
+        if (previewPlayerView != null) previewPlayerView.setVisibility(View.INVISIBLE);
 
         if (iconProfile != null) {
             iconProfile.setImageTintList(androidx.core.content.ContextCompat.getColorStateList(this, R.color.nav_icon_selector));
             iconProfile.setImageResource(R.drawable.ic_nav_profile);
         }
 
-        if (prefs != null) {
-            prefs.edit().clear().apply();
-        }
+        if (prefs != null) prefs.edit().clear().apply();
 
         try {
             File dir = getFilesDir();
@@ -363,121 +359,131 @@ public class MainActivity extends AppCompatActivity {
         try {
             JSONArray array = new JSONArray(historyJson);
             for (int i = 0; i < array.length(); i++) {
-                if (!array.getJSONObject(i).optBoolean("isRead", false)) {
-                    unreadCount++;
-                }
+                if (!array.getJSONObject(i).optBoolean("isRead", false)) unreadCount++;
             }
         } catch (Exception e) { e.printStackTrace(); }
 
         if (unreadCount > 0) {
             badge.setVisibility(View.VISIBLE);
-            if (unreadCount > 99) {
-                badge.setText(getString(R.string.notif_max_count));
-            } else {
-                badge.setText(String.valueOf(unreadCount));
-            }
+            if (unreadCount > 99) badge.setText(getString(R.string.notif_max_count));
+            else badge.setText(String.valueOf(unreadCount));
         } else {
             badge.setVisibility(View.GONE);
         }
     }
 
+    // === ИНИЦИАЛИЗАЦИЯ ДВУХ СЛОЕВ ПАМЯТИ ===
     private void initGlobalBackground() {
         playerView = findViewById(R.id.global_background_video);
         globalImageView = findViewById(R.id.global_background_image);
+        
+        // Слой 1: Наш основной плеер
         exoPlayer = new ExoPlayer.Builder(this).build();
         playerView.setPlayer(exoPlayer);
         exoPlayer.setRepeatMode(Player.REPEAT_MODE_ALL);
         exoPlayer.setVolume(0f);
         exoPlayer.setVideoScalingMode(androidx.media3.common.C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING);
         playerView.setShutterBackgroundColor(android.graphics.Color.TRANSPARENT);
+
+        // Слой 2: Динамически добавляем плеер и картинку для ЧУЖОГО профиля поверх основного
+        ViewGroup parent = (ViewGroup) globalImageView.getParent();
+        int insertIndex = parent.indexOfChild(playerView) + 1;
+        
+        previewImageView = new ImageView(this);
+        previewImageView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        previewImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        previewImageView.setVisibility(View.INVISIBLE);
+        parent.addView(previewImageView, insertIndex);
+
+        previewPlayerView = new PlayerView(this);
+        previewPlayerView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        previewPlayerView.setUseController(false);
+        previewPlayerView.setShutterBackgroundColor(android.graphics.Color.TRANSPARENT);
+        previewPlayerView.setVisibility(View.INVISIBLE);
+        parent.addView(previewPlayerView, insertIndex + 1);
+
+        previewExoPlayer = new ExoPlayer.Builder(this).build();
+        previewExoPlayer.setRepeatMode(Player.REPEAT_MODE_ALL);
+        previewExoPlayer.setVolume(0f);
+        previewExoPlayer.setVideoScalingMode(androidx.media3.common.C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING);
+        previewPlayerView.setPlayer(previewExoPlayer);
     }
 
-    private void switchMedia(String newPath, boolean isVideo) {
-        if (newPath == null) return;
-
-        // Если медиа то же самое - снимаем с паузы МГНОВЕННО, без загрузок!
-        if (newPath.equals(currentBgPath)) {
-            if (isVideo) {
-                if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
-                if (playerView != null) playerView.setVisibility(View.VISIBLE);
-                if (exoPlayer != null && !exoPlayer.isPlaying()) exoPlayer.play();
-            } else {
-                if (playerView != null) playerView.setVisibility(View.INVISIBLE);
-                if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
-                if (globalImageView != null) globalImageView.setVisibility(View.VISIBLE);
-            }
-            return;
-        }
-
-        if (currentBgPath != null && exoPlayer != null) {
-            mediaPositions.put(currentBgPath, exoPlayer.getCurrentPosition());
-        }
-
-        currentBgPath = newPath;
-
-        if (isVideo) {
-            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
-            if (playerView != null) playerView.setVisibility(View.VISIBLE);
-            
-            MediaItem mediaItem = newPath.startsWith("http") ? 
-                    MediaItem.fromUri(Uri.parse(newPath)) : 
-                    MediaItem.fromUri(Uri.fromFile(new File(newPath)));
-                    
-            if (exoPlayer != null) {
-                exoPlayer.setMediaItem(mediaItem);
-                exoPlayer.prepare();
-                Long savedPos = mediaPositions.get(newPath);
-                if (savedPos != null) {
-                    exoPlayer.seekTo(savedPos);
-                }
-                exoPlayer.play();
-            }
-        } else {
-            if (playerView != null) playerView.setVisibility(View.INVISIBLE);
-            if (exoPlayer != null) exoPlayer.pause();
-            
-            if (globalImageView != null) {
-                globalImageView.setVisibility(View.VISIBLE);
-                // .dontAnimate() - убивает мерцания и вспышки фото
-                if (newPath.startsWith("http")) {
-                    Glide.with(MainActivity.this).load(newPath).dontAnimate().centerCrop().into(globalImageView);
-                } else {
-                    Glide.with(MainActivity.this).load(new File(newPath)).dontAnimate().centerCrop().into(globalImageView);
-                }
-            }
-        }
-    }
-
+    // === УПРАВЛЕНИЕ ЧУЖИМ ФОНОМ (СЛОЙ 2) ===
     public void previewBackground(String path, boolean isVideo) {
         if (path == null) return;
 
         if (path.equals("none")) {
             previewBgPath = "none";
-            bgHandler.removeCallbacks(hideBgRunnable);
+            if (previewExoPlayer != null && previewExoPlayer.isPlaying()) previewExoPlayer.pause();
+            if (previewPlayerView != null) previewPlayerView.setVisibility(View.INVISIBLE);
+            if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
+            
+            // Если своего фона тоже нет - выключаем его, чтобы была полная темнота
             if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
             if (playerView != null) playerView.setVisibility(View.INVISIBLE);
             if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
             return;
         }
 
+        // Мы открыли чужой фон - ставим на паузу наш основной фон для экономии памяти
+        if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
+
+        // Если это то же самое чужое видео/фото, что мы смотрели минуту назад - мгновенно снимаем с паузы!
+        if (path.equals(previewBgPath)) {
+            if (isVideo) {
+                if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
+                if (previewPlayerView != null) previewPlayerView.setVisibility(View.VISIBLE);
+                if (previewExoPlayer != null && !previewExoPlayer.isPlaying()) previewExoPlayer.play();
+            } else {
+                if (previewPlayerView != null) previewPlayerView.setVisibility(View.INVISIBLE);
+                if (previewExoPlayer != null && previewExoPlayer.isPlaying()) previewExoPlayer.pause();
+                if (previewImageView != null) previewImageView.setVisibility(View.VISIBLE);
+            }
+            return;
+        }
+
+        // Загрузка нового чужого профиля
         previewBgPath = path;
         isPreviewVideo = isVideo;
-        
-        bgHandler.removeCallbacks(hideBgRunnable);
-        switchMedia(path, isVideo);
+
+        if (isVideo) {
+            if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
+            if (previewPlayerView != null) previewPlayerView.setVisibility(View.VISIBLE);
+            
+            MediaItem mediaItem = path.startsWith("http") ? 
+                    MediaItem.fromUri(Uri.parse(path)) : 
+                    MediaItem.fromUri(Uri.fromFile(new File(path)));
+                    
+            if (previewExoPlayer != null) {
+                previewExoPlayer.setMediaItem(mediaItem);
+                previewExoPlayer.prepare();
+                previewExoPlayer.play();
+            }
+        } else {
+            if (previewPlayerView != null) previewPlayerView.setVisibility(View.INVISIBLE);
+            if (previewExoPlayer != null) previewExoPlayer.pause();
+            
+            if (previewImageView != null) {
+                previewImageView.setVisibility(View.VISIBLE);
+                // .dontAnimate() - убивает вспышки и мерцания фото!
+                if (path.startsWith("http")) {
+                    Glide.with(this).load(path).dontAnimate().centerCrop().into(previewImageView);
+                } else {
+                    Glide.with(this).load(new File(path)).dontAnimate().centerCrop().into(previewImageView);
+                }
+            }
+        }
     }
 
-    // === ИСПРАВЛЕНИЕ: Мы больше не заменяем чужой фон на свой, если переходим на Поиск/Настройки ===
+    // === ПЕРЕКЛЮЧЕНИЕ ФОНОВ БЕЗ УНИЧТОЖЕНИЯ ===
     public void clearPreviewBackground() {
-        if (previewBgPath != null) {
-            previewBgPath = null;
-            // Если мы переходим на свой профиль - грузим свой фон.
-            // Иначе - просто ставим текущий фон (чужой) на паузу!
-            if (currentTab == 4) {
-                updateGlobalBackground(true);
-            } else {
-                updateGlobalBackground(false);
-            }
+        // Мы НЕ обнуляем previewBgPath, чтобы приложение помнило чужой фон!
+        // Просто возвращаемся к нашему основному фону (или гасим всё, если это поиск)
+        if (currentTab == 4) {
+            updateGlobalBackground(true);
+        } else {
+            updateGlobalBackground(false);
         }
     }
 
@@ -490,9 +496,7 @@ public class MainActivity extends AppCompatActivity {
         File[] files = dir.listFiles();
         if (files != null) {
             for (File f : files) {
-                if (f.getName().startsWith("my_bg_" + uid)) {
-                    f.delete();
-                }
+                if (f.getName().startsWith("my_bg_" + uid)) f.delete();
             }
         }
 
@@ -537,42 +541,24 @@ public class MainActivity extends AppCompatActivity {
         return path;
     }
 
+    // === УПРАВЛЕНИЕ НАШИМ ФОНОМ (СЛОЙ 1) ===
     public void updateGlobalBackground(boolean show) {
-        if (hideBgRunnable == null) {
-            hideBgRunnable = () -> {
-                if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
-                if (playerView != null) playerView.setVisibility(View.INVISIBLE);
-                if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
-            };
-        }
-
         if (!show) {
-            bgHandler.removeCallbacks(hideBgRunnable);
-            bgHandler.postDelayed(hideBgRunnable, 200);
+            // Мягко ставим на паузу оба плеера (например, мы в Настройках или Поиске)
+            if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
+            if (previewExoPlayer != null && previewExoPlayer.isPlaying()) previewExoPlayer.pause();
             return;
         }
 
-        bgHandler.removeCallbacks(hideBgRunnable);
-
-        if (previewBgPath != null) {
-            if ("none".equals(previewBgPath)) {
-                if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
-                if (playerView != null) playerView.setVisibility(View.INVISIBLE);
-                if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
-                return;
-            }
-            switchMedia(previewBgPath, isPreviewVideo);
-            return;
-        }
+        // Мы включаем наш глобальный фон - значит чужой фон (слой 2) нужно скрыть
+        if (previewExoPlayer != null && previewExoPlayer.isPlaying()) previewExoPlayer.pause();
+        if (previewPlayerView != null) previewPlayerView.setVisibility(View.INVISIBLE);
+        if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
 
         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
-        if (acct == null) {
-            bgHandler.postDelayed(hideBgRunnable, 200);
-            return;
-        }
+        if (acct == null) return;
         
         String uid = acct.getId();
-
         String myBgUrl = prefs.getString("my_bg_base64", null);
         if (myBgUrl != null && myBgUrl.startsWith("http")) {
             syncMyBackground(myBgUrl);
@@ -595,19 +581,59 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (targetPath == null || targetPath.isEmpty() || (!new File(targetPath).exists() && !targetPath.startsWith("http"))) {
-            bgHandler.postDelayed(hideBgRunnable, 200);
+            if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
+            if (playerView != null) playerView.setVisibility(View.INVISIBLE);
+            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
             currentBgPath = null;
+            return;
+        }
+
+        // Наш фон уже загружен - просто снимаем его с паузы!
+        if (targetPath.equals(currentBgPath)) {
+            if (isVideo) {
+                if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+                if (playerView != null) playerView.setVisibility(View.VISIBLE);
+                if (exoPlayer != null && !exoPlayer.isPlaying()) exoPlayer.play();
+            } else {
+                if (playerView != null) playerView.setVisibility(View.INVISIBLE);
+                if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
+                if (globalImageView != null) globalImageView.setVisibility(View.VISIBLE);
+            }
             return;
         }
 
         if (currentBgPath != null && currentBgPath.startsWith("http") && targetPath != null && !targetPath.startsWith("http")) {
             String syncedUrl = prefs.getString("synced_bg_url_" + uid, "");
-            if (currentBgPath.equals(syncedUrl) || currentBgPath.equals(currentBgBase64)) {
-                return; 
-            }
+            if (currentBgPath.equals(syncedUrl) || currentBgPath.equals(currentBgBase64)) return; 
         }
 
-        switchMedia(targetPath, isVideo);
+        currentBgPath = targetPath;
+
+        if (isVideo) {
+            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+            if (playerView != null) playerView.setVisibility(View.VISIBLE);
+            
+            MediaItem mediaItem = targetPath.startsWith("http") ? 
+                    MediaItem.fromUri(Uri.parse(targetPath)) : 
+                    MediaItem.fromUri(Uri.fromFile(new File(targetPath)));
+                    
+            if (exoPlayer != null) {
+                exoPlayer.setMediaItem(mediaItem);
+                exoPlayer.prepare();
+                exoPlayer.play();
+            }
+        } else {
+            if (playerView != null) playerView.setVisibility(View.INVISIBLE);
+            if (exoPlayer != null) exoPlayer.pause();
+            if (globalImageView != null) {
+                globalImageView.setVisibility(View.VISIBLE);
+                if (targetPath.startsWith("http")) {
+                    Glide.with(this).load(targetPath).dontAnimate().centerCrop().into(globalImageView);
+                } else {
+                    Glide.with(this).load(new File(targetPath)).dontAnimate().centerCrop().into(globalImageView);
+                }
+            }
+        }
     }   
     
     public void syncMyBackground(String bgUrl) {
@@ -657,7 +683,7 @@ public class MainActivity extends AppCompatActivity {
                     isSyncingBg = false;
                     prefs.edit()
                          .putString("synced_bg_url_" + uid, bgUrl)
-                         .putString("custom_bg_path_" + uid, localFile.getAbsolutePath())
+                         .putString("custom_bg_path_" + localFile.getAbsolutePath())
                          .putBoolean("custom_bg_is_video_" + uid, isVideo)
                          .apply();
                          
@@ -674,6 +700,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         if (exoPlayer != null && exoPlayer.isPlaying()) exoPlayer.pause();
+        if (previewExoPlayer != null && previewExoPlayer.isPlaying()) previewExoPlayer.pause();
         getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(notifListener);
     }
@@ -684,7 +711,8 @@ public class MainActivity extends AppCompatActivity {
         loadUserAvatarToBottomNav(); 
         updateNotificationBadge(); 
         
-        if (previewBgPath != null) {
+        // Решаем, что включить при возврате в приложение
+        if (previewBgPath != null && navigator != null && navigator.hasSubScreen()) {
             previewBackground(previewBgPath, isPreviewVideo);
         } else {
             updateGlobalBackground(true);
@@ -716,6 +744,10 @@ public class MainActivity extends AppCompatActivity {
         if (exoPlayer != null) {
             exoPlayer.release();
             exoPlayer = null;
+        }
+        if (previewExoPlayer != null) {
+            previewExoPlayer.release();
+            previewExoPlayer = null;
         }
     }
 
@@ -763,17 +795,12 @@ public class MainActivity extends AppCompatActivity {
 
         if (iconProfile != null) {
             String uid = account.getId();
-            
             String customAvatarPath = prefs.getString("custom_avatar_path_" + uid, null);
             if (customAvatarPath != null) {
                 File localFile = new File(customAvatarPath);
                 if (localFile.exists()) {
                     iconProfile.setImageTintList(null); 
-                    Glide.with(this)
-                         .load(localFile)
-                         .signature(new ObjectKey(localFile.lastModified())) 
-                         .circleCrop()
-                         .into(iconProfile);
+                    Glide.with(this).load(localFile).signature(new ObjectKey(localFile.lastModified())).circleCrop().into(iconProfile);
                     return;
                 }
             }
@@ -894,9 +921,7 @@ public class MainActivity extends AppCompatActivity {
                             }
                         }
                     } else {
-                        if (overlay != null) {
-                            overlay.setVisibility(View.GONE);
-                        }
+                        if (overlay != null) overlay.setVisibility(View.GONE);
                     }
                 }
             }
@@ -948,7 +973,7 @@ public class MainActivity extends AppCompatActivity {
     private void updateNavState(int index) {
         currentTab = index;
         
-        // Переход по вкладкам. Мягко отключаем превью (без зачистки пути плеера).
+        // Просто переключаем состояние, не забывая чужой фон
         clearPreviewBackground();
         
         mainHeader.setVisibility(View.VISIBLE);
