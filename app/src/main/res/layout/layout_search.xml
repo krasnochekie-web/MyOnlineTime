@@ -19,6 +19,7 @@
             android:layout_marginLeft="16dp"
             android:layout_marginRight="16dp">
 
+            <!-- УВЕЛИЧЕН paddingRight="45dp", чтобы текст не залезал под крест -->
             <EditText
                 android:id="@+id/search_input"
                 android:layout_width="match_parent"
@@ -28,7 +29,7 @@
                 android:textColor="@color/textDynamic"
                 android:background="@drawable/bg_input_field"
                 android:paddingLeft="16dp"
-                android:paddingRight="45dp" <!-- УВЕЛИЧЕНО: чтобы текст не залезал под крест -->
+                android:paddingRight="45dp" 
                 android:paddingTop="12dp"
                 android:paddingBottom="12dp"
                 android:drawableLeft="@drawable/ic_nav_search"
@@ -51,7 +52,7 @@
                 android:foreground="?android:attr/selectableItemBackgroundBorderless"
                 android:src="@android:drawable/ic_menu_close_clear_cancel"
                 android:tint="@color/textDynamic"
-                android:visibility="gone" /> <!-- По умолчанию скрыт, пока нет текста -->
+                android:visibility="gone" />
 
         </RelativeLayout>
 
@@ -67,7 +68,6 @@
 
     </LinearLayout>
 
-    <!-- ВОТ ОНА, НАША КРУТИЛОЧКА -->
     <ProgressBar
         android:id="@+id/search_loading_spinner"
         android:layout_width="40dp"
