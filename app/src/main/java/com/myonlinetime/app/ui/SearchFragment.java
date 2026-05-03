@@ -10,6 +10,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.ProgressBar; 
 
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -55,6 +56,7 @@ public class SearchFragment extends Fragment {
         View view = inflater.inflate(R.layout.layout_search, container, false);
         
         EditText searchInput = view.findViewById(R.id.search_input);
+        ImageView clearBtn = view.findViewById(R.id.search_clear_btn); // НАШ КРЕСТИК
         resultsList = view.findViewById(R.id.search_results_list);
         loadingSpinner = view.findViewById(R.id.search_loading_spinner); 
 
@@ -76,10 +78,16 @@ public class SearchFragment extends Fragment {
         resultsList.setAdapter(adapter);
         resultsList.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
+        // Очищаем поле при клике на крестик
+        clearBtn.setOnClickListener(v -> searchInput.setText(""));
+
         if (lastSearchQuery.length() > 0) {
             searchInput.setText(lastSearchQuery);
             searchInput.setSelection(lastSearchQuery.length());
+            clearBtn.setVisibility(View.VISIBLE);
             performSearch(lastSearchQuery, activity);
+        } else {
+            clearBtn.setVisibility(View.GONE);
         }
 
         searchInput.addTextChangedListener(new TextWatcher() {
@@ -90,7 +98,14 @@ public class SearchFragment extends Fragment {
                 searchRunnable = () -> performSearch(s.toString(), activity);
                 searchHandler.postDelayed(searchRunnable, 400);
             }
-            @Override public void afterTextChanged(Editable s) {}
+            @Override public void afterTextChanged(Editable s) {
+                // Показываем крестик, если текст есть, и скрываем, если пусто
+                if (s.length() > 0) {
+                    clearBtn.setVisibility(View.VISIBLE);
+                } else {
+                    clearBtn.setVisibility(View.GONE);
+                }
+            }
         });
 
         return view;
