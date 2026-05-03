@@ -73,10 +73,6 @@ public class OtherProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
 
-        if (activity.navigator != null && activity.navigator.getCurrentTabIndex() == 4) {
-            activity.updateGlobalBackground(true);
-        }
-
         final TextView nameView = view.findViewById(R.id.profile_name);
         final TextView aboutView = view.findViewById(R.id.profile_about);
         avatarView = view.findViewById(R.id.profile_avatar);
@@ -88,9 +84,6 @@ public class OtherProfileFragment extends Fragment {
         final TextView weekTimeText = view.findViewById(R.id.profile_week_time);
         View followersClick = view.findViewById(R.id.container_followers);
         View followingClick = view.findViewById(R.id.container_following);
-
-        TextView tabTopApps = view.findViewById(R.id.tab_top_apps);
-        if (tabTopApps != null) tabTopApps.setSelected(true);
 
         final ImageView btnExpand = view.findViewById(R.id.btn_expand_apps);
         final ImageView btnCollapse = view.findViewById(R.id.btn_collapse_apps);
@@ -132,9 +125,7 @@ public class OtherProfileFragment extends Fragment {
                             activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
                         } else {
                             loadedBgUrl = null;
-                            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                                if (isAdded() && !isHidden()) activity.clearPreviewBackground();
-                            }, 400);
+                            activity.previewBackground("none", false); // Черный фон без морганий
                         }
 
                         renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
@@ -177,10 +168,6 @@ public class OtherProfileFragment extends Fragment {
                  }
             });
         }
-
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
-        }, 400);
 
         return view;
     }
@@ -238,12 +225,11 @@ public class OtherProfileFragment extends Fragment {
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null && !isHidden()) {
             refreshCounts(activity);
-            
-            if (loadedBgUrl != null) activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
-            
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
-            }, 400);
+            if (loadedBgUrl != null) {
+                activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
+            } else {
+                activity.previewBackground("none", false);
+            }
         }
     }
 
@@ -258,11 +244,11 @@ public class OtherProfileFragment extends Fragment {
             activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
             refreshCounts(activity);
             
-            if (loadedBgUrl != null) activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
-            
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
-            }, 400);
+            if (loadedBgUrl != null) {
+                activity.previewBackground(loadedBgUrl, isLoadedBgVideo);
+            } else {
+                activity.previewBackground("none", false);
+            }
         }
     }
 
@@ -271,11 +257,13 @@ public class OtherProfileFragment extends Fragment {
         super.onDestroyView();
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
-            if (activity.navigator != null && activity.navigator.getCurrentTabIndex() == 4) {
-                activity.updateGlobalBackground(true);
-            }
+            // ИСПРАВЛЕНИЕ: Стираем фон ТОЛЬКО если он всё еще принадлежит этому мертвому фрагменту.
+            // Иначе мы случайно убьем фон нового фрагмента.
+            final String bgToClear = loadedBgUrl != null ? loadedBgUrl : "none";
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                activity.clearPreviewBackground();
+                if (activity.previewBgPath != null && activity.previewBgPath.equals(bgToClear)) {
+                    activity.clearPreviewBackground();
+                }
             }, 400);
         }
     }
@@ -287,10 +275,11 @@ public class OtherProfileFragment extends Fragment {
         }
         if (activity == null) return;
 
-        // Если приложений нет — скрываем ТОЛЬКО саму полоску контейнера. Надписи остаются!
+        // Если пусто - скрываем ТОЛЬКО полоску списка. Все надписи и часы остаются!
         if (topApps == null || topApps.isEmpty()) {
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (container != null) container.setVisibility(View.GONE);
+                
                 long minutes = serverTotalTime / 1000 / 60;
                 long hours = minutes / 60;
                 long mins = minutes % 60;
