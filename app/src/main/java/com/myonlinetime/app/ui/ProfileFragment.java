@@ -54,7 +54,7 @@ public class ProfileFragment extends Fragment {
     private ImageView myBgImageView;
     private String myUid = "";
 
-    // === ЖЕСТКАЯ ПАМЯТЬ ДЛЯ ИЗОЛЯЦИИ ОБНОВЛЕНИЙ ===
+    // Жесткая память для абсолютной изоляции обновлений (ничего не моргает)
     private String currentLoadedAvatar = null;
     private String currentLoadedBg = null;
 
@@ -162,8 +162,8 @@ public class ProfileFragment extends Fragment {
                 @Override
                 public void onLoaded(User user) {
                     if (!isAdded()) return;
-
-                    // === ЗАМОК ===
+                    
+                    // ЗАМОК: Игнорируем данные сервера, если мы только что сохраняли изменения!
                     if (EditProfileFragment.isProfileUploading || (System.currentTimeMillis() - EditProfileFragment.lastProfileSyncTime < 5000)) {
                         return;
                     }
@@ -245,7 +245,7 @@ public class ProfileFragment extends Fragment {
         ImageView btnExpand = getView().findViewById(R.id.btn_expand_apps);
         ImageView btnCollapse = getView().findViewById(R.id.btn_collapse_apps);
 
-        // ИЗОЛЯЦИЯ ТЕКСТОВ
+        // 1. ИЗОЛЯЦИЯ ТЕКСТОВ
         String newName = activity.prefs.getString("my_nickname", "...");
         if (!newName.equals(nameView.getText().toString())) nameView.setText(newName);
 
@@ -260,17 +260,22 @@ public class ProfileFragment extends Fragment {
         if (followersCount != null) followersCount.setText(String.valueOf(prefs.getInt("followers_count", 0)));
         if (followingCount != null) followingCount.setText(String.valueOf(prefs.getInt("following_count", 0)));
 
-        // ИЗОЛЯЦИЯ АВАТАРКИ
+        // 2. ИЗОЛЯЦИЯ АВАТАРКИ
         String photoUrl = activity.prefs.getString("my_photo_base64", null);
         handleMediaLoading(activity, photoUrl, true, myUid);
 
-        // ИЗОЛЯЦИЯ ФОНА
+        // 3. ИЗОЛЯЦИЯ ФОНА (Абсолютная защита от мерцания)
         if (myBgImageView != null) {
             String myBgUrl = activity.prefs.getString("my_bg_base64", null);
             String customBgPath = activity.prefs.getString("custom_bg_path_" + myUid, null);
 
-            String bgHash = (myBgUrl != null) ? myBgUrl : "empty";
-            String newBgKey = myUid + "_" + customBgPath + "_" + bgHash;
+            String newBgKey;
+            // Если есть локальный файл, ключ зависит ТОЛЬКО от него. Серверные ссылки игнорируются!
+            if (customBgPath != null && new File(customBgPath).exists()) {
+                newBgKey = myUid + "_local_" + new File(customBgPath).lastModified();
+            } else {
+                newBgKey = myUid + "_remote_" + ((myBgUrl != null) ? myBgUrl : "empty");
+            }
 
             if (!newBgKey.equals(currentLoadedBg)) {
                 currentLoadedBg = newBgKey;
@@ -327,8 +332,14 @@ public class ProfileFragment extends Fragment {
         if (!isAdded() || avatarView == null) return;
 
         String customAvatarPath = useLocalFile ? activity.prefs.getString("custom_avatar_path_" + uid, null) : null;
-        String urlHash = photoUrl != null ? String.valueOf(photoUrl.hashCode()) : "empty";
-        String newAvatarKey = uid + "_" + customAvatarPath + "_" + urlHash;
+        
+        String newAvatarKey;
+        // Если есть локальная аватарка, ключ зависит ТОЛЬКО от нее. Серверные ссылки игнорируются!
+        if (useLocalFile && customAvatarPath != null && new File(customAvatarPath).exists()) {
+            newAvatarKey = uid + "_local_" + new File(customAvatarPath).lastModified();
+        } else {
+            newAvatarKey = uid + "_remote_" + (photoUrl != null ? String.valueOf(photoUrl.hashCode()) : "empty");
+        }
         
         // ЕСЛИ АВАТАРКА НЕ МЕНЯЛАСЬ — ГАРАНТИЯ ОТСУТСТВИЯ МЕРЦАНИЯ
         if (newAvatarKey.equals(currentLoadedAvatar)) return;
