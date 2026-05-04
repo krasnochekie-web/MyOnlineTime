@@ -44,8 +44,6 @@ import java.io.OutputStream;
 
 public class EditProfileFragment extends Fragment {
 
-    public static boolean isProfileUploading = false;
-
     private File pendingPhotoFile = null;
     private File pendingBgFile = null;
     
@@ -84,9 +82,11 @@ public class EditProfileFragment extends Fragment {
         }
     }
 
+    // === ИДЕАЛЬНАЯ ЛОГИКА АНТИ-СПАМА ===
     private boolean isActionSpam(boolean isMedia) {
         long now = System.currentTimeMillis();
         
+        // ЖЕСТКОЕ ПРАВИЛО: Если наказание еще действует, ЛЮБАЯ попытка сбрасывает таймер на 30 сек заново!
         if (now < penaltyEndTime) {
             penaltyEndTime = now + 30000; 
             if (getActivity() != null) Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
@@ -104,8 +104,10 @@ public class EditProfileFragment extends Fragment {
             }
         } else {
             textAttemptTimes.add(now);
+            // Удаляем старые клики (старше 5 секунд)
             while (!textAttemptTimes.isEmpty() && now - textAttemptTimes.getFirst() > 5000) textAttemptTimes.removeFirst();
             
+            // Если за 5 секунд накопилось более 5 попыток проверки/сохранения
             if (textAttemptTimes.size() > 5) {
                 penaltyEndTime = now + 30000;
                 textAttemptTimes.clear();
@@ -235,100 +237,91 @@ public class EditProfileFragment extends Fragment {
              String uid = acct.getId();
              File finalBgFile = pendingBgFile;
              File finalPhotoFile = pendingPhotoFile;
+             
+             final String oldName = activity.prefs.getString("my_nickname", "...");
+             final String oldAbout = activity.prefs.getString("my_about", "");
 
              Runnable performOptimisticSaveAndUpload = () -> {
                  SharedPreferences.Editor editor = activity.prefs.edit();
                  editor.putString("my_nickname", n);
                  editor.putString("my_about", a);
 
-                 // 1. Создаем ЛОКАЛЬНЫЕ БЕЗОПАСНЫЕ ФАЙЛЫ (Они не удаляются!)
-                 final File[] safePhotoFile = {null};
-                 final File[] safeBgFile = {null};
-
                  if (finalPhotoFile != null) {
-                     File pPath = new File(activity.getFilesDir(), "avatar_" + uid + ".png");
-                     try { copyFile(finalPhotoFile, pPath); safePhotoFile[0] = pPath; } catch (Exception ignored) {}
-                     editor.putString("custom_avatar_path_" + uid, pPath.getAbsolutePath());
+                     String pPath = new File(activity.getFilesDir(), "avatar_" + uid + "_" + System.currentTimeMillis() + (finalPhotoFile.getName().endsWith(".gif") ? ".gif" : ".png")).getAbsolutePath();
+                     try { copyFile(finalPhotoFile, new File(pPath)); } catch (Exception ignored) {}
+                     editor.putString("custom_avatar_path_" + uid, pPath);
                  }
                  if (finalBgFile != null) {
-                     String ext = finalBgFile.getName().endsWith(".mp4") ? ".mp4" : ".jpg";
-                     File bPath = new File(activity.getFilesDir(), "my_bg_" + uid + ext);
-                     try { copyFile(finalBgFile, bPath); safeBgFile[0] = bPath; } catch (Exception ignored) {}
-                     editor.putString("custom_bg_path_" + uid, bPath.getAbsolutePath());
-                     editor.putBoolean("custom_bg_is_video_" + uid, ext.equals(".mp4"));
+                     String bPath = new File(activity.getFilesDir(), "my_bg_" + uid + "_" + System.currentTimeMillis() + (finalBgFile.getName().endsWith(".mp4") ? ".mp4" : ".jpg")).getAbsolutePath();
+                     try { copyFile(finalBgFile, new File(bPath)); } catch (Exception ignored) {}
+                     editor.putString("custom_bg_path_" + uid, bPath);
+                     editor.putBoolean("custom_bg_is_video_" + uid, finalBgFile.getName().endsWith(".mp4"));
                  }
                  
                  editor.apply();
                  activity.mMemoryCache.remove("avatar_" + uid);
 
-                 EditProfileFragment.isProfileUploading = true;
-
-                 // 2. Очищаем превью (ЗДЕСЬ УДАЛЯЛСЯ ВРЕМЕННЫЙ ФАЙЛ ФОНА)
                  activity.clearPreviewBackground();
                  activity.updateGlobalBackground(true);
                  activity.updateAvatarInUI();
                  activity.navigator.closeSubScreen();
                  LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
 
-                 // 3. Отправляем файлы на сервер, используя только БЕЗОПАСНЫЕ КОПИИ
                  Utils.backgroundExecutor.execute(() -> {
-                     File serverUploadPhoto = null;
-                     File serverUploadBg = null;
+                     File readyBg = finalBgFile;
+                     File readyPhoto = finalPhotoFile;
 
                      try {
-                         // Читаем из safePhotoFile и safeBgFile, которые гарантированно существуют!
-                         if (safePhotoFile[0] != null && safePhotoFile[0].exists()) {
-                             serverUploadPhoto = new File(activity.getCacheDir(), "server_upload_avatar_" + uid + (safePhotoFile[0].getName().endsWith(".gif") ? ".gif" : ".png"));
-                             copyFile(safePhotoFile[0], serverUploadPhoto);
+                         if (finalBgFile != null) {
+                             boolean isVideo = finalBgFile.getName().endsWith(".mp4");
+                             boolean isGif = finalBgFile.getName().endsWith(".gif");
+                             String ext = isVideo ? ".mp4" : (isGif ? ".gif" : ".jpg");
+                             File permBg = new File(activity.getFilesDir(), "temp_upload_bg_" + uid + ext);
+                             copyFile(finalBgFile, permBg);
+                             readyBg = permBg;
                          }
-                         if (safeBgFile[0] != null && safeBgFile[0].exists()) {
-                             serverUploadBg = new File(activity.getCacheDir(), "server_upload_bg_" + uid + (safeBgFile[0].getName().endsWith(".mp4") ? ".mp4" : ".jpg"));
-                             copyFile(safeBgFile[0], serverUploadBg);
+                         if (finalPhotoFile != null) {
+                             boolean isAvatarGif = finalPhotoFile.getName().endsWith(".gif");
+                             String avatarExt = isAvatarGif ? ".gif" : ".png";
+                             File permAvatar = new File(activity.getFilesDir(), "temp_upload_avatar_" + uid + avatarExt);
+                             copyFile(finalPhotoFile, permAvatar);
+                             readyPhoto = permAvatar;
                          }
                      } catch (Exception e) { e.printStackTrace(); }
 
-                     final File isolatedPhoto = serverUploadPhoto;
-                     final File isolatedBg = serverUploadBg;
+                     File uploadBg = readyBg;
+                     File uploadPhoto = readyPhoto;
 
                      if (activity.vpsToken != null) {
-                         VpsApi.saveUserProfile(activity.vpsToken, n, a, isolatedPhoto, isolatedBg, new VpsApi.Callback() {
+                         VpsApi.saveUserProfile(activity.vpsToken, n, a, uploadPhoto, uploadBg, new VpsApi.Callback() {
                              @Override 
                              public void onSuccess(String result) {
                                  try {
                                      JSONObject json = new JSONObject(result);
-                                     String newPhotoUrl = json.has("photoUrl") ? json.optString("photoUrl") : json.optString("photo", null);
-                                     String newBgUrl = json.has("backgroundUrl") ? json.optString("backgroundUrl") : json.optString("background", null);
+                                     String newPhotoUrl = json.optString("photoUrl", null);
+                                     String newBgUrl = json.optString("backgroundUrl", null);
 
                                      activity.runOnUiThread(() -> {
                                          SharedPreferences.Editor successEditor = activity.prefs.edit();
                                          if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null")) {
                                              successEditor.putString("my_photo_base64", newPhotoUrl);
+                                             successEditor.putString("synced_photo_url_" + uid, newPhotoUrl);
                                          }
                                          if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null")) {
                                              successEditor.putString("my_bg_base64", newBgUrl);
+                                             successEditor.putString("synced_bg_url_" + uid, newBgUrl);
                                          }
                                          successEditor.apply();
-                                         
-                                         EditProfileFragment.isProfileUploading = false;
-                                         LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
                                      });
-                                 } catch (Exception ignored) {
-                                     EditProfileFragment.isProfileUploading = false;
-                                 } finally {
-                                     if (isolatedPhoto != null && isolatedPhoto.exists()) isolatedPhoto.delete();
-                                     if (isolatedBg != null && isolatedBg.exists()) isolatedBg.delete();
+
                                      if (pendingPhotoFile != null && pendingPhotoFile.exists()) pendingPhotoFile.delete();
                                      if (pendingBgFile != null && pendingBgFile.exists()) pendingBgFile.delete();
-                                 }
+                                     if (uploadBg != null && uploadBg.exists() && uploadBg != finalBgFile) uploadBg.delete();
+                                     if (uploadPhoto != null && uploadPhoto.exists() && uploadPhoto != finalPhotoFile) uploadPhoto.delete();
+                                 } catch (Exception ignored) {}
                              }
-                             @Override public void onError(String error) {
-                                 EditProfileFragment.isProfileUploading = false;
-                                 if (isolatedPhoto != null && isolatedPhoto.exists()) isolatedPhoto.delete();
-                                 if (isolatedBg != null && isolatedBg.exists()) isolatedBg.delete();
-                             }
+                             @Override public void onError(String error) {}
                          });
-                     } else {
-                         EditProfileFragment.isProfileUploading = false;
                      }
                  });
              };
@@ -486,4 +479,3 @@ public class EditProfileFragment extends Fragment {
             }
         }
     }
-}
