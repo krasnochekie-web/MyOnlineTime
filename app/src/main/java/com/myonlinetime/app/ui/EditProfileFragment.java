@@ -7,6 +7,7 @@ import androidx.fragment.app.Fragment;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
@@ -17,7 +18,9 @@ import com.myonlinetime.app.utils.Utils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.signature.ObjectKey;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -45,6 +48,8 @@ public class EditProfileFragment extends Fragment {
 
     private File pendingPhotoFile = null;
     private File pendingBgFile = null;
+
+    private ImageView localBgImageView; // Свой собственный фон для плавного выезда!
 
     private static long penaltyEndTime = 0;
     private static final java.util.LinkedList<Long> textAttemptTimes = new java.util.LinkedList<>();
@@ -114,24 +119,40 @@ public class EditProfileFragment extends Fragment {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         final MainActivity activity = (MainActivity) getActivity();
-        final View view = inflater.inflate(R.layout.layout_edit_profile, container, false);
+        final View originalView = inflater.inflate(R.layout.layout_edit_profile, container, false);
 
-        if (activity == null) return view;
+        if (activity == null) return originalView;
         setupHeader(activity);
 
         final GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
-        if (acct == null) return view;
+        if (acct == null) return originalView;
+
+        // === ИЗОЛИРОВАННЫЙ ФОН ===
+        // Оборачиваем EditProfile во FrameLayout и даем ему свой фон, чтобы он выезжал без мерцаний!
+        FrameLayout wrapper = new FrameLayout(activity);
+        wrapper.setLayoutParams(originalView.getLayoutParams() != null ? originalView.getLayoutParams() : new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        originalView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        localBgImageView = new ImageView(activity);
+        localBgImageView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        localBgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        localBgImageView.setBackgroundColor(Color.parseColor("#121212")); 
+
+        wrapper.addView(localBgImageView);
+        wrapper.addView(originalView);
+
+        loadExistingBackground(activity); // Загружаем текущий фон профиля сюда
 
         final String initialName = getArguments() != null ? getArguments().getString("CURRENT_NAME", "") : "";
         final String initialAbout = getArguments() != null ? getArguments().getString("CURRENT_ABOUT", "") : "";
 
-        final EditText inputName = view.findViewById(R.id.input_nickname);
-        final EditText inputAbout = view.findViewById(R.id.input_about);
-        final TextView aboutCounter = view.findViewById(R.id.text_about_counter); 
-        View btnChangePhoto = view.findViewById(R.id.btn_change_photo);
-        View btnChangeBackground = view.findViewById(R.id.btn_change_background);
-        ImageView avatarPreview = view.findViewById(R.id.edit_avatar_preview);
-        Button btnSave = view.findViewById(R.id.btn_save_changes);
+        final EditText inputName = wrapper.findViewById(R.id.input_nickname);
+        final EditText inputAbout = wrapper.findViewById(R.id.input_about);
+        final TextView aboutCounter = wrapper.findViewById(R.id.text_about_counter); 
+        View btnChangePhoto = wrapper.findViewById(R.id.btn_change_photo);
+        View btnChangeBackground = wrapper.findViewById(R.id.btn_change_background);
+        ImageView avatarPreview = wrapper.findViewById(R.id.edit_avatar_preview);
+        Button btnSave = wrapper.findViewById(R.id.btn_save_changes);
 
         InputFilter exoticFilter = new InputFilter() {
             @Override
@@ -207,9 +228,8 @@ public class EditProfileFragment extends Fragment {
              final String n = inputName.getText().toString().trim();
              final String a = inputAbout.getText().toString().trim();
 
-             // Если не меняли НИЧЕГО - просто выходим. Никаких событий и обновлений.
+             // ИЗОЛЯЦИЯ: Если нет изменений — выходим без лишнего шума
              if (n.equals(initialName) && a.equals(initialAbout) && pendingPhotoFile == null && pendingBgFile == null) {
-                 activity.clearPreviewBackground(); 
                  activity.navigator.closeSubScreen();
                  return;
              }
@@ -226,7 +246,7 @@ public class EditProfileFragment extends Fragment {
              String uid = acct.getId();
              File finalBgFile = pendingBgFile;
              File finalPhotoFile = pendingPhotoFile;
-             
+
              Runnable performOptimisticSaveAndUpload = () -> {
                  SharedPreferences.Editor editor = activity.prefs.edit();
                  editor.putString("my_nickname", n);
@@ -263,10 +283,7 @@ public class EditProfileFragment extends Fragment {
                  EditProfileFragment.isProfileUploading = true;
                  EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
 
-                 activity.clearPreviewBackground();
-                 // Внимание: мы БОЛЬШЕ НЕ ВЫЗЫВАЕМ updateGlobalBackground здесь! 
-                 
-                 // Обновляем аватарку в нижней панели ТОЛЬКО если она реально поменялась
+                 // ИЗОЛЯЦИЯ: Обновляем нижнюю аватарку ТОЛЬКО если изменили саму аватарку
                  if (finalPhotoFile != null) {
                      activity.mMemoryCache.remove("avatar_" + uid);
                      activity.updateAvatarInUI();
@@ -302,13 +319,23 @@ public class EditProfileFragment extends Fragment {
                                      String newPhotoUrl = json.has("photoUrl") ? json.optString("photoUrl") : json.optString("photo", null);
                                      String newBgUrl = json.has("backgroundUrl") ? json.optString("backgroundUrl") : json.optString("background", null);
 
-                                     if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null") && newPhotoUrl.startsWith("http")) {
-                                         if (newPhotoUrl.contains("?")) newPhotoUrl = newPhotoUrl.substring(0, newPhotoUrl.indexOf("?"));
-                                         newPhotoUrl += "?t=" + System.currentTimeMillis();
+                                     // СТРОГАЯ ИЗОЛЯЦИЯ: Меняем ссылку (сброс кэша) ТОЛЬКО если отправляли новый файл!
+                                     if (safePhotoFile[0] != null) {
+                                         if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null") && newPhotoUrl.startsWith("http")) {
+                                             if (newPhotoUrl.contains("?")) newPhotoUrl = newPhotoUrl.substring(0, newPhotoUrl.indexOf("?"));
+                                             newPhotoUrl += "?t=" + System.currentTimeMillis();
+                                         }
+                                     } else {
+                                         newPhotoUrl = activity.prefs.getString("my_photo_base64", newPhotoUrl);
                                      }
-                                     if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null") && newBgUrl.startsWith("http")) {
-                                         if (newBgUrl.contains("?")) newBgUrl = newBgUrl.substring(0, newBgUrl.indexOf("?"));
-                                         newBgUrl += "?t=" + System.currentTimeMillis();
+
+                                     if (safeBgFile[0] != null) {
+                                         if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null") && newBgUrl.startsWith("http")) {
+                                             if (newBgUrl.contains("?")) newBgUrl = newBgUrl.substring(0, newBgUrl.indexOf("?"));
+                                             newBgUrl += "?t=" + System.currentTimeMillis();
+                                         }
+                                     } else {
+                                         newBgUrl = activity.prefs.getString("my_bg_base64", newBgUrl);
                                      }
 
                                      final String finalPhotoUrl = newPhotoUrl;
@@ -377,7 +404,23 @@ public class EditProfileFragment extends Fragment {
              }
         });
 
-        return view;
+        return wrapper; // Возвращаем обертку с изолированным фоном!
+    }
+
+    private void loadExistingBackground(MainActivity activity) {
+        if (localBgImageView == null) return;
+        String uid = GoogleSignIn.getLastSignedInAccount(activity) != null ? GoogleSignIn.getLastSignedInAccount(activity).getId() : "";
+        String myBgUrl = activity.prefs.getString("my_bg_base64", null);
+        String customBgPath = activity.prefs.getString("custom_bg_path_" + uid, null);
+        
+        if (customBgPath != null && new File(customBgPath).exists()) {
+            File bgFile = new File(customBgPath);
+            Glide.with(activity).load(bgFile).signature(new ObjectKey(bgFile.lastModified())).centerCrop().into(localBgImageView);
+        } else if (myBgUrl != null && !myBgUrl.isEmpty() && !myBgUrl.equals("null")) {
+            Glide.with(activity).load(myBgUrl).centerCrop().into(localBgImageView);
+        } else {
+            localBgImageView.setImageDrawable(null);
+        }
     }
 
     private void processMediaFile(Uri uri, int maxMb, boolean isPhoto) {
@@ -423,7 +466,7 @@ public class EditProfileFragment extends Fragment {
                         if (avatarPreview != null) Glide.with(this).load(tempFile).circleCrop().into(avatarPreview);
                     } else {
                         pendingBgFile = tempFile;
-                        activity.previewBackground(tempFile.getAbsolutePath());
+                        if (localBgImageView != null) Glide.with(activity).load(tempFile).centerCrop().into(localBgImageView);
                     }
                 });
             } catch (Exception e) {}
@@ -447,7 +490,6 @@ public class EditProfileFragment extends Fragment {
         super.onDestroyView();
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
-            activity.clearPreviewBackground();
             if (!activity.navigator.hasSubScreen()) activity.headerManager.resetHeader();
         }
     }
@@ -455,7 +497,6 @@ public class EditProfileFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        // ВЫРЕЗАН КОСТЫЛЬ updateGlobalBackground(true), чтобы анимация не затемнялась!
     }
 
     @Override
@@ -465,7 +506,6 @@ public class EditProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!hidden) {
                 setupHeader(activity);
-                // ВЫРЕЗАН КОСТЫЛЬ updateGlobalBackground(true)
             }
         }
     }
