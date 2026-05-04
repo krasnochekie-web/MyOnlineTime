@@ -95,7 +95,7 @@ public class ProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.resetHeader();
 
-        // Убеждаемся, что старый глобальный фон отключен, чтобы не было дублей и затемнений
+        // Убеждаемся, что старый глобальный фон отключен
         activity.updateGlobalBackground(false);
 
         FrameLayout wrapper = new FrameLayout(activity);
@@ -163,6 +163,7 @@ public class ProfileFragment extends Fragment {
                 public void onLoaded(User user) {
                     if (!isAdded()) return;
 
+                    // === ЗАМОК ===
                     if (EditProfileFragment.isProfileUploading || (System.currentTimeMillis() - EditProfileFragment.lastProfileSyncTime < 5000)) {
                         return;
                     }
@@ -244,7 +245,7 @@ public class ProfileFragment extends Fragment {
         ImageView btnExpand = getView().findViewById(R.id.btn_expand_apps);
         ImageView btnCollapse = getView().findViewById(R.id.btn_collapse_apps);
 
-        // Обновляем текст ТОЛЬКО если он реально изменился
+        // ИЗОЛЯЦИЯ ТЕКСТОВ
         String newName = activity.prefs.getString("my_nickname", "...");
         if (!newName.equals(nameView.getText().toString())) nameView.setText(newName);
 
@@ -259,11 +260,11 @@ public class ProfileFragment extends Fragment {
         if (followersCount != null) followersCount.setText(String.valueOf(prefs.getInt("followers_count", 0)));
         if (followingCount != null) followingCount.setText(String.valueOf(prefs.getInt("following_count", 0)));
 
-        // Обработка аватарки (строго изолированно)
+        // ИЗОЛЯЦИЯ АВАТАРКИ
         String photoUrl = activity.prefs.getString("my_photo_base64", null);
         handleMediaLoading(activity, photoUrl, true, myUid);
 
-        // Обработка фона (строго изолированно)
+        // ИЗОЛЯЦИЯ ФОНА
         if (myBgImageView != null) {
             String myBgUrl = activity.prefs.getString("my_bg_base64", null);
             String customBgPath = activity.prefs.getString("custom_bg_path_" + myUid, null);
@@ -271,7 +272,6 @@ public class ProfileFragment extends Fragment {
             String bgHash = (myBgUrl != null) ? myBgUrl : "empty";
             String newBgKey = myUid + "_" + customBgPath + "_" + bgHash;
 
-            // ЕСЛИ ФОН НЕ МЕНЯЛСЯ — МЫ ВООБЩЕ НЕ ТРОГАЕМ GLIDE (Нет моргания!)
             if (!newBgKey.equals(currentLoadedBg)) {
                 currentLoadedBg = newBgKey;
 
@@ -330,7 +330,7 @@ public class ProfileFragment extends Fragment {
         String urlHash = photoUrl != null ? String.valueOf(photoUrl.hashCode()) : "empty";
         String newAvatarKey = uid + "_" + customAvatarPath + "_" + urlHash;
         
-        // ЕСЛИ АВАТАРКА НЕ МЕНЯЛАСЬ — ВЫХОДИМ (Нет моргания!)
+        // ЕСЛИ АВАТАРКА НЕ МЕНЯЛАСЬ — ГАРАНТИЯ ОТСУТСТВИЯ МЕРЦАНИЯ
         if (newAvatarKey.equals(currentLoadedAvatar)) return;
         currentLoadedAvatar = newAvatarKey;
 
