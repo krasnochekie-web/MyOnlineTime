@@ -207,6 +207,7 @@ public class EditProfileFragment extends Fragment {
              final String n = inputName.getText().toString().trim();
              final String a = inputAbout.getText().toString().trim();
 
+             // Если не меняли НИЧЕГО - просто выходим. Никаких событий и обновлений.
              if (n.equals(initialName) && a.equals(initialAbout) && pendingPhotoFile == null && pendingBgFile == null) {
                  activity.clearPreviewBackground(); 
                  activity.navigator.closeSubScreen();
@@ -263,8 +264,9 @@ public class EditProfileFragment extends Fragment {
                  EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
 
                  activity.clearPreviewBackground();
-                 // Больше не включаем глобальный фон здесь! ProfileFragment сам разберется со своей оберткой
+                 // Внимание: мы БОЛЬШЕ НЕ ВЫЗЫВАЕМ updateGlobalBackground здесь! 
                  
+                 // Обновляем аватарку в нижней панели ТОЛЬКО если она реально поменялась
                  if (finalPhotoFile != null) {
                      activity.mMemoryCache.remove("avatar_" + uid);
                      activity.updateAvatarInUI();
@@ -453,10 +455,7 @@ public class EditProfileFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        if (!isHidden() && getActivity() instanceof MainActivity) {
-            MainActivity activity = (MainActivity) getActivity();
-            if (activity.previewBgPath == null) activity.updateGlobalBackground(true); 
-        }
+        // ВЫРЕЗАН КОСТЫЛЬ updateGlobalBackground(true), чтобы анимация не затемнялась!
     }
 
     @Override
@@ -466,7 +465,7 @@ public class EditProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!hidden) {
                 setupHeader(activity);
-                if (activity.previewBgPath == null) activity.updateGlobalBackground(true);
+                // ВЫРЕЗАН КОСТЫЛЬ updateGlobalBackground(true)
             }
         }
     }
