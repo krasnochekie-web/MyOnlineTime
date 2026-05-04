@@ -170,7 +170,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // === ИСПРАВЛЕНИЕ: БЛОКИРОВКА ПОВТОРНЫХ НАЖАТИЙ ===
         findViewById(R.id.nav_feed).setOnClickListener(v -> {
             if (currentTab == 0) return;
             updateNavState(0);
@@ -244,26 +243,52 @@ public class MainActivity extends AppCompatActivity {
 
         handleNotificationIntent(getIntent());
         
+        // === ЗАПУСКАЕМ НАШ НОВЫЙ ЖЕЛЕЗНЫЙ МЕХАНИЗМ АВТОРИЗАЦИИ ПРИ СТАРТЕ ===
+        refreshGoogleAndVpsToken(true);
+    } 
+
+    // === НОВЫЙ МЕТОД: АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ ПРОТУХШИХ ТОКЕНОВ И ВОССТАНОВЛЕНИЕ vpsToken ===
+    public void refreshGoogleAndVpsToken(boolean isStartup) {
+        if (mGoogleSignInClient == null) return;
+
         mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
-            StatsHelper.syncUserProfile(MainActivity.this);
-            loadUserAvatarToBottomNav(); 
-            enforceLoginOverlays();
             try {
                 final GoogleSignInAccount account = task.getResult(ApiException.class);
-                if (account != null && navigator != null) {
-                    Looper.myQueue().addIdleHandler(new MessageQueue.IdleHandler() {
+                if (account != null && account.getIdToken() != null) {
+                    
+                    // ГЛАВНОЕ ИСПРАВЛЕНИЕ: Отправляем СВЕЖИЙ токен на сервер
+                    // Это вернет нам vpsToken, даже если приложение было перезапущено!
+                    VpsApi.authenticateWithGoogle(MainActivity.this, account.getIdToken(), new VpsApi.LoginCallback() {
                         @Override
-                        public boolean queueIdle() {
+                        public void onSuccess(String ourServerToken) {
+                            vpsToken = ourServerToken;
+                            StatsHelper.syncUserProfile(MainActivity.this);
+                        }
+                        @Override
+                        public void onError(String error) { }
+                    });
+
+                    // Загружаем статистику только если это первый старт
+                    if (isStartup && navigator != null) {
+                        Looper.myQueue().addIdleHandler(() -> {
                             Utils.backgroundExecutor.execute(() -> {
                                 com.myonlinetime.app.utils.UsageMath.preloadCoreStats(MainActivity.this);
                             });
                             return false; 
-                        }
-                    });
+                        });
+                    }
+                } else {
+                    vpsToken = null;
                 }
-            } catch (Exception ignored) { }
+            } catch (Exception ignored) { 
+                vpsToken = null;
+            }
+            
+            // Обновляем визуал интерфейса после фоновой проверки
+            loadUserAvatarToBottomNav(); 
+            enforceLoginOverlays();
         });
-    } 
+    }
 
     public void clearAllFragments() {
         FragmentManager fm = getSupportFragmentManager();
@@ -375,7 +400,6 @@ public class MainActivity extends AppCompatActivity {
         parent.addView(previewImageView, insertIndex);
     }
 
-    // === ЗАГЛУШКИ ДЛЯ EDIT PROFILE И СТАРЫХ ФРАГМЕНТОВ ===
     public void previewBackground(String path) {
         if (path == null) return;
         if (path.equals("none")) {
@@ -486,7 +510,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // === УПРАВЛЕНИЕ НАШИМ ФОНОМ (МГНОВЕННО) ===
     public void updateGlobalBackground(boolean show) {
         if (!show) {
             if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
@@ -622,6 +645,10 @@ public class MainActivity extends AppCompatActivity {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
             adjustHeaderForWindowMode(isInMultiWindowMode());
         }
+
+        // === ВАЖНО: Обновляем токен при каждом возвращении в приложение! ===
+        // Это защита от ошибки "Token used too late", если приложение долго висело в фоне.
+        refreshGoogleAndVpsToken(false);
     }
 
     @Override
