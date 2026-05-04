@@ -49,7 +49,11 @@ public class EditProfileFragment extends Fragment {
     private File pendingPhotoFile = null;
     private File pendingBgFile = null;
 
-    private ImageView localBgImageView; // Свой собственный фон для плавного выезда!
+    private ImageView localBgImageView;
+
+    // === ИДЕНТИФИКАТОРЫ ВЫБОРА (ЗАЩИТА ОТ ГОНКИ ФАЙЛОВ ПРИ ПЛОХОМ ИНТЕРНЕТЕ) ===
+    private long currentPhotoSelectionId = 0;
+    private long currentBgSelectionId = 0;
 
     private static long penaltyEndTime = 0;
     private static final java.util.LinkedList<Long> textAttemptTimes = new java.util.LinkedList<>();
@@ -57,12 +61,22 @@ public class EditProfileFragment extends Fragment {
 
     private final ActivityResultLauncher<String[]> photoPicker = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(),
-            uri -> { if (uri != null) processMediaFile(uri, 10, true); }
+            uri -> { 
+                if (uri != null) {
+                    currentPhotoSelectionId++;
+                    processMediaFile(uri, 10, true, currentPhotoSelectionId); 
+                }
+            }
     );
 
     private final ActivityResultLauncher<String[]> bgPicker = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(),
-            uri -> { if (uri != null) processMediaFile(uri, 30, false); }
+            uri -> { 
+                if (uri != null) {
+                    currentBgSelectionId++;
+                    processMediaFile(uri, 30, false, currentBgSelectionId); 
+                }
+            }
     );
 
     public static EditProfileFragment newInstance(String currentName, String currentAbout) {
@@ -127,8 +141,9 @@ public class EditProfileFragment extends Fragment {
         final GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
         if (acct == null) return originalView;
 
-        // === ИЗОЛИРОВАННЫЙ ФОН ===
-        // Оборачиваем EditProfile во FrameLayout и даем ему свой фон, чтобы он выезжал без мерцаний!
+        // Делаем сам макет полностью прозрачным, иначе он перекроет наш фон!
+        originalView.setBackgroundColor(Color.TRANSPARENT);
+
         FrameLayout wrapper = new FrameLayout(activity);
         wrapper.setLayoutParams(originalView.getLayoutParams() != null ? originalView.getLayoutParams() : new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         originalView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -141,7 +156,7 @@ public class EditProfileFragment extends Fragment {
         wrapper.addView(localBgImageView);
         wrapper.addView(originalView);
 
-        loadExistingBackground(activity); // Загружаем текущий фон профиля сюда
+        loadExistingBackground(activity); 
 
         final String initialName = getArguments() != null ? getArguments().getString("CURRENT_NAME", "") : "";
         final String initialAbout = getArguments() != null ? getArguments().getString("CURRENT_ABOUT", "") : "";
@@ -207,12 +222,9 @@ public class EditProfileFragment extends Fragment {
             }
         }
 
-        String[] photoMimeTypes = new String[]{"image/*"};
-        String[] backgroundMimeTypes = new String[]{"image/*"};
-        
         View.OnClickListener photoClickListener = v -> {
             if (isActionSpam(true)) return; 
-            photoPicker.launch(photoMimeTypes);
+            photoPicker.launch(new String[]{"image/*"});
         };
         if (btnChangePhoto != null) btnChangePhoto.setOnClickListener(photoClickListener);
         if (avatarPreview != null) avatarPreview.setOnClickListener(photoClickListener);
@@ -220,7 +232,7 @@ public class EditProfileFragment extends Fragment {
         if (btnChangeBackground != null) {
             btnChangeBackground.setOnClickListener(v -> {
                 if (isActionSpam(true)) return; 
-                bgPicker.launch(backgroundMimeTypes);
+                bgPicker.launch(new String[]{"image/*"});
             });
         }
 
@@ -228,7 +240,7 @@ public class EditProfileFragment extends Fragment {
              final String n = inputName.getText().toString().trim();
              final String a = inputAbout.getText().toString().trim();
 
-             // ИЗОЛЯЦИЯ: Если нет изменений — выходим без лишнего шума
+             // ВЫХОД БЕЗ ИЗМЕНЕНИЙ (Тихо и мирно)
              if (n.equals(initialName) && a.equals(initialAbout) && pendingPhotoFile == null && pendingBgFile == null) {
                  activity.navigator.closeSubScreen();
                  return;
@@ -319,7 +331,7 @@ public class EditProfileFragment extends Fragment {
                                      String newPhotoUrl = json.has("photoUrl") ? json.optString("photoUrl") : json.optString("photo", null);
                                      String newBgUrl = json.has("backgroundUrl") ? json.optString("backgroundUrl") : json.optString("background", null);
 
-                                     // СТРОГАЯ ИЗОЛЯЦИЯ: Меняем ссылку (сброс кэша) ТОЛЬКО если отправляли новый файл!
+                                     // ВЗЛОМ КЭША ТОЛЬКО ДЛЯ ТЕХ ФАЙЛОВ, КОТОРЫЕ МЫ ОТПРАВЛЯЛИ
                                      if (safePhotoFile[0] != null) {
                                          if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null") && newPhotoUrl.startsWith("http")) {
                                              if (newPhotoUrl.contains("?")) newPhotoUrl = newPhotoUrl.substring(0, newPhotoUrl.indexOf("?"));
@@ -404,7 +416,7 @@ public class EditProfileFragment extends Fragment {
              }
         });
 
-        return wrapper; // Возвращаем обертку с изолированным фоном!
+        return wrapper; 
     }
 
     private void loadExistingBackground(MainActivity activity) {
@@ -423,7 +435,8 @@ public class EditProfileFragment extends Fragment {
         }
     }
 
-    private void processMediaFile(Uri uri, int maxMb, boolean isPhoto) {
+    // === ПЕРЕДАЕМ selectionId ДЛЯ ЗАЩИТЫ ОТ МЕДЛЕННОГО ИНТЕРНЕТА ===
+    private void processMediaFile(Uri uri, int maxMb, boolean isPhoto, long selectionId) {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
 
@@ -460,6 +473,16 @@ public class EditProfileFragment extends Fragment {
                 fos.flush(); fos.close(); is.close();
 
                 activity.runOnUiThread(() -> {
+                    // АНТИ-ГОНКА: Если пока мы обрабатывали файл, юзер выбрал другой - молча выбрасываем этот!
+                    if (isPhoto && selectionId != currentPhotoSelectionId) {
+                        tempFile.delete();
+                        return;
+                    }
+                    if (!isPhoto && selectionId != currentBgSelectionId) {
+                        tempFile.delete();
+                        return;
+                    }
+
                     if (isPhoto) {
                         pendingPhotoFile = tempFile;
                         ImageView avatarPreview = getView() != null ? getView().findViewById(R.id.edit_avatar_preview) : null;
@@ -504,9 +527,7 @@ public class EditProfileFragment extends Fragment {
         super.onHiddenChanged(hidden);
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
-            if (!hidden) {
-                setupHeader(activity);
-            }
+            if (!hidden) setupHeader(activity);
         }
     }
 }
