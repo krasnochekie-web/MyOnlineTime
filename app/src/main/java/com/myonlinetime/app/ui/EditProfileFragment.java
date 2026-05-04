@@ -41,7 +41,6 @@ import java.io.OutputStream;
 public class EditProfileFragment extends Fragment {
 
     public static boolean isProfileUploading = false;
-    // === ЗАМОК ДЛЯ ЗАЩИТЫ ОТ "ОТКАТА" ДАННЫХ ===
     public static long lastProfileSyncTime = 0;
 
     private File pendingPhotoFile = null;
@@ -188,7 +187,6 @@ public class EditProfileFragment extends Fragment {
         }
 
         String[] photoMimeTypes = new String[]{"image/*"};
-        // ВИДЕО УБРАНО!
         String[] backgroundMimeTypes = new String[]{"image/*"};
         
         View.OnClickListener photoClickListener = v -> {
@@ -236,29 +234,42 @@ public class EditProfileFragment extends Fragment {
                  final File[] safePhotoFile = {null};
                  final File[] safeBgFile = {null};
 
+                 if (finalPhotoFile != null || finalBgFile != null) {
+                     File[] files = activity.getFilesDir().listFiles();
+                     if (files != null) {
+                         for (File f : files) {
+                             if (finalPhotoFile != null && f.getName().startsWith("avatar_" + uid)) f.delete();
+                             if (finalBgFile != null && f.getName().startsWith("my_bg_" + uid)) f.delete();
+                         }
+                     }
+                 }
+
                  if (finalPhotoFile != null) {
-                     File pPath = new File(activity.getFilesDir(), "avatar_" + uid + ".png");
+                     File pPath = new File(activity.getFilesDir(), "avatar_" + uid + "_" + System.currentTimeMillis() + ".png");
                      try { copyFile(finalPhotoFile, pPath); safePhotoFile[0] = pPath; } catch (Exception ignored) {}
                      editor.putString("custom_avatar_path_" + uid, pPath.getAbsolutePath());
                  }
                  if (finalBgFile != null) {
                      String ext = finalBgFile.getName().endsWith(".gif") ? ".gif" : ".jpg";
-                     File bPath = new File(activity.getFilesDir(), "my_bg_" + uid + ext);
+                     File bPath = new File(activity.getFilesDir(), "my_bg_" + uid + "_" + System.currentTimeMillis() + ext);
                      try { copyFile(finalBgFile, bPath); safeBgFile[0] = bPath; } catch (Exception ignored) {}
                      editor.putString("custom_bg_path_" + uid, bPath.getAbsolutePath());
                      editor.putBoolean("custom_bg_is_video_" + uid, false);
                  }
                  
                  editor.apply();
-                 activity.mMemoryCache.remove("avatar_" + uid);
 
-                 // ЗАКРЫВАЕМ ЗАМОК: Мы начали обновление!
                  EditProfileFragment.isProfileUploading = true;
                  EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
 
                  activity.clearPreviewBackground();
-                 activity.updateGlobalBackground(true);
-                 activity.updateAvatarInUI();
+                 // Больше не включаем глобальный фон здесь! ProfileFragment сам разберется со своей оберткой
+                 
+                 if (finalPhotoFile != null) {
+                     activity.mMemoryCache.remove("avatar_" + uid);
+                     activity.updateAvatarInUI();
+                 }
+
                  activity.navigator.closeSubScreen();
                  LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
 
@@ -289,7 +300,6 @@ public class EditProfileFragment extends Fragment {
                                      String newPhotoUrl = json.has("photoUrl") ? json.optString("photoUrl") : json.optString("photo", null);
                                      String newBgUrl = json.has("backgroundUrl") ? json.optString("backgroundUrl") : json.optString("background", null);
 
-                                     // === ВЗЛОМ КЭША ===
                                      if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null") && newPhotoUrl.startsWith("http")) {
                                          if (newPhotoUrl.contains("?")) newPhotoUrl = newPhotoUrl.substring(0, newPhotoUrl.indexOf("?"));
                                          newPhotoUrl += "?t=" + System.currentTimeMillis();
@@ -312,7 +322,6 @@ public class EditProfileFragment extends Fragment {
                                          }
                                          successEditor.apply();
                                          
-                                         // Обновляем таймер замка, чтобы 5 секунд после сохранения ничего не откатывалось
                                          EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
                                          EditProfileFragment.isProfileUploading = false;
                                          LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
@@ -327,7 +336,7 @@ public class EditProfileFragment extends Fragment {
                                  }
                              }
                              @Override public void onError(String error) {
-                                 EditProfileFragment.lastProfileSyncTime = 0; // Снимаем замок, пусть скачает правду
+                                 EditProfileFragment.lastProfileSyncTime = 0; 
                                  EditProfileFragment.isProfileUploading = false;
                                  if (isolatedPhoto != null && isolatedPhoto.exists()) isolatedPhoto.delete();
                                  if (isolatedBg != null && isolatedBg.exists()) isolatedBg.delete();
