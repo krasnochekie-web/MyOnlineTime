@@ -147,18 +147,31 @@ public class ProfileFragment extends Fragment {
                 @Override
                 public void onLoaded(User user) {
                     if (!isAdded()) return;
+                    
+                    // === ЗАМОК! Игнорируем данные сервера, если мы только что сохраняли изменения! ===
+                    if (EditProfileFragment.isProfileUploading || (System.currentTimeMillis() - EditProfileFragment.lastProfileSyncTime < 5000)) {
+                        return;
+                    }
+
                     if (user != null) {
                         if (user.nickname != null) activity.prefs.edit().putString("my_nickname", user.nickname).apply();
                         if (user.about != null) activity.prefs.edit().putString("my_about", user.about).apply();
 
+                        // Сохраняем ссылки только если они отличаются от текущих (чтобы не стереть наш Cache-Buster с "?t=")
                         if (user.photo != null && user.photo.length() > 10) {
-                            activity.prefs.edit().putString("my_photo_base64", user.photo).apply();
-                            activity.updateAvatarInUI();
+                            String currentPhoto = activity.prefs.getString("my_photo_base64", "");
+                            if (!currentPhoto.startsWith(user.photo)) {
+                                activity.prefs.edit().putString("my_photo_base64", user.photo).apply();
+                                activity.updateAvatarInUI();
+                            }
                         }
 
                         if (user.background != null && user.background.length() > 10) {
-                            activity.prefs.edit().putString("my_bg_base64", user.background).apply();
-                            activity.syncMyBackground(user.background);
+                            String currentBg = activity.prefs.getString("my_bg_base64", "");
+                            if (!currentBg.startsWith(user.background)) {
+                                activity.prefs.edit().putString("my_bg_base64", user.background).apply();
+                                activity.syncMyBackground(user.background);
+                            }
                         }
 
                         if (user.createdAt != null) {
