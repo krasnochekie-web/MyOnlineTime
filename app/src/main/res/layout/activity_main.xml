@@ -6,27 +6,27 @@
     android:layout_height="match_parent"
     android:background="@color/bgDynamic">
 
+    <!-- Контейнер фона с двумя слоями для коллаж-анимации -->
     <FrameLayout
+        android:id="@+id/bg_collage_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent">
-        
-        <androidx.media3.ui.PlayerView
-            android:id="@+id/global_background_video"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_gravity="center"
-            app:use_controller="false" 
-            app:resize_mode="zoom" 
-            app:surface_type="texture_view"
-            android:visibility="gone" />
 
         <ImageView
-            android:id="@+id/global_background_image"
+            android:id="@+id/bg_layer_a"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:scaleType="centerCrop"
-            android:visibility="gone" />
+            android:visibility="invisible" />
+
+        <ImageView
+            android:id="@+id/bg_layer_b"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:visibility="invisible" />
     </FrameLayout>
+
     <FrameLayout
         android:id="@+id/fragment_container"
         android:layout_width="match_parent"
@@ -115,11 +115,11 @@
     <LinearLayout
         android:id="@+id/bottom_nav_container"
         android:layout_width="match_parent"
-        android:layout_height="64dp" 
+        android:layout_height="64dp"
         android:layout_gravity="bottom"
-        android:layout_marginLeft="10dp" 
+        android:layout_marginLeft="10dp"
         android:layout_marginRight="10dp"
-        android:layout_marginBottom="10dp" 
+        android:layout_marginBottom="10dp"
         android:background="@drawable/bg_floating_bottom_nav"
         android:orientation="horizontal"
         android:gravity="center_vertical"
@@ -140,7 +140,7 @@
                 android:id="@+id/icon_profile"
                 android:layout_width="34dp"
                 android:layout_height="34dp"
-                android:padding="2dp" 
+                android:padding="2dp"
                 android:background="@drawable/bg_profile_avatar_border"
                 android:src="@drawable/ic_nav_profile"/>
         </LinearLayout>
@@ -155,13 +155,13 @@
         </LinearLayout>
     </LinearLayout>
 
-    <include 
+    <include
         layout="@layout/layout_permission_required"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_gravity="center"
-        android:layout_marginTop="76dp" 
+        android:layout_marginTop="76dp"
         android:elevation="30dp"
-        android:visibility="gone" /> 
+        android:visibility="gone" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
