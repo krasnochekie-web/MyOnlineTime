@@ -53,18 +53,18 @@ public class ProfileFragment extends Fragment {
     private final Gson gson = new Gson();
     
     private ImageView avatarView;
-    private ImageView myBgImageView;
     private String myUid = "";
     
     private View profileContentView;
 
+    // Память для устранения морганий
     private String currentLoadedAvatar = null;
-    private String currentLoadedBg = null;
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
     private Runnable fetchProfileDataRunnable; 
 
+    // Слушатель: Прячет UI, когда открывается прозрачный EditProfile
     private final android.content.BroadcastReceiver profileUpdateReceiver = new android.content.BroadcastReceiver() {
         @Override
         public void onReceive(android.content.Context context, android.content.Intent intent) {
@@ -125,21 +125,11 @@ public class ProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.resetHeader();
 
-        // Выключаем старый глобальный фон активити - он нам больше не нужен
-        activity.updateGlobalBackground(false);
-
-        FrameLayout wrapper = new FrameLayout(activity);
-        wrapper.setLayoutParams(originalView.getLayoutParams() != null ? originalView.getLayoutParams() : new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        originalView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-
-        // ЭФФЕКТ КОЛЛАЖА: Фон живет внутри фрагмента и двигается вместе с ним
-        myBgImageView = new ImageView(activity);
-        myBgImageView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        myBgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        myBgImageView.setBackgroundColor(Color.parseColor("#121212")); 
-
-        wrapper.addView(myBgImageView);
-        wrapper.addView(originalView);
+        // Мы используем ТОЛЬКО глобальный фон MainActivity
+        activity.updateGlobalBackground(true);
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (isAdded() && !isHidden()) activity.clearPreviewBackground();
+        }, 400);
 
         prefs = activity.getSharedPreferences("MyOnlineTime_Cache_" + myUid, Context.MODE_PRIVATE);
 
@@ -194,6 +184,7 @@ public class ProfileFragment extends Fragment {
                 public void onLoaded(User user) {
                     if (!isAdded()) return;
 
+                    // ЗАМОК: Игнорируем данные сервера, если идет сохранение профиля!
                     if (EditProfileFragment.isProfileUploading || (System.currentTimeMillis() - EditProfileFragment.lastProfileSyncTime < 5000)) {
                         return;
                     }
@@ -214,6 +205,7 @@ public class ProfileFragment extends Fragment {
                             String currentBg = activity.prefs.getString("my_bg_base64", "");
                             if (!currentBg.startsWith(user.background)) {
                                 activity.prefs.edit().putString("my_bg_base64", user.background).apply();
+                                activity.syncMyBackground(user.background);
                             }
                         }
 
@@ -263,7 +255,7 @@ public class ProfileFragment extends Fragment {
         if (activity.vpsToken != null) fetchProfileDataRunnable.run();
         refreshCounts(activity);
 
-        return wrapper;
+        return originalView;
     }
 
     private void updateUiFromPrefs(MainActivity activity) {
@@ -274,6 +266,7 @@ public class ProfileFragment extends Fragment {
         ImageView btnExpand = getView().findViewById(R.id.btn_expand_apps);
         ImageView btnCollapse = getView().findViewById(R.id.btn_collapse_apps);
 
+        // ИЗОЛЯЦИЯ ТЕКСТОВ
         String newName = activity.prefs.getString("my_nickname", "...");
         if (!newName.equals(nameView.getText().toString())) nameView.setText(newName);
 
@@ -288,34 +281,9 @@ public class ProfileFragment extends Fragment {
         if (followersCount != null) followersCount.setText(String.valueOf(prefs.getInt("followers_count", 0)));
         if (followingCount != null) followingCount.setText(String.valueOf(prefs.getInt("following_count", 0)));
 
+        // ИЗОЛЯЦИЯ АВАТАРКИ
         String photoUrl = activity.prefs.getString("my_photo_base64", null);
         handleMediaLoading(activity, photoUrl, true, myUid);
-
-        // Локальный фон фрагмента
-        if (myBgImageView != null) {
-            String myBgUrl = activity.prefs.getString("my_bg_base64", null);
-            String customBgPath = activity.prefs.getString("custom_bg_path_" + myUid, null);
-
-            String newBgKey;
-            if (customBgPath != null && new File(customBgPath).exists()) {
-                newBgKey = myUid + "_local_" + new File(customBgPath).lastModified();
-            } else {
-                newBgKey = myUid + "_remote_" + ((myBgUrl != null) ? myBgUrl : "empty");
-            }
-
-            if (!newBgKey.equals(currentLoadedBg)) {
-                currentLoadedBg = newBgKey;
-
-                if (customBgPath != null && new File(customBgPath).exists()) {
-                    File bgFile = new File(customBgPath);
-                    Glide.with(activity).load(bgFile).signature(new ObjectKey(bgFile.lastModified())).centerCrop().into(myBgImageView);
-                } else if (myBgUrl != null && !myBgUrl.isEmpty() && !myBgUrl.equals("null")) {
-                    Glide.with(activity).load(myBgUrl).centerCrop().into(myBgImageView);
-                } else {
-                    myBgImageView.setImageDrawable(null);
-                }
-            }
-        }
     }
 
     private void refreshCounts(MainActivity activity) {
@@ -349,29 +317,29 @@ public class ProfileFragment extends Fragment {
         if (!isAdded() || avatarView == null) return;
 
         String customAvatarPath = useLocalFile ? activity.prefs.getString("custom_avatar_path_" + uid, null) : null;
+        
         String newAvatarKey;
-
-        if (useLocalFile && customAvatarPath != null) {
-            if (customAvatarPath.startsWith("content://")) {
-                newAvatarKey = uid + "_local_" + customAvatarPath;
-            } else if (new File(customAvatarPath).exists()) {
-                newAvatarKey = uid + "_local_" + new File(customAvatarPath).lastModified();
-            } else {
-                newAvatarKey = uid + "_remote_" + (photoUrl != null ? String.valueOf(photoUrl.hashCode()) : "empty");
-            }
+        if (useLocalFile && customAvatarPath != null && new File(customAvatarPath).exists()) {
+            newAvatarKey = uid + "_local_" + new File(customAvatarPath).lastModified();
         } else {
             newAvatarKey = uid + "_remote_" + (photoUrl != null ? String.valueOf(photoUrl.hashCode()) : "empty");
         }
         
+        // Гарантия от мерцания
         if (newAvatarKey.equals(currentLoadedAvatar)) return;
         currentLoadedAvatar = newAvatarKey;
 
-        if (useLocalFile && customAvatarPath != null) {
-            if (customAvatarPath.startsWith("content://")) {
-                Glide.with(activity).load(android.net.Uri.parse(customAvatarPath)).circleCrop().error(R.drawable.bg_edit_circle).into(avatarView);
-                return;
-            } else if (new File(customAvatarPath).exists()) {
-                Glide.with(activity).load(new File(customAvatarPath)).signature(new ObjectKey(new File(customAvatarPath).lastModified())).circleCrop().error(R.drawable.bg_edit_circle).into(avatarView);
+        if (useLocalFile) {
+            if (customAvatarPath != null) {
+                File localCustomFile = new File(customAvatarPath);
+                if (localCustomFile.exists()) {
+                    Glide.with(activity).load(localCustomFile).signature(new ObjectKey(localCustomFile.lastModified())).circleCrop().error(R.drawable.bg_edit_circle).into(avatarView);
+                    return;
+                }
+            }
+            File file = new File(activity.getFilesDir(), "avatar_" + uid + ".png");
+            if (file.exists()) {
+                Glide.with(activity).load(file).circleCrop().error(R.drawable.bg_edit_circle).into(avatarView);
                 return;
             }
         }
@@ -401,6 +369,7 @@ public class ProfileFragment extends Fragment {
                 updateUiFromPrefs(activity);
                 if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
+                activity.updateGlobalBackground(true); 
             }
         }
     }
@@ -416,6 +385,13 @@ public class ProfileFragment extends Fragment {
                 updateUiFromPrefs(activity);
                 if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
+                activity.updateGlobalBackground(true); 
+            } else {
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (isAdded() && isHidden() && activity.navigator != null && activity.navigator.getCurrentTabIndex() != 4) {
+                        activity.updateGlobalBackground(false);
+                    }
+                }, 750);
             }
         }
     }
