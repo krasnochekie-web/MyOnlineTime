@@ -30,10 +30,6 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 
-import com.otaliastudios.transcoder.Transcoder;
-import com.otaliastudios.transcoder.TranscoderListener;
-import com.otaliastudios.transcoder.strategy.DefaultVideoStrategy;
-
 import org.json.JSONObject;
 
 import java.io.File;
@@ -44,10 +40,12 @@ import java.io.OutputStream;
 
 public class EditProfileFragment extends Fragment {
 
+    public static boolean isProfileUploading = false;
+    // === ЗАМОК ДЛЯ ЗАЩИТЫ ОТ "ОТКАТА" ДАННЫХ ===
+    public static long lastProfileSyncTime = 0;
+
     private File pendingPhotoFile = null;
     private File pendingBgFile = null;
-    
-    private boolean isCompressing = false; 
 
     private static long penaltyEndTime = 0;
     private static final java.util.LinkedList<Long> textAttemptTimes = new java.util.LinkedList<>();
@@ -82,11 +80,9 @@ public class EditProfileFragment extends Fragment {
         }
     }
 
-    // === ИДЕАЛЬНАЯ ЛОГИКА АНТИ-СПАМА ===
     private boolean isActionSpam(boolean isMedia) {
         long now = System.currentTimeMillis();
         
-        // ЖЕСТКОЕ ПРАВИЛО: Если наказание еще действует, ЛЮБАЯ попытка сбрасывает таймер на 30 сек заново!
         if (now < penaltyEndTime) {
             penaltyEndTime = now + 30000; 
             if (getActivity() != null) Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
@@ -104,10 +100,8 @@ public class EditProfileFragment extends Fragment {
             }
         } else {
             textAttemptTimes.add(now);
-            // Удаляем старые клики (старше 5 секунд)
             while (!textAttemptTimes.isEmpty() && now - textAttemptTimes.getFirst() > 5000) textAttemptTimes.removeFirst();
             
-            // Если за 5 секунд накопилось более 5 попыток проверки/сохранения
             if (textAttemptTimes.size() > 5) {
                 penaltyEndTime = now + 30000;
                 textAttemptTimes.clear();
@@ -194,7 +188,8 @@ public class EditProfileFragment extends Fragment {
         }
 
         String[] photoMimeTypes = new String[]{"image/*"};
-        String[] backgroundMimeTypes = new String[]{"image/*", "video/*"};
+        // ВИДЕО УБРАНО!
+        String[] backgroundMimeTypes = new String[]{"image/*"};
         
         View.OnClickListener photoClickListener = v -> {
             if (isActionSpam(true)) return; 
@@ -211,11 +206,6 @@ public class EditProfileFragment extends Fragment {
         }
 
         btnSave.setOnClickListener(v -> { 
-             if (isCompressing) {
-                 Toast.makeText(activity, R.string.err_wait_compressing, Toast.LENGTH_SHORT).show();
-                 return;
-             }
-             
              final String n = inputName.getText().toString().trim();
              final String a = inputAbout.getText().toString().trim();
 
@@ -238,28 +228,33 @@ public class EditProfileFragment extends Fragment {
              File finalBgFile = pendingBgFile;
              File finalPhotoFile = pendingPhotoFile;
              
-             final String oldName = activity.prefs.getString("my_nickname", "...");
-             final String oldAbout = activity.prefs.getString("my_about", "");
-
              Runnable performOptimisticSaveAndUpload = () -> {
                  SharedPreferences.Editor editor = activity.prefs.edit();
                  editor.putString("my_nickname", n);
                  editor.putString("my_about", a);
 
+                 final File[] safePhotoFile = {null};
+                 final File[] safeBgFile = {null};
+
                  if (finalPhotoFile != null) {
-                     String pPath = new File(activity.getFilesDir(), "avatar_" + uid + "_" + System.currentTimeMillis() + (finalPhotoFile.getName().endsWith(".gif") ? ".gif" : ".png")).getAbsolutePath();
-                     try { copyFile(finalPhotoFile, new File(pPath)); } catch (Exception ignored) {}
-                     editor.putString("custom_avatar_path_" + uid, pPath);
+                     File pPath = new File(activity.getFilesDir(), "avatar_" + uid + ".png");
+                     try { copyFile(finalPhotoFile, pPath); safePhotoFile[0] = pPath; } catch (Exception ignored) {}
+                     editor.putString("custom_avatar_path_" + uid, pPath.getAbsolutePath());
                  }
                  if (finalBgFile != null) {
-                     String bPath = new File(activity.getFilesDir(), "my_bg_" + uid + "_" + System.currentTimeMillis() + (finalBgFile.getName().endsWith(".mp4") ? ".mp4" : ".jpg")).getAbsolutePath();
-                     try { copyFile(finalBgFile, new File(bPath)); } catch (Exception ignored) {}
-                     editor.putString("custom_bg_path_" + uid, bPath);
-                     editor.putBoolean("custom_bg_is_video_" + uid, finalBgFile.getName().endsWith(".mp4"));
+                     String ext = finalBgFile.getName().endsWith(".gif") ? ".gif" : ".jpg";
+                     File bPath = new File(activity.getFilesDir(), "my_bg_" + uid + ext);
+                     try { copyFile(finalBgFile, bPath); safeBgFile[0] = bPath; } catch (Exception ignored) {}
+                     editor.putString("custom_bg_path_" + uid, bPath.getAbsolutePath());
+                     editor.putBoolean("custom_bg_is_video_" + uid, false);
                  }
                  
                  editor.apply();
                  activity.mMemoryCache.remove("avatar_" + uid);
+
+                 // ЗАКРЫВАЕМ ЗАМОК: Мы начали обновление!
+                 EditProfileFragment.isProfileUploading = true;
+                 EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
 
                  activity.clearPreviewBackground();
                  activity.updateGlobalBackground(true);
@@ -268,60 +263,78 @@ public class EditProfileFragment extends Fragment {
                  LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
 
                  Utils.backgroundExecutor.execute(() -> {
-                     File readyBg = finalBgFile;
-                     File readyPhoto = finalPhotoFile;
+                     File serverUploadPhoto = null;
+                     File serverUploadBg = null;
 
                      try {
-                         if (finalBgFile != null) {
-                             boolean isVideo = finalBgFile.getName().endsWith(".mp4");
-                             boolean isGif = finalBgFile.getName().endsWith(".gif");
-                             String ext = isVideo ? ".mp4" : (isGif ? ".gif" : ".jpg");
-                             File permBg = new File(activity.getFilesDir(), "temp_upload_bg_" + uid + ext);
-                             copyFile(finalBgFile, permBg);
-                             readyBg = permBg;
+                         if (safePhotoFile[0] != null && safePhotoFile[0].exists()) {
+                             serverUploadPhoto = new File(activity.getCacheDir(), "server_upload_avatar_" + uid + (safePhotoFile[0].getName().endsWith(".gif") ? ".gif" : ".png"));
+                             copyFile(safePhotoFile[0], serverUploadPhoto);
                          }
-                         if (finalPhotoFile != null) {
-                             boolean isAvatarGif = finalPhotoFile.getName().endsWith(".gif");
-                             String avatarExt = isAvatarGif ? ".gif" : ".png";
-                             File permAvatar = new File(activity.getFilesDir(), "temp_upload_avatar_" + uid + avatarExt);
-                             copyFile(finalPhotoFile, permAvatar);
-                             readyPhoto = permAvatar;
+                         if (safeBgFile[0] != null && safeBgFile[0].exists()) {
+                             serverUploadBg = new File(activity.getCacheDir(), "server_upload_bg_" + uid + (safeBgFile[0].getName().endsWith(".gif") ? ".gif" : ".jpg"));
+                             copyFile(safeBgFile[0], serverUploadBg);
                          }
                      } catch (Exception e) { e.printStackTrace(); }
 
-                     File uploadBg = readyBg;
-                     File uploadPhoto = readyPhoto;
+                     final File isolatedPhoto = serverUploadPhoto;
+                     final File isolatedBg = serverUploadBg;
 
                      if (activity.vpsToken != null) {
-                         VpsApi.saveUserProfile(activity.vpsToken, n, a, uploadPhoto, uploadBg, new VpsApi.Callback() {
+                         VpsApi.saveUserProfile(activity.vpsToken, n, a, isolatedPhoto, isolatedBg, new VpsApi.Callback() {
                              @Override 
                              public void onSuccess(String result) {
                                  try {
                                      JSONObject json = new JSONObject(result);
-                                     String newPhotoUrl = json.optString("photoUrl", null);
-                                     String newBgUrl = json.optString("backgroundUrl", null);
+                                     String newPhotoUrl = json.has("photoUrl") ? json.optString("photoUrl") : json.optString("photo", null);
+                                     String newBgUrl = json.has("backgroundUrl") ? json.optString("backgroundUrl") : json.optString("background", null);
+
+                                     // === ВЗЛОМ КЭША ===
+                                     if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null") && newPhotoUrl.startsWith("http")) {
+                                         if (newPhotoUrl.contains("?")) newPhotoUrl = newPhotoUrl.substring(0, newPhotoUrl.indexOf("?"));
+                                         newPhotoUrl += "?t=" + System.currentTimeMillis();
+                                     }
+                                     if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null") && newBgUrl.startsWith("http")) {
+                                         if (newBgUrl.contains("?")) newBgUrl = newBgUrl.substring(0, newBgUrl.indexOf("?"));
+                                         newBgUrl += "?t=" + System.currentTimeMillis();
+                                     }
+
+                                     final String finalPhotoUrl = newPhotoUrl;
+                                     final String finalBgUrl = newBgUrl;
 
                                      activity.runOnUiThread(() -> {
                                          SharedPreferences.Editor successEditor = activity.prefs.edit();
-                                         if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null")) {
-                                             successEditor.putString("my_photo_base64", newPhotoUrl);
-                                             successEditor.putString("synced_photo_url_" + uid, newPhotoUrl);
+                                         if (finalPhotoUrl != null && !finalPhotoUrl.isEmpty() && !finalPhotoUrl.equals("null")) {
+                                             successEditor.putString("my_photo_base64", finalPhotoUrl);
                                          }
-                                         if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null")) {
-                                             successEditor.putString("my_bg_base64", newBgUrl);
-                                             successEditor.putString("synced_bg_url_" + uid, newBgUrl);
+                                         if (finalBgUrl != null && !finalBgUrl.isEmpty() && !finalBgUrl.equals("null")) {
+                                             successEditor.putString("my_bg_base64", finalBgUrl);
                                          }
                                          successEditor.apply();
+                                         
+                                         // Обновляем таймер замка, чтобы 5 секунд после сохранения ничего не откатывалось
+                                         EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
+                                         EditProfileFragment.isProfileUploading = false;
+                                         LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
                                      });
-
+                                 } catch (Exception ignored) {
+                                     EditProfileFragment.isProfileUploading = false;
+                                 } finally {
+                                     if (isolatedPhoto != null && isolatedPhoto.exists()) isolatedPhoto.delete();
+                                     if (isolatedBg != null && isolatedBg.exists()) isolatedBg.delete();
                                      if (pendingPhotoFile != null && pendingPhotoFile.exists()) pendingPhotoFile.delete();
                                      if (pendingBgFile != null && pendingBgFile.exists()) pendingBgFile.delete();
-                                     if (uploadBg != null && uploadBg.exists() && uploadBg != finalBgFile) uploadBg.delete();
-                                     if (uploadPhoto != null && uploadPhoto.exists() && uploadPhoto != finalPhotoFile) uploadPhoto.delete();
-                                 } catch (Exception ignored) {}
+                                 }
                              }
-                             @Override public void onError(String error) {}
+                             @Override public void onError(String error) {
+                                 EditProfileFragment.lastProfileSyncTime = 0; // Снимаем замок, пусть скачает правду
+                                 EditProfileFragment.isProfileUploading = false;
+                                 if (isolatedPhoto != null && isolatedPhoto.exists()) isolatedPhoto.delete();
+                                 if (isolatedBg != null && isolatedBg.exists()) isolatedBg.delete();
+                             }
                          });
+                     } else {
+                         EditProfileFragment.isProfileUploading = false;
                      }
                  });
              };
@@ -380,11 +393,10 @@ public class EditProfileFragment extends Fragment {
                 if (is == null) return;
 
                 String mimeType = activity.getContentResolver().getType(uri);
-                boolean isVideoBg = !isPhoto && mimeType != null && mimeType.startsWith("video/");
                 boolean isGif = mimeType != null && mimeType.contains("gif"); 
                 
                 String prefix = isPhoto ? "temp_avatar_" : "temp_bg_";
-                String extension = isVideoBg ? ".mp4" : (isGif ? ".gif" : ".jpg"); 
+                String extension = isGif ? ".gif" : ".jpg"; 
                 File tempFile = new File(activity.getCacheDir(), prefix + System.currentTimeMillis() + extension);
                 
                 FileOutputStream fos = new FileOutputStream(tempFile);
@@ -392,36 +404,6 @@ public class EditProfileFragment extends Fragment {
                 int nRead;
                 while ((nRead = is.read(buffer)) != -1) fos.write(buffer, 0, nRead);
                 fos.flush(); fos.close(); is.close();
-                
-                if (isVideoBg) {
-                    isCompressing = true;
-                    activity.runOnUiThread(() -> Toast.makeText(activity, R.string.video_compressing_warning, Toast.LENGTH_SHORT).show());
-                    
-                    File compressedFile = new File(activity.getCacheDir(), "compressed_bg_" + System.currentTimeMillis() + ".mp4");
-                    
-                    Transcoder.into(compressedFile.getAbsolutePath())
-                        .addDataSource(tempFile.getAbsolutePath())
-                        .setVideoTrackStrategy(DefaultVideoStrategy.atMost(540).build()) 
-                        .setListener(new TranscoderListener() {
-                            @Override public void onTranscodeProgress(double progress) {}
-
-                            @Override
-                            public void onTranscodeCompleted(int successCode) {
-                                isCompressing = false;
-                                tempFile.delete(); 
-                                
-                                activity.runOnUiThread(() -> {
-                                    pendingBgFile = compressedFile;
-                                    activity.previewBackground(compressedFile.getAbsolutePath());
-                                });
-                            }
-                            @Override public void onTranscodeCanceled() { isCompressing = false; }
-                            @Override public void onTranscodeFailed(@NonNull Throwable exception) {
-                                isCompressing = false;
-                            }
-                        }).transcode();
-                    return; 
-                }
 
                 activity.runOnUiThread(() -> {
                     if (isPhoto) {
