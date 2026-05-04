@@ -54,7 +54,9 @@ public class ProfileFragment extends Fragment {
     private ImageView myBgImageView;
     private String myUid = "";
 
+    // === ЖЕСТКАЯ ПАМЯТЬ ДЛЯ ИЗОЛЯЦИИ ОБНОВЛЕНИЙ ===
     private String currentLoadedAvatar = null;
+    private String currentLoadedBg = null;
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
@@ -66,9 +68,6 @@ public class ProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (activity != null && isAdded()) {
                 updateUiFromPrefs(activity);
-                if (activity.vpsToken != null) {
-                    refreshCounts(activity);
-                }
             }
         }
     };
@@ -96,9 +95,7 @@ public class ProfileFragment extends Fragment {
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.resetHeader();
 
-        // === ИДЕАЛЬНАЯ АНИМАЦИЯ (ЭФФЕКТ КОЛЛАЖА) ===
-        // Отключаем старый "глобальный" фон активити. Теперь фон живет СТРОГО внутри фрагмента.
-        // При любом свайпе он поедет как приклеенный вместе с кнопками!
+        // Убеждаемся, что старый глобальный фон отключен, чтобы не было дублей и затемнений
         activity.updateGlobalBackground(false);
 
         FrameLayout wrapper = new FrameLayout(activity);
@@ -247,38 +244,54 @@ public class ProfileFragment extends Fragment {
         ImageView btnExpand = getView().findViewById(R.id.btn_expand_apps);
         ImageView btnCollapse = getView().findViewById(R.id.btn_collapse_apps);
 
-        nameView.setText(activity.prefs.getString("my_nickname", "..."));
-        aboutView.setText(activity.prefs.getString("my_about", ""));
-        StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+        // Обновляем текст ТОЛЬКО если он реально изменился
+        String newName = activity.prefs.getString("my_nickname", "...");
+        if (!newName.equals(nameView.getText().toString())) nameView.setText(newName);
+
+        String newAbout = activity.prefs.getString("my_about", "");
+        if (!newAbout.equals(aboutView.getText().toString())) {
+            aboutView.setText(newAbout);
+            StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+        }
 
         TextView followersCount = getView().findViewById(R.id.txt_followers_count);
         TextView followingCount = getView().findViewById(R.id.txt_following_count);
         if (followersCount != null) followersCount.setText(String.valueOf(prefs.getInt("followers_count", 0)));
         if (followingCount != null) followingCount.setText(String.valueOf(prefs.getInt("following_count", 0)));
 
+        // Обработка аватарки (строго изолированно)
         String photoUrl = activity.prefs.getString("my_photo_base64", null);
         handleMediaLoading(activity, photoUrl, true, myUid);
 
+        // Обработка фона (строго изолированно)
         if (myBgImageView != null) {
             String myBgUrl = activity.prefs.getString("my_bg_base64", null);
             String customBgPath = activity.prefs.getString("custom_bg_path_" + myUid, null);
 
-            if (customBgPath != null && new File(customBgPath).exists()) {
-                File bgFile = new File(customBgPath);
-                Glide.with(activity)
-                     .load(bgFile)
-                     .signature(new ObjectKey(bgFile.lastModified()))
-                     .centerCrop()
-                     .into(myBgImageView);
-            } else if (myBgUrl != null && !myBgUrl.isEmpty() && !myBgUrl.equals("null")) {
-                Glide.with(activity)
-                     .load(myBgUrl)
-                     .centerCrop()
-                     .into(myBgImageView);
-                     
-                activity.syncMyBackground(myBgUrl);
-            } else {
-                myBgImageView.setImageDrawable(null);
+            String bgHash = (myBgUrl != null) ? myBgUrl : "empty";
+            String newBgKey = myUid + "_" + customBgPath + "_" + bgHash;
+
+            // ЕСЛИ ФОН НЕ МЕНЯЛСЯ — МЫ ВООБЩЕ НЕ ТРОГАЕМ GLIDE (Нет моргания!)
+            if (!newBgKey.equals(currentLoadedBg)) {
+                currentLoadedBg = newBgKey;
+
+                if (customBgPath != null && new File(customBgPath).exists()) {
+                    File bgFile = new File(customBgPath);
+                    Glide.with(activity)
+                         .load(bgFile)
+                         .signature(new ObjectKey(bgFile.lastModified()))
+                         .centerCrop()
+                         .into(myBgImageView);
+                } else if (myBgUrl != null && !myBgUrl.isEmpty() && !myBgUrl.equals("null")) {
+                    Glide.with(activity)
+                         .load(myBgUrl)
+                         .centerCrop()
+                         .into(myBgImageView);
+                         
+                    activity.syncMyBackground(myBgUrl);
+                } else {
+                    myBgImageView.setImageDrawable(null);
+                }
             }
         }
     }
@@ -317,6 +330,7 @@ public class ProfileFragment extends Fragment {
         String urlHash = photoUrl != null ? String.valueOf(photoUrl.hashCode()) : "empty";
         String newAvatarKey = uid + "_" + customAvatarPath + "_" + urlHash;
         
+        // ЕСЛИ АВАТАРКА НЕ МЕНЯЛАСЬ — ВЫХОДИМ (Нет моргания!)
         if (newAvatarKey.equals(currentLoadedAvatar)) return;
         currentLoadedAvatar = newAvatarKey;
 
@@ -360,8 +374,7 @@ public class ProfileFragment extends Fragment {
                 updateUiFromPrefs(activity);
                 if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
-                
-                activity.updateGlobalBackground(false); // Глобальный фон больше не нужен, у нас свой!
+                activity.updateGlobalBackground(false); 
             }
         }
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
@@ -386,11 +399,8 @@ public class ProfileFragment extends Fragment {
                 updateUiFromPrefs(activity);
                 if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
-                
                 activity.updateGlobalBackground(false); 
-            } 
-            // Обрати внимание: блока else (когда hidden == true) больше нет!
-            // Никаких черных экранов. Фрагмент уезжает целиком с фоном.
+            }
         }
     }
 
