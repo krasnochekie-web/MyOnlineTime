@@ -70,7 +70,14 @@ public class SearchFragment extends Fragment {
                 if (clickedUser.uid != null && clickedUser.uid.equals(myUid)) {
                     activity.navigator.switchScreen(4, myUid);
                 } else {
-                    activity.navigator.openSubScreen(OtherProfileFragment.newInstance(clickedUser.uid, activity.getString(R.string.title_search)));
+                    // === ИСПРАВЛЕНИЕ: Передаем 5 параметров для мгновенной Telegram-загрузки ===
+                    activity.navigator.openSubScreen(OtherProfileFragment.newInstance(
+                            clickedUser.uid, 
+                            activity.getString(R.string.title_search),
+                            clickedUser.nickname,
+                            clickedUser.about,
+                            clickedUser.photo
+                    ));
                 }
             }
         });
