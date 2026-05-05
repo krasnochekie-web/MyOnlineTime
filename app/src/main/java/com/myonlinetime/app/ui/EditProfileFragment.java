@@ -43,7 +43,6 @@ public class EditProfileFragment extends Fragment {
     public static volatile boolean isProfileUploading = false;
     public static long lastProfileSyncTime = 0;
 
-    // Глобальное поколение загрузок: ПОБЕЖДАЕТ ПОСЛЕДНИЙ
     public static volatile long currentUploadGeneration = 0;
 
     private File pendingPhotoFile = null;
@@ -188,7 +187,12 @@ public class EditProfileFragment extends Fragment {
 
         String customAvatarPath = activity.prefs.getString("custom_avatar_path_" + acct.getId(), null);
         if (customAvatarPath != null && new File(customAvatarPath).exists() && avatarPreview != null) {
-            Glide.with(activity).load(new File(customAvatarPath)).skipMemoryCache(true).diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE).circleCrop().into(avatarPreview);
+            Glide.with(activity)
+                 .load(new File(customAvatarPath))
+                 .skipMemoryCache(true)
+                 .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
+                 .circleCrop()
+                 .into(avatarPreview);
         } else {
             String savedAvatar = activity.prefs.getString("my_photo_base64", null);
             if (savedAvatar != null && avatarPreview != null) {
@@ -225,7 +229,6 @@ public class EditProfileFragment extends Fragment {
              final String a = inputAbout.getText().toString().trim();
 
              if (n.equals(initialName) && a.equals(initialAbout) && pendingPhotoFile == null && pendingBgFile == null) {
-                 activity.clearPreviewBackground(); 
                  activity.navigator.closeSubScreen();
                  return;
              }
@@ -285,8 +288,6 @@ public class EditProfileFragment extends Fragment {
                      activity.updateAvatarInUI();
                  }
 
-                 activity.clearPreviewBackground();
-                 activity.updateGlobalBackground(true);
                  activity.navigator.closeSubScreen();
                  LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
 
@@ -331,8 +332,6 @@ public class EditProfileFragment extends Fragment {
                                      activity.runOnUiThread(() -> {
                                          SharedPreferences.Editor successEditor = activity.prefs.edit();
                                          
-                                         // === ИСПРАВЛЕНИЕ ВЕКА: СОХРАНЯЕМ ЧИСТУЮ ССЫЛКУ ===
-                                         // Больше никаких ?t=, которые ломали MainActivity.syncMyBackground!
                                          if (finalPhotoFile != null) {
                                              String newPhotoUrl = json.optString("photoUrl", json.optString("photo", null));
                                              if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null") && newPhotoUrl.startsWith("http")) {
@@ -347,14 +346,12 @@ public class EditProfileFragment extends Fragment {
                                              if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null") && newBgUrl.startsWith("http")) {
                                                  if (newBgUrl.contains("?")) newBgUrl = newBgUrl.substring(0, newBgUrl.indexOf("?"));
                                                  successEditor.putString("my_bg_base64", newBgUrl);
-                                                 successEditor.putString("synced_bg_url_" + uid, newBgUrl); // ЭТА СТРОКА УБИЛА ТЕМНУЮ СТЕНУ
+                                                 successEditor.putString("synced_bg_url_" + uid, newBgUrl); 
                                              }
                                          }
 
                                          successEditor.apply();
-                                         
                                          activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
-                                         
                                          EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
                                          if (myGeneration == currentUploadGeneration) EditProfileFragment.isProfileUploading = false;
                                          LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
@@ -418,6 +415,21 @@ public class EditProfileFragment extends Fragment {
         if (bg != null && bg.exists()) bg.delete();
     }
 
+    // === ОЧИСТКА ВРЕМЕННОГО КЭША (Чтобы не забивать память телефона) ===
+    private void cleanupTempCacheDir(MainActivity activity) {
+        Utils.backgroundExecutor.execute(() -> {
+            File cacheDir = activity.getCacheDir();
+            if (cacheDir != null && cacheDir.listFiles() != null) {
+                for (File f : cacheDir.listFiles()) {
+                    String name = f.getName();
+                    if (name.startsWith("temp_bg_") || name.startsWith("temp_avatar_")) {
+                        f.delete();
+                    }
+                }
+            }
+        });
+    }
+
     private void processMediaFile(Uri uri, int maxMb, boolean isPhoto, long selectionId) {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null || uri == null) return;
@@ -468,7 +480,7 @@ public class EditProfileFragment extends Fragment {
                         if (avatarPreview != null) Glide.with(this).load(tempFile).circleCrop().into(avatarPreview);
                     } else {
                         pendingBgFile = tempFile;
-                        activity.previewBackground(tempFile.getAbsolutePath());
+                        activity.previewBackground(tempFile.getAbsolutePath()); // Временный показ для EditProfileFragment
                     }
                 });
             } catch (Exception e) {}
@@ -489,18 +501,10 @@ public class EditProfileFragment extends Fragment {
         super.onDestroyView();
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
+            cleanupTempCacheDir(activity); // Очищаем мусор при закрытии
             LocalBroadcastManager.getInstance(requireContext()).sendBroadcast(new Intent("ACTION_EDIT_PROFILE_CLOSED"));
             activity.clearPreviewBackground();
             if (!activity.navigator.hasSubScreen()) activity.headerManager.resetHeader();
-        }
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (!isHidden() && getActivity() instanceof MainActivity) {
-            MainActivity activity = (MainActivity) getActivity();
-            if (activity.previewBgPath == null) activity.updateGlobalBackground(true); 
         }
     }
 
@@ -511,7 +515,6 @@ public class EditProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!hidden) {
                 setupHeader(activity);
-                if (activity.previewBgPath == null) activity.updateGlobalBackground(true);
             }
         }
     }
