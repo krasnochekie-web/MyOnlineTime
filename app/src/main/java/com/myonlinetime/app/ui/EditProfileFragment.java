@@ -131,13 +131,11 @@ public class EditProfileFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         final MainActivity activity = (MainActivity) getActivity();
         
-        // Сигнал ProfileFragment'у: "Спрячь свой контент, я поверх тебя!"
         if (activity != null) {
             LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_EDIT_PROFILE_OPENED"));
         }
 
         final View view = inflater.inflate(R.layout.layout_edit_profile, container, false);
-        // Фрагмент прозрачный, сквозь него светит глобальный фон
         view.setBackgroundColor(Color.TRANSPARENT);
 
         if (activity == null) return view;
@@ -190,12 +188,7 @@ public class EditProfileFragment extends Fragment {
 
         String customAvatarPath = activity.prefs.getString("custom_avatar_path_" + acct.getId(), null);
         if (customAvatarPath != null && new File(customAvatarPath).exists() && avatarPreview != null) {
-            Glide.with(activity)
-                 .load(new File(customAvatarPath))
-                 .skipMemoryCache(true)
-                 .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
-                 .circleCrop()
-                 .into(avatarPreview);
+            Glide.with(activity).load(new File(customAvatarPath)).skipMemoryCache(true).diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE).circleCrop().into(avatarPreview);
         } else {
             String savedAvatar = activity.prefs.getString("my_photo_base64", null);
             if (savedAvatar != null && avatarPreview != null) {
@@ -231,7 +224,6 @@ public class EditProfileFragment extends Fragment {
              final String n = inputName.getText().toString().trim();
              final String a = inputAbout.getText().toString().trim();
 
-             // Выход без изменений
              if (n.equals(initialName) && a.equals(initialAbout) && pendingPhotoFile == null && pendingBgFile == null) {
                  activity.clearPreviewBackground(); 
                  activity.navigator.closeSubScreen();
@@ -251,10 +243,7 @@ public class EditProfileFragment extends Fragment {
              File finalBgFile = pendingBgFile;
              File finalPhotoFile = pendingPhotoFile;
 
-             // Жесткая привязка к текущему сохранению
              final long myGeneration = ++currentUploadGeneration;
-
-             // === ГЕНЕРИРУЕМ УНИКАЛЬНЫЙ БИЛЕТ ТЕКУЩЕЙ ЗАГРУЗКИ ===
              final long myUploadTicket = System.currentTimeMillis();
              activity.prefs.edit().putLong("active_upload_ticket", myUploadTicket).apply();
 
@@ -263,7 +252,6 @@ public class EditProfileFragment extends Fragment {
                  editor.putString("my_nickname", n);
                  editor.putString("my_about", a);
 
-                 // 1. ОПТИМИСТИЧНОЕ ЛОКАЛЬНОЕ СОХРАНЕНИЕ
                  if (finalPhotoFile != null || finalBgFile != null) {
                      File[] files = activity.getFilesDir().listFiles();
                      if (files != null) {
@@ -292,7 +280,6 @@ public class EditProfileFragment extends Fragment {
                  EditProfileFragment.isProfileUploading = true;
                  EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
 
-                 // Изолированно обновляем аватарку
                  if (finalPhotoFile != null) {
                      activity.mMemoryCache.remove("avatar_" + uid);
                      activity.updateAvatarInUI();
@@ -303,13 +290,11 @@ public class EditProfileFragment extends Fragment {
                  activity.navigator.closeSubScreen();
                  LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
 
-                 // 2. ОТПРАВКА НА СЕРВЕР (В ФОНЕ)
                  Utils.backgroundExecutor.execute(() -> {
                      File serverUploadPhoto = null;
                      File serverUploadBg = null;
 
                      try {
-                         // Защита от перебивания гонки
                          if (myGeneration != currentUploadGeneration) return;
 
                          if (finalPhotoFile != null && finalPhotoFile.exists()) {
@@ -326,11 +311,9 @@ public class EditProfileFragment extends Fragment {
                      final File isolatedBg = serverUploadBg;
 
                      if (activity.vpsToken != null) {
-                         // === ПЕРЕДАЕМ БИЛЕТ myUploadTicket НА СЕРВЕР ===
                          VpsApi.saveUserProfile(activity.vpsToken, n, a, isolatedPhoto, isolatedBg, myUploadTicket, new VpsApi.Callback() {
                              @Override 
                              public void onSuccess(String result) {
-                                 // ПОБЕЖДАЕТ ПОСЛЕДНИЙ
                                  long currentTicket = activity.prefs.getLong("active_upload_ticket", 0);
                                  if (myGeneration != currentUploadGeneration || currentTicket != myUploadTicket) {
                                      cleanupFiles(isolatedPhoto, isolatedBg);
@@ -340,7 +323,6 @@ public class EditProfileFragment extends Fragment {
                                  try {
                                      JSONObject json = new JSONObject(result);
                                      
-                                     // Проверяем, не был ли запрос проигнорирован сервером из-за старого билета
                                      if ("ignored".equals(json.optString("status"))) {
                                          cleanupFiles(isolatedPhoto, isolatedBg);
                                          return;
@@ -349,13 +331,14 @@ public class EditProfileFragment extends Fragment {
                                      activity.runOnUiThread(() -> {
                                          SharedPreferences.Editor successEditor = activity.prefs.edit();
                                          
-                                         // Строгая изоляция обновления ссылок
+                                         // === ИСПРАВЛЕНИЕ ВЕКА: СОХРАНЯЕМ ЧИСТУЮ ССЫЛКУ ===
+                                         // Больше никаких ?t=, которые ломали MainActivity.syncMyBackground!
                                          if (finalPhotoFile != null) {
                                              String newPhotoUrl = json.optString("photoUrl", json.optString("photo", null));
                                              if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null") && newPhotoUrl.startsWith("http")) {
                                                  if (newPhotoUrl.contains("?")) newPhotoUrl = newPhotoUrl.substring(0, newPhotoUrl.indexOf("?"));
-                                                 newPhotoUrl += "?t=" + System.currentTimeMillis();
                                                  successEditor.putString("my_photo_base64", newPhotoUrl);
+                                                 successEditor.putString("synced_photo_url_" + uid, newPhotoUrl);
                                              }
                                          }
 
@@ -363,14 +346,13 @@ public class EditProfileFragment extends Fragment {
                                              String newBgUrl = json.optString("backgroundUrl", json.optString("background", null));
                                              if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null") && newBgUrl.startsWith("http")) {
                                                  if (newBgUrl.contains("?")) newBgUrl = newBgUrl.substring(0, newBgUrl.indexOf("?"));
-                                                 newBgUrl += "?t=" + System.currentTimeMillis();
                                                  successEditor.putString("my_bg_base64", newBgUrl);
+                                                 successEditor.putString("synced_bg_url_" + uid, newBgUrl); // ЭТА СТРОКА УБИЛА ТЕМНУЮ СТЕНУ
                                              }
                                          }
 
                                          successEditor.apply();
                                          
-                                         // Снимаем билет после успешной серверной синхронизации
                                          activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
                                          
                                          EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
@@ -385,7 +367,7 @@ public class EditProfileFragment extends Fragment {
                                      EditProfileFragment.isProfileUploading = false;
                                      long currentTicket = activity.prefs.getLong("active_upload_ticket", 0);
                                      if (currentTicket == myUploadTicket) {
-                                         activity.prefs.edit().putLong("active_upload_ticket", 0).apply(); // Снимаем щит при ошибке
+                                         activity.prefs.edit().putLong("active_upload_ticket", 0).apply(); 
                                      }
                                  }
                                  cleanupFiles(isolatedPhoto, isolatedBg);
@@ -473,7 +455,6 @@ public class EditProfileFragment extends Fragment {
                 fos.flush(); fos.close(); is.close();
 
                 activity.runOnUiThread(() -> {
-                    // АНТИ-ГОНКА В ПИКЕРЕ
                     if (isPhoto && selectionId != currentPhotoSelectionId) {
                         tempFile.delete(); return;
                     }
