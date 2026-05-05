@@ -12,6 +12,7 @@ import com.bumptech.glide.Glide;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.models.User;
+import com.myonlinetime.app.ui.OtherProfileFragment; // Импортируем фрагмент для предзагрузки
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,12 +22,10 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
     private MainActivity activity;
     private OnUserClickListener listener;
 
-    // === ДОБАВЛЕНО: Интерфейс для правильной обработки кликов ===
     public interface OnUserClickListener {
         void onUserClick(User user);
     }
 
-    // === ИСПРАВЛЕНО: Теперь конструктор требует слушатель ===
     public UserListAdapter(MainActivity activity, OnUserClickListener listener) {
         this.activity = activity;
         this.listener = listener;
@@ -63,7 +62,13 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
             holder.avatar.setImageResource(android.R.drawable.sym_def_app_icon);
         }
 
-        // === ИСПРАВЛЕНО: Больше не дергаем нижнее меню! Передаем клик во фрагмент ===
+        // === ИНТЕГРАЦИЯ TELEGRAM-ЭФФЕКТА ===
+        // Вызывается ТОЛЬКО для видимых на экране карточек. Старые данные автоматически 
+        // вытесняются из LruCache, спасая память устройства.
+        if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
+            OtherProfileFragment.prefetchProfile(activity.vpsToken, u.uid);
+        }
+
         holder.itemView.setOnClickListener(v -> {
             if (listener != null) {
                 listener.onUserClick(u);
