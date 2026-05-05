@@ -9,6 +9,8 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.InputFilter;
 import android.text.Spanned;
@@ -131,6 +133,10 @@ public class EditProfileFragment extends Fragment {
         final MainActivity activity = (MainActivity) getActivity();
         
         if (activity != null) {
+            // === ПРОБИВАЕМ ТЕМНУЮ СТЕНУ ===
+            // Мгновенно включаем глобальный фон под прозрачным фрагментом, 
+            // пока ProfileFragment скрыт навигатором.
+            activity.updateGlobalBackground(true);
             LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_EDIT_PROFILE_OPENED"));
         }
 
@@ -288,6 +294,8 @@ public class EditProfileFragment extends Fragment {
                      activity.updateAvatarInUI();
                  }
 
+                 activity.clearPreviewBackground();
+                 activity.updateGlobalBackground(true);
                  activity.navigator.closeSubScreen();
                  LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
 
@@ -410,12 +418,6 @@ public class EditProfileFragment extends Fragment {
         return view;
     }
 
-    private void cleanupFiles(File photo, File bg) {
-        if (photo != null && photo.exists()) photo.delete();
-        if (bg != null && bg.exists()) bg.delete();
-    }
-
-    // === ОЧИСТКА ВРЕМЕННОГО КЭША (Чтобы не забивать память телефона) ===
     private void cleanupTempCacheDir(MainActivity activity) {
         Utils.backgroundExecutor.execute(() -> {
             File cacheDir = activity.getCacheDir();
@@ -480,7 +482,7 @@ public class EditProfileFragment extends Fragment {
                         if (avatarPreview != null) Glide.with(this).load(tempFile).circleCrop().into(avatarPreview);
                     } else {
                         pendingBgFile = tempFile;
-                        activity.previewBackground(tempFile.getAbsolutePath()); // Временный показ для EditProfileFragment
+                        activity.previewBackground(tempFile.getAbsolutePath());
                     }
                 });
             } catch (Exception e) {}
@@ -501,10 +503,30 @@ public class EditProfileFragment extends Fragment {
         super.onDestroyView();
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
-            cleanupTempCacheDir(activity); // Очищаем мусор при закрытии
+            cleanupTempCacheDir(activity); 
             LocalBroadcastManager.getInstance(requireContext()).sendBroadcast(new Intent("ACTION_EDIT_PROFILE_CLOSED"));
             activity.clearPreviewBackground();
-            if (!activity.navigator.hasSubScreen()) activity.headerManager.resetHeader();
+            if (!activity.navigator.hasSubScreen()) {
+                activity.headerManager.resetHeader();
+                
+                // === ПЛАВНАЯ ПЕРЕДАЧА ЭСТАФЕТЫ ===
+                // Выключаем дублирующий глобальный фон с микро-задержкой, 
+                // чтобы ProfileFragment успел отрисовать свой внутренний фон.
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (activity.navigator != null && !activity.navigator.hasSubScreen()) {
+                        activity.updateGlobalBackground(false);
+                    }
+                }, 400);
+            }
+        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (!isHidden() && getActivity() instanceof MainActivity) {
+            MainActivity activity = (MainActivity) getActivity();
+            if (activity.previewBgPath == null) activity.updateGlobalBackground(true); 
         }
     }
 
@@ -515,6 +537,7 @@ public class EditProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!hidden) {
                 setupHeader(activity);
+                if (activity.previewBgPath == null) activity.updateGlobalBackground(true);
             }
         }
     }
