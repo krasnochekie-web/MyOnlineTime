@@ -7,6 +7,7 @@ import androidx.fragment.app.Fragment;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
@@ -30,10 +31,6 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 
-import com.otaliastudios.transcoder.Transcoder;
-import com.otaliastudios.transcoder.TranscoderListener;
-import com.otaliastudios.transcoder.strategy.DefaultVideoStrategy;
-
 import org.json.JSONObject;
 
 import java.io.File;
@@ -46,10 +43,8 @@ public class EditProfileFragment extends Fragment {
 
     private File pendingPhotoFile = null;
     private File pendingBgFile = null;
-    
-    private boolean isCompressing = false; 
 
-    // Защита от гонки пикера
+    // Защита от гонки пикера (если юзер быстро выбирает разные файлы)
     private long currentPhotoSelectionId = 0;
     private long currentBgSelectionId = 0;
 
@@ -128,7 +123,15 @@ public class EditProfileFragment extends Fragment {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         final MainActivity activity = (MainActivity) getActivity();
+        
+        // Сигнал ProfileFragment'у: "Спрячь свой контент, я поверх тебя!"
+        if (activity != null) {
+            LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_EDIT_PROFILE_OPENED"));
+        }
+
         final View view = inflater.inflate(R.layout.layout_edit_profile, container, false);
+        // Фрагмент прозрачный, сквозь него светит глобальный фон MainActivity
+        view.setBackgroundColor(Color.TRANSPARENT);
 
         if (activity == null) return view;
         setupHeader(activity);
@@ -201,7 +204,7 @@ public class EditProfileFragment extends Fragment {
         }
 
         String[] photoMimeTypes = new String[]{"image/*"};
-        String[] backgroundMimeTypes = new String[]{"image/*", "video/*"};
+        String[] backgroundMimeTypes = new String[]{"image/*"};
         
         View.OnClickListener photoClickListener = v -> {
             if (isActionSpam(true)) return; 
@@ -218,14 +221,10 @@ public class EditProfileFragment extends Fragment {
         }
 
         btnSave.setOnClickListener(v -> { 
-             if (isCompressing) {
-                 Toast.makeText(activity, R.string.err_wait_compressing, Toast.LENGTH_SHORT).show();
-                 return;
-             }
-             
              final String n = inputName.getText().toString().trim();
              final String a = inputAbout.getText().toString().trim();
 
+             // Выход без изменений
              if (n.equals(initialName) && a.equals(initialAbout) && pendingPhotoFile == null && pendingBgFile == null) {
                  activity.clearPreviewBackground(); 
                  activity.navigator.closeSubScreen();
@@ -250,9 +249,8 @@ public class EditProfileFragment extends Fragment {
 
                  try {
                      if (finalBgFile != null) {
-                         boolean isVideo = finalBgFile.getName().endsWith(".mp4");
                          boolean isGif = finalBgFile.getName().endsWith(".gif");
-                         String ext = isVideo ? ".mp4" : (isGif ? ".gif" : ".jpg");
+                         String ext = isGif ? ".gif" : ".jpg";
                          
                          File dir = activity.getFilesDir();
                          File[] files = dir.listFiles();
@@ -265,10 +263,8 @@ public class EditProfileFragment extends Fragment {
                          
                          activity.prefs.edit()
                              .putString("custom_bg_path_" + uid, permBg.getAbsolutePath())
-                             .putBoolean("custom_bg_is_video_" + uid, isVideo)
                              .apply();
                              
-                         activity.currentBgBase64 = permBg.getAbsolutePath(); 
                          readyBg = permBg;
                      }
                      
@@ -299,7 +295,11 @@ public class EditProfileFragment extends Fragment {
                      activity.prefs.edit().putString("my_nickname", n).putString("my_about", a).apply();
                      activity.clearPreviewBackground();
                      activity.updateGlobalBackground(true);
-                     activity.updateAvatarInUI();
+                     
+                     if (finalPhotoFile != null) {
+                         activity.updateAvatarInUI();
+                     }
+                     
                      activity.navigator.closeSubScreen();
                      LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
                  });
@@ -311,8 +311,7 @@ public class EditProfileFragment extends Fragment {
                              // ПРАВИЛО: ПОБЕЖДАЕТ ПОСЛЕДНИЙ
                              long currentTicket = activity.prefs.getLong("active_upload_ticket", 0);
                              if (currentTicket != myUploadTicket) {
-                                 // Если билет не совпадает, значит юзер уже нажал "Сохранить" с новыми файлами!
-                                 // Тихо умираем, не трогая серверные ссылки.
+                                 // Если билет не совпадает, юзер уже нажал "Сохранить" с новыми файлами!
                                  if (uploadPhoto != null && uploadPhoto != finalPhotoFile) uploadPhoto.delete();
                                  if (uploadBg != null && uploadBg != finalBgFile) uploadBg.delete();
                                  return;
@@ -323,18 +322,17 @@ public class EditProfileFragment extends Fragment {
                                  String newPhotoUrl = json.optString("photoUrl", null);
                                  String newBgUrl = json.optString("backgroundUrl", null);
 
-                                 if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null")) {
-                                     activity.prefs.edit()
-                                         .putString("my_photo_base64", newPhotoUrl)
-                                         .putString("synced_photo_url_" + uid, newPhotoUrl)
-                                         .apply();
+                                 SharedPreferences.Editor successEditor = activity.prefs.edit();
+
+                                 if (finalPhotoFile != null && newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null")) {
+                                     successEditor.putString("my_photo_base64", newPhotoUrl);
                                  }
-                                 if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null")) {
-                                     activity.prefs.edit()
-                                         .putString("my_bg_base64", newBgUrl)
-                                         .putString("synced_bg_url_" + uid, newBgUrl) 
-                                         .apply();
+                                 
+                                 if (finalBgFile != null && newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null")) {
+                                     successEditor.putString("my_bg_base64", newBgUrl);
                                  }
+
+                                 successEditor.apply();
 
                                  // Мы дошли до конца — снимаем Щит
                                  activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
@@ -351,7 +349,6 @@ public class EditProfileFragment extends Fragment {
                          }
                      });
                  } else {
-                     // Если нет токена, просто снимаем щит
                      activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
                  }
              });
@@ -384,11 +381,10 @@ public class EditProfileFragment extends Fragment {
                 if (is == null) return;
 
                 String mimeType = activity.getContentResolver().getType(uri);
-                boolean isVideoBg = !isPhoto && mimeType != null && mimeType.startsWith("video/");
                 boolean isGif = mimeType != null && mimeType.contains("gif"); 
                 
                 String prefix = isPhoto ? "temp_avatar_" : "temp_bg_";
-                String extension = isVideoBg ? ".mp4" : (isGif ? ".gif" : ".jpg"); 
+                String extension = isGif ? ".gif" : ".jpg"; 
                 File tempFile = new File(activity.getCacheDir(), prefix + System.currentTimeMillis() + extension);
                 
                 FileOutputStream fos = new FileOutputStream(tempFile);
@@ -396,45 +392,16 @@ public class EditProfileFragment extends Fragment {
                 int nRead;
                 while ((nRead = is.read(buffer)) != -1) fos.write(buffer, 0, nRead);
                 fos.flush(); fos.close(); is.close();
-                
-                if (isVideoBg) {
-                    isCompressing = true;
-                    File compressedFile = new File(activity.getCacheDir(), "compressed_bg_" + System.currentTimeMillis() + ".mp4");
-                    
-                    Transcoder.into(compressedFile.getAbsolutePath())
-                        .addDataSource(tempFile.getAbsolutePath())
-                        .setVideoTrackStrategy(DefaultVideoStrategy.atMost(540).build()) 
-                        .setListener(new TranscoderListener() {
-                            @Override public void onTranscodeProgress(double progress) {}
-
-                            @Override
-                            public void onTranscodeCompleted(int successCode) {
-                                isCompressing = false;
-                                tempFile.delete(); 
-                                
-                                activity.runOnUiThread(() -> {
-                                    if (!isPhoto && selectionId != currentBgSelectionId) {
-                                        compressedFile.delete(); return;
-                                    }
-                                    pendingBgFile = compressedFile;
-                                    activity.previewBackground(compressedFile.getAbsolutePath(), true);
-                                });
-                            }
-                            @Override public void onTranscodeCanceled() { isCompressing = false; }
-                            @Override public void onTranscodeFailed(@NonNull Throwable exception) {
-                                isCompressing = false;
-                            }
-                        }).transcode();
-                    return; 
-                }
 
                 activity.runOnUiThread(() -> {
-                    // АНТИ-ГОНКА В ПИКЕРЕ
+                    // АНТИ-ГОНКА ПИКЕРА
                     if (isPhoto && selectionId != currentPhotoSelectionId) {
-                        tempFile.delete(); return;
+                        tempFile.delete();
+                        return;
                     }
                     if (!isPhoto && selectionId != currentBgSelectionId) {
-                        tempFile.delete(); return;
+                        tempFile.delete();
+                        return;
                     }
 
                     if (isPhoto) {
@@ -443,7 +410,7 @@ public class EditProfileFragment extends Fragment {
                         if (avatarPreview != null) Glide.with(this).load(tempFile).circleCrop().into(avatarPreview);
                     } else {
                         pendingBgFile = tempFile;
-                        activity.previewBackground(tempFile.getAbsolutePath(), false);
+                        activity.previewBackground(tempFile.getAbsolutePath());
                     }
                 });
             } catch (Exception e) {}
@@ -456,9 +423,6 @@ public class EditProfileFragment extends Fragment {
             activity.headerTitle.setText(activity.getString(R.string.edit_profile_title));
             activity.headerBackBtn.setVisibility(View.VISIBLE);
             activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow); 
-            
-            ImageView bellBtn = activity.findViewById(R.id.header_bell_btn);
-            if (bellBtn != null) bellBtn.setVisibility(View.VISIBLE);
         }
     }
 
