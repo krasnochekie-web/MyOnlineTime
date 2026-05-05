@@ -254,6 +254,10 @@ public class EditProfileFragment extends Fragment {
              // Жесткая привязка к текущему сохранению
              final long myGeneration = ++currentUploadGeneration;
 
+             // === ГЕНЕРИРУЕМ УНИКАЛЬНЫЙ БИЛЕТ ТЕКУЩЕЙ ЗАГРУЗКИ ===
+             final long myUploadTicket = System.currentTimeMillis();
+             activity.prefs.edit().putLong("active_upload_ticket", myUploadTicket).apply();
+
              Runnable performOptimisticSaveAndUpload = () -> {
                  SharedPreferences.Editor editor = activity.prefs.edit();
                  editor.putString("my_nickname", n);
@@ -322,17 +326,25 @@ public class EditProfileFragment extends Fragment {
                      final File isolatedBg = serverUploadBg;
 
                      if (activity.vpsToken != null) {
-                         VpsApi.saveUserProfile(activity.vpsToken, n, a, isolatedPhoto, isolatedBg, new VpsApi.Callback() {
+                         // === ПЕРЕДАЕМ БИЛЕТ myUploadTicket НА СЕРВЕР ===
+                         VpsApi.saveUserProfile(activity.vpsToken, n, a, isolatedPhoto, isolatedBg, myUploadTicket, new VpsApi.Callback() {
                              @Override 
                              public void onSuccess(String result) {
                                  // ПОБЕЖДАЕТ ПОСЛЕДНИЙ
-                                 if (myGeneration != currentUploadGeneration) {
+                                 long currentTicket = activity.prefs.getLong("active_upload_ticket", 0);
+                                 if (myGeneration != currentUploadGeneration || currentTicket != myUploadTicket) {
                                      cleanupFiles(isolatedPhoto, isolatedBg);
                                      return;
                                  }
 
                                  try {
                                      JSONObject json = new JSONObject(result);
+                                     
+                                     // Проверяем, не был ли запрос проигнорирован сервером из-за старого билета
+                                     if ("ignored".equals(json.optString("status"))) {
+                                         cleanupFiles(isolatedPhoto, isolatedBg);
+                                         return;
+                                     }
                                      
                                      activity.runOnUiThread(() -> {
                                          SharedPreferences.Editor successEditor = activity.prefs.edit();
@@ -357,6 +369,10 @@ public class EditProfileFragment extends Fragment {
                                          }
 
                                          successEditor.apply();
+                                         
+                                         // Снимаем билет после успешной серверной синхронизации
+                                         activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
+                                         
                                          EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
                                          if (myGeneration == currentUploadGeneration) EditProfileFragment.isProfileUploading = false;
                                          LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
@@ -365,12 +381,21 @@ public class EditProfileFragment extends Fragment {
                                  finally { cleanupFiles(isolatedPhoto, isolatedBg); }
                              }
                              @Override public void onError(String error) {
-                                 if (myGeneration == currentUploadGeneration) EditProfileFragment.isProfileUploading = false;
+                                 if (myGeneration == currentUploadGeneration) {
+                                     EditProfileFragment.isProfileUploading = false;
+                                     long currentTicket = activity.prefs.getLong("active_upload_ticket", 0);
+                                     if (currentTicket == myUploadTicket) {
+                                         activity.prefs.edit().putLong("active_upload_ticket", 0).apply(); // Снимаем щит при ошибке
+                                     }
+                                 }
                                  cleanupFiles(isolatedPhoto, isolatedBg);
                              }
                          });
                      } else {
-                         if (myGeneration == currentUploadGeneration) EditProfileFragment.isProfileUploading = false;
+                         if (myGeneration == currentUploadGeneration) {
+                             EditProfileFragment.isProfileUploading = false;
+                             activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
+                         }
                      }
                  });
              };
@@ -383,7 +408,10 @@ public class EditProfileFragment extends Fragment {
                      @Override public void onError(String error) {
                          activity.runOnUiThread(() -> {
                              btnSave.setEnabled(true);
-                             if (myGeneration == currentUploadGeneration) EditProfileFragment.isProfileUploading = false;
+                             if (myGeneration == currentUploadGeneration) {
+                                 EditProfileFragment.isProfileUploading = false;
+                                 activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
+                             }
                              String displayError = activity.getString(R.string.err_server);
                              try {
                                  if (error.contains("{")) {
@@ -459,7 +487,6 @@ public class EditProfileFragment extends Fragment {
                         if (avatarPreview != null) Glide.with(this).load(tempFile).circleCrop().into(avatarPreview);
                     } else {
                         pendingBgFile = tempFile;
-                        // ОПТИМИСТИЧНЫЙ ИНТЕРФЕЙС: физический путь, Glide его не потеряет!
                         activity.previewBackground(tempFile.getAbsolutePath());
                     }
                 });
