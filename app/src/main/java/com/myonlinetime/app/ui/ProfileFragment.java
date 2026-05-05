@@ -59,6 +59,10 @@ public class ProfileFragment extends Fragment {
 
     private View profileContentView;
 
+    // Память для устранения морганий
+    private String currentLoadedAvatar = null;
+    private String currentLoadedBg = null;
+
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
     private Runnable fetchProfileDataRunnable; 
@@ -72,7 +76,6 @@ public class ProfileFragment extends Fragment {
                 if ("ACTION_PROFILE_UPDATED".equals(action)) {
                     updateUiFromPrefs(activity);
                 } else if ("ACTION_EDIT_PROFILE_OPENED".equals(action)) {
-                    // Прячем только контент. myBgImageView остается и просвечивает сквозь EditProfileFragment!
                     if (profileContentView != null) profileContentView.setVisibility(View.INVISIBLE);
                 } else if ("ACTION_EDIT_PROFILE_CLOSED".equals(action)) {
                     if (profileContentView != null) profileContentView.setVisibility(View.VISIBLE);
@@ -238,7 +241,7 @@ public class ProfileFragment extends Fragment {
         if (activity.vpsToken != null) fetchProfileDataRunnable.run();
         refreshCounts(activity);
 
-        return wrapper; // Возвращаем обертку с фоном!
+        return wrapper; 
     }
 
     private void updateUiFromPrefs(MainActivity activity) {
@@ -256,16 +259,27 @@ public class ProfileFragment extends Fragment {
         String b64 = activity.prefs.getString("my_photo_base64", null);
         handleMediaLoading(activity, b64, true, myUid);
 
-        // === ОПТИМИЗАЦИЯ КЭША ДЛЯ ЛОКАЛЬНОГО ФОНА ===
+        // === ИДЕАЛЬНЫЙ КЭШ И УСТРАНЕНИЕ МЕРЦАНИЯ ===
         String bgPath = activity.prefs.getString("custom_bg_path_" + myUid, null);
+        String remoteBg = activity.prefs.getString("my_bg_base64", null);
+        
+        String newBgKey;
         if (bgPath != null && new File(bgPath).exists()) {
-            Glide.with(this).load(new File(bgPath))
-                 .skipMemoryCache(true) // Не жрем оперативу!
-                 .diskCacheStrategy(DiskCacheStrategy.NONE) // Не плодим копии на диске!
-                 .centerCrop().into(myBgImageView);
+            newBgKey = myUid + "_local_bg_" + new File(bgPath).lastModified();
         } else {
-            String remoteBg = activity.prefs.getString("my_bg_base64", null);
-            if (remoteBg != null && remoteBg.startsWith("http")) {
+            newBgKey = myUid + "_remote_bg_" + (remoteBg != null ? String.valueOf(remoteBg.hashCode()) : "empty");
+        }
+
+        // Запускаем Glide ТОЛЬКО если фон реально изменился
+        if (!newBgKey.equals(currentLoadedBg)) {
+            currentLoadedBg = newBgKey;
+            
+            if (bgPath != null && new File(bgPath).exists()) {
+                Glide.with(this).load(new File(bgPath))
+                     .diskCacheStrategy(DiskCacheStrategy.NONE) // Не плодим копии на жестком диске!
+                     .signature(new ObjectKey(new File(bgPath).lastModified())) // Мгновенная загрузка из ОЗУ при свайпах
+                     .centerCrop().into(myBgImageView);
+            } else if (remoteBg != null && remoteBg.startsWith("http")) {
                 Glide.with(this).load(remoteBg).centerCrop().into(myBgImageView);
             } else {
                 myBgImageView.setImageDrawable(null);
@@ -298,8 +312,19 @@ public class ProfileFragment extends Fragment {
     private void handleMediaLoading(MainActivity activity, String base64Data, boolean useLocalFile, String uid) {
         if (!isAdded() || avatarView == null) return;
 
+        String customAvatarPath = useLocalFile ? activity.prefs.getString("custom_avatar_path_" + uid, null) : null;
+        
+        String newAvatarKey;
+        if (useLocalFile && customAvatarPath != null && new File(customAvatarPath).exists()) {
+            newAvatarKey = uid + "_local_" + new File(customAvatarPath).lastModified();
+        } else {
+            newAvatarKey = uid + "_remote_" + (base64Data != null ? String.valueOf(base64Data.hashCode()) : "empty");
+        }
+        
+        if (newAvatarKey.equals(currentLoadedAvatar)) return;
+        currentLoadedAvatar = newAvatarKey;
+
         if (useLocalFile) {
-            String customAvatarPath = activity.prefs.getString("custom_avatar_path_" + uid, null);
             if (customAvatarPath != null) {
                 File localCustomFile = new File(customAvatarPath);
                 if (localCustomFile.exists()) {
