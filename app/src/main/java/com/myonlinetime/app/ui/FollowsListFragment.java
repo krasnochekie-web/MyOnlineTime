@@ -62,7 +62,15 @@ public class FollowsListFragment extends Fragment {
                 } else {
                     String currentTitle = listType.equals("followers") ? 
                             getString(R.string.followers) : getString(R.string.following);
-                    activity.navigator.openSubScreen(OtherProfileFragment.newInstance(clickedUser.uid, currentTitle));
+                            
+                    // === ПЕРЕДАЕМ БАЗОВУЮ ИНФУ ИЗ КАРТОЧКИ ДЛЯ МГНОВЕННОГО ОТОБРАЖЕНИЯ ===
+                    activity.navigator.openSubScreen(OtherProfileFragment.newInstance(
+                            clickedUser.uid, 
+                            currentTitle,
+                            clickedUser.nickname,
+                            clickedUser.about,
+                            clickedUser.photo
+                    ));
                 }
             }
         });
@@ -119,6 +127,4 @@ public class FollowsListFragment extends Fragment {
         statusText.setVisibility(View.VISIBLE);
         statusText.setText(getString(R.string.err_loading));
     }
-
-    // МЕТОД onResume И hideBgRunnable УДАЛЕНЫ ПОЛНОСТЬЮ — ФОНОМ УПРАВЛЯЕТ FollowsFragment!
 }
