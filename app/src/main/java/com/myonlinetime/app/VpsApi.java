@@ -105,13 +105,14 @@ public class VpsApi {
         Request request = createAuthedRequest("save_user", ourServerToken).post(RequestBody.create(JSON, gson.toJson(payload))).build();
         enqueueCall(request, callback);
     }
-
-    public static void saveUserProfile(String ourServerToken, String nickname, String about, File photoFile, File bgFile, long ticket, final Callback callback) {
+public static void saveUserProfile(String ourServerToken, String nickname, String about, File photoFile, File bgFile, long ticket, final Callback callback) {
+        // === ЖЕСТКИЙ ОБРЫВ ПРЕДЫДУЩИХ ЗАГРУЗОК ПО URL ===
+        // Гарантированно прерывает старый процесс, даже если OkHttp потерял теги
         for (Call call : client.dispatcher().queuedCalls()) {
-            if ("upload_profile_task".equals(call.request().tag())) call.cancel();
+            if (call.request().url().toString().contains("save_user")) call.cancel();
         }
         for (Call call : client.dispatcher().runningCalls()) {
-            if ("upload_profile_task".equals(call.request().tag())) call.cancel();
+            if (call.request().url().toString().contains("save_user")) call.cancel();
         }
 
         MultipartBody.Builder builder = new MultipartBody.Builder().setType(MultipartBody.FORM);
@@ -138,7 +139,6 @@ public class VpsApi {
                 
         enqueueCall(request, callback);
     }
-
     public static void deleteBackground(String ourServerToken, final Callback callback) {
         RequestBody body = RequestBody.create(JSON, "{}");
         Request request = createAuthedRequest("delete_background", ourServerToken)
