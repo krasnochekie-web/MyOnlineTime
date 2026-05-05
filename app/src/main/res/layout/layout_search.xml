@@ -12,14 +12,12 @@
         android:clipToPadding="false"
         android:nestedScrollingEnabled="true">
 
-        <!-- Оборачиваем поле ввода и крестик, чтобы наложить их друг на друга -->
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginLeft="16dp"
             android:layout_marginRight="16dp">
 
-            <!-- УВЕЛИЧЕН paddingRight="45dp", чтобы текст не залезал под крест -->
             <EditText
                 android:id="@+id/search_input"
                 android:layout_width="match_parent"
@@ -37,7 +35,7 @@
                 android:drawablePadding="10dp"
                 android:singleLine="true"/>
 
-            <!-- ИДЕАЛЬНАЯ ВОЛНА: Убрали Borderless и добавили clipToOutline -->
+            <!-- ИДЕАЛЬНАЯ КРУГЛАЯ ВОЛНА: Убрали старый фон, поставили Borderless -->
             <ImageView
                 android:id="@+id/search_clear_btn"
                 android:layout_width="25dp"
@@ -45,12 +43,10 @@
                 android:layout_alignParentRight="true"
                 android:layout_centerVertical="true"
                 android:layout_marginRight="10dp"
-                android:background="@drawable/bg_close_circle"
+                android:background="?attr/selectableItemBackgroundBorderless"
                 android:padding="3.5dp"
                 android:clickable="true"
                 android:focusable="true"
-                android:foreground="?android:attr/selectableItemBackground"
-                android:clipToOutline="true"
                 android:src="@android:drawable/ic_menu_close_clear_cancel"
                 android:tint="@color/textDynamic"
                 android:visibility="gone" />
