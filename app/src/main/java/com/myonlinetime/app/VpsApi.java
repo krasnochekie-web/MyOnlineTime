@@ -60,6 +60,7 @@ public class VpsApi {
 
         client.newCall(request).enqueue(new okhttp3.Callback() {
             @Override public void onFailure(Call call, IOException e) {
+                if (call.isCanceled()) return;
                 postError(callback, e.getMessage());
             }
             @Override public void onResponse(Call call, Response response) throws IOException {
@@ -85,7 +86,6 @@ public class VpsApi {
         });
     }
 
-    // === НОВЫЙ МЕТОД ДЛЯ ПРЕДВАРИТЕЛЬНОЙ ПРОВЕРКИ ИМЕНИ ===
     public static void checkNickname(String ourServerToken, String nickname, final Callback callback) {
         CheckNicknamePayload payload = new CheckNicknamePayload();
         payload.nickname = nickname;
@@ -107,6 +107,15 @@ public class VpsApi {
     }
 
     public static void saveUserProfile(String ourServerToken, String nickname, String about, File photoFile, File bgFile, final Callback callback) {
+        // === ЖЕСТКИЙ ОБРЫВ ПРЕДЫДУЩИХ ЗАГРУЗОК ===
+        // Если юзер быстро выбрал другой фон, убиваем старый запрос на корню
+        for (Call call : client.dispatcher().queuedCalls()) {
+            if ("upload_profile_task".equals(call.request().tag())) call.cancel();
+        }
+        for (Call call : client.dispatcher().runningCalls()) {
+            if ("upload_profile_task".equals(call.request().tag())) call.cancel();
+        }
+
         MultipartBody.Builder builder = new MultipartBody.Builder().setType(MultipartBody.FORM);
 
         if (nickname != null) builder.addFormDataPart("nickname", nickname);
@@ -124,6 +133,7 @@ public class VpsApi {
 
         Request request = createAuthedRequest("save_user", ourServerToken)
                 .post(builder.build())
+                .tag("upload_profile_task") // === ВЕШАЕМ ТЕГ ДЛЯ ИДЕНТИФИКАЦИИ ===
                 .build();
                 
         enqueueCall(request, callback);
@@ -141,7 +151,10 @@ public class VpsApi {
         HttpUrl url = HttpUrl.parse(BASE_URL + "get_user").newBuilder().addQueryParameter("uid", uid).build();
         Request request = createAuthedRequest(url, ourServerToken).build();
         client.newCall(request).enqueue(new okhttp3.Callback() {
-            @Override public void onFailure(Call call, IOException e) { postError(callback, e.getMessage()); }
+            @Override public void onFailure(Call call, IOException e) { 
+                if (call.isCanceled()) return;
+                postError(callback, e.getMessage()); 
+            }
             @Override public void onResponse(Call call, Response response) throws IOException {
                 if (response.isSuccessful()) {
                     final User user = gson.fromJson(response.body().string(), User.class);
@@ -161,7 +174,10 @@ public class VpsApi {
         HttpUrl url = HttpUrl.parse(BASE_URL + "search_users").newBuilder().addQueryParameter("q", query).build();
         Request request = createAuthedRequest(url, ourServerToken).build();
         client.newCall(request).enqueue(new okhttp3.Callback() {
-            @Override public void onFailure(Call call, IOException e) { postSearchError(callback); }
+            @Override public void onFailure(Call call, IOException e) { 
+                if (call.isCanceled()) return;
+                postSearchError(callback); 
+            }
             @Override public void onResponse(Call call, Response response) throws IOException {
                 if (response.isSuccessful()) {
                     TypeToken<List<User>> tokenType = new TypeToken<List<User>>() {};
@@ -192,6 +208,7 @@ public class VpsApi {
         Request request = createAuthedRequest("check_is_following", ourServerToken).post(RequestBody.create(JSON, gson.toJson(payload))).build();
         client.newCall(request).enqueue(new okhttp3.Callback() {
             @Override public void onFailure(Call call, IOException e) {
+                if (call.isCanceled()) return;
                 if(callback!=null) {
                     mainHandler.post(new Runnable() {
                         @Override public void run() { callback.onResult(false); }
@@ -231,7 +248,10 @@ public class VpsApi {
                 .build();
         Request request = createAuthedRequest(url, ourServerToken).build();
         client.newCall(request).enqueue(new okhttp3.Callback() {
-            @Override public void onFailure(Call call, IOException e) { postSearchError(callback); }
+            @Override public void onFailure(Call call, IOException e) { 
+                if (call.isCanceled()) return;
+                postSearchError(callback); 
+            }
             @Override public void onResponse(Call call, Response response) throws IOException {
                 if (response.isSuccessful()) {
                     TypeToken<List<User>> tokenType = new TypeToken<List<User>>() {};
@@ -278,7 +298,11 @@ public class VpsApi {
 
     private static void enqueueCall(Request request, final Callback callback) {
         client.newCall(request).enqueue(new okhttp3.Callback() {
-            @Override public void onFailure(Call call, IOException e) { postError(callback, e.getMessage()); }
+            @Override public void onFailure(Call call, IOException e) { 
+                // === ТИХАЯ СМЕРТЬ ОТМЕНЕННОГО ЗАПРОСА ===
+                if (call.isCanceled()) return; 
+                postError(callback, e.getMessage()); 
+            }
             @Override public void onResponse(Call call, Response response) throws IOException {
                 if (callback == null) return;
                 if (response.isSuccessful()) {
