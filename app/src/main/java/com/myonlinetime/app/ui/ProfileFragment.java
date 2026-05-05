@@ -3,6 +3,8 @@ package com.myonlinetime.app.ui;
 import androidx.fragment.app.Fragment;
 import android.app.Dialog;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -17,6 +19,7 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
@@ -24,6 +27,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.signature.ObjectKey;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
@@ -50,7 +54,10 @@ public class ProfileFragment extends Fragment {
     private final Gson gson = new Gson();
     
     private ImageView avatarView;
+    private ImageView myBgImageView; // Наш локальный фон для эффекта коллажа
     private String myUid = "";
+
+    private View profileContentView;
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
@@ -61,7 +68,15 @@ public class ProfileFragment extends Fragment {
         public void onReceive(android.content.Context context, android.content.Intent intent) {
             MainActivity activity = (MainActivity) getActivity();
             if (activity != null && isAdded()) {
-                updateUiFromPrefs(activity);
+                String action = intent.getAction();
+                if ("ACTION_PROFILE_UPDATED".equals(action)) {
+                    updateUiFromPrefs(activity);
+                } else if ("ACTION_EDIT_PROFILE_OPENED".equals(action)) {
+                    // Прячем только контент. myBgImageView остается и просвечивает сквозь EditProfileFragment!
+                    if (profileContentView != null) profileContentView.setVisibility(View.INVISIBLE);
+                } else if ("ACTION_EDIT_PROFILE_CLOSED".equals(action)) {
+                    if (profileContentView != null) profileContentView.setVisibility(View.VISIBLE);
+                }
             }
         }
     };
@@ -78,35 +93,43 @@ public class ProfileFragment extends Fragment {
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        final View view = inflater.inflate(R.layout.layout_profile, container, false);
         final MainActivity activity = (MainActivity) getActivity();
-        if (activity == null) return view;
+        if (activity == null) return new View(requireContext());
+
+        // === СОЗДАЕМ ЭФФЕКТ КОЛЛАЖА ===
+        FrameLayout wrapper = new FrameLayout(requireContext());
+        wrapper.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        
+        myBgImageView = new ImageView(requireContext());
+        myBgImageView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        myBgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        
+        final View originalView = inflater.inflate(R.layout.layout_profile, wrapper, false);
+        profileContentView = originalView;
+        
+        wrapper.addView(myBgImageView, 0); // Фон на самом дне (индекс 0)
+        wrapper.addView(originalView, 1);  // Контент поверх фона
 
         final GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
-        if (account == null) return view;
+        if (account == null) return wrapper;
         myUid = account.getId();
 
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.resetHeader();
 
-        activity.updateGlobalBackground(true);
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (isAdded() && !isHidden()) activity.clearPreviewBackground();
-        }, 400);
-
         prefs = activity.getSharedPreferences("MyOnlineTime_Cache_" + myUid, Context.MODE_PRIVATE);
 
-        avatarView = view.findViewById(R.id.profile_avatar);
-        final View btnEdit = view.findViewById(R.id.btn_edit_profile);
-        final Button btnFollow = view.findViewById(R.id.btn_follow);
-        final TextView weekTimeText = view.findViewById(R.id.profile_week_time);
-        View followersClick = view.findViewById(R.id.container_followers);
-        View followingClick = view.findViewById(R.id.container_following);
-        TextView tabTopApps = view.findViewById(R.id.tab_top_apps);
+        avatarView = originalView.findViewById(R.id.profile_avatar);
+        final View btnEdit = originalView.findViewById(R.id.btn_edit_profile);
+        final Button btnFollow = originalView.findViewById(R.id.btn_follow);
+        final TextView weekTimeText = originalView.findViewById(R.id.profile_week_time);
+        View followersClick = originalView.findViewById(R.id.container_followers);
+        View followingClick = originalView.findViewById(R.id.container_following);
+        TextView tabTopApps = originalView.findViewById(R.id.tab_top_apps);
         if (tabTopApps != null) tabTopApps.setSelected(true);
-        final ImageView btnExpand = view.findViewById(R.id.btn_expand_apps);
-        final ImageView btnCollapse = view.findViewById(R.id.btn_collapse_apps);
-        final LinearLayout appsContainerLocal = view.findViewById(R.id.profile_apps_container);
+        final ImageView btnExpand = originalView.findViewById(R.id.btn_expand_apps);
+        final ImageView btnCollapse = originalView.findViewById(R.id.btn_collapse_apps);
+        final LinearLayout appsContainerLocal = originalView.findViewById(R.id.profile_apps_container);
 
         btnFollow.setVisibility(View.GONE);
         btnEdit.setVisibility(View.VISIBLE);
@@ -120,21 +143,21 @@ public class ProfileFragment extends Fragment {
         btnExpand.setOnClickListener(v -> {
             btnExpand.setVisibility(View.GONE);
             btnCollapse.setVisibility(View.VISIBLE);
-            StatsHelper.applyCollapseLogic(getView().findViewById(R.id.profile_about), appsContainerLocal, btnExpand, btnCollapse);
+            StatsHelper.applyCollapseLogic(originalView.findViewById(R.id.profile_about), appsContainerLocal, btnExpand, btnCollapse);
         });
 
         btnCollapse.setOnClickListener(v -> {
             btnCollapse.setVisibility(View.GONE);
             btnExpand.setVisibility(View.VISIBLE);
-            StatsHelper.applyCollapseLogic(getView().findViewById(R.id.profile_about), appsContainerLocal, btnExpand, btnCollapse);
+            StatsHelper.applyCollapseLogic(originalView.findViewById(R.id.profile_about), appsContainerLocal, btnExpand, btnCollapse);
         });
 
         followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(myUid, "followers")));
         followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(myUid, "following")));
 
         btnEdit.setOnClickListener(v -> {
-            TextView nameView = getView().findViewById(R.id.profile_name);
-            TextView aboutView = getView().findViewById(R.id.profile_about);
+            TextView nameView = originalView.findViewById(R.id.profile_name);
+            TextView aboutView = originalView.findViewById(R.id.profile_about);
             activity.navigator.openSubScreen(EditProfileFragment.newInstance(
                     nameView.getText().toString().equals("...") ? "" : nameView.getText().toString(),
                     aboutView.getText().toString()
@@ -147,12 +170,9 @@ public class ProfileFragment extends Fragment {
                 public void onLoaded(User user) {
                     if (!isAdded()) return;
 
-                    // === ОПТИМИСТИЧНЫЙ ЩИТ ===
-                    // Если билет активен и с момента нажатия "Сохранить" прошло меньше 60 сек,
-                    // мы НЕ ВЕРИМ серверу, так как он пришлет нам старый фон (Черная стена).
                     long activeTicket = activity.prefs.getLong("active_upload_ticket", 0);
                     if (activeTicket != 0 && (System.currentTimeMillis() - activeTicket < 60000)) {
-                        return; // Молча выходим, доверяя локальным файлам!
+                        return; // Защита от черной стены
                     }
 
                     if (user != null) {
@@ -218,7 +238,7 @@ public class ProfileFragment extends Fragment {
         if (activity.vpsToken != null) fetchProfileDataRunnable.run();
         refreshCounts(activity);
 
-        return view;
+        return wrapper; // Возвращаем обертку с фоном!
     }
 
     private void updateUiFromPrefs(MainActivity activity) {
@@ -235,6 +255,22 @@ public class ProfileFragment extends Fragment {
 
         String b64 = activity.prefs.getString("my_photo_base64", null);
         handleMediaLoading(activity, b64, true, myUid);
+
+        // === ОПТИМИЗАЦИЯ КЭША ДЛЯ ЛОКАЛЬНОГО ФОНА ===
+        String bgPath = activity.prefs.getString("custom_bg_path_" + myUid, null);
+        if (bgPath != null && new File(bgPath).exists()) {
+            Glide.with(this).load(new File(bgPath))
+                 .skipMemoryCache(true) // Не жрем оперативу!
+                 .diskCacheStrategy(DiskCacheStrategy.NONE) // Не плодим копии на диске!
+                 .centerCrop().into(myBgImageView);
+        } else {
+            String remoteBg = activity.prefs.getString("my_bg_base64", null);
+            if (remoteBg != null && remoteBg.startsWith("http")) {
+                Glide.with(this).load(remoteBg).centerCrop().into(myBgImageView);
+            } else {
+                myBgImageView.setImageDrawable(null);
+            }
+        }
     }
 
     private void refreshCounts(MainActivity activity) {
@@ -317,15 +353,14 @@ public class ProfileFragment extends Fragment {
                 updateUiFromPrefs(activity);
                 if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
-                
-                activity.updateGlobalBackground(true);
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    if (isAdded() && !isHidden()) activity.clearPreviewBackground();
-                }, 400);
             }
         }
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
             .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_PROFILE_UPDATED"));
+        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
+            .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_EDIT_PROFILE_OPENED"));
+        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
+            .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_EDIT_PROFILE_CLOSED"));
     }
 
     @Override
@@ -346,17 +381,6 @@ public class ProfileFragment extends Fragment {
                 updateUiFromPrefs(activity);
                 if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
-                
-                activity.updateGlobalBackground(true);
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    if (isAdded() && !isHidden()) activity.clearPreviewBackground();
-                }, 400);
-            } else {
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    if (isAdded() && isHidden() && activity.navigator != null && activity.navigator.getCurrentTabIndex() != 4) {
-                        activity.updateGlobalBackground(false);
-                    }
-                }, 400);
             }
         }
     }
