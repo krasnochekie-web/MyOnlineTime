@@ -19,7 +19,6 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
@@ -386,12 +385,6 @@ public class ProfileFragment extends Fragment {
                 if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
                 activity.updateGlobalBackground(true); 
-            } else {
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    if (isAdded() && isHidden() && activity.navigator != null && activity.navigator.getCurrentTabIndex() != 4) {
-                        activity.updateGlobalBackground(false);
-                    }
-                }, 750);
             }
         }
     }
