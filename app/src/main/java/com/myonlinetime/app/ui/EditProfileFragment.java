@@ -133,9 +133,6 @@ public class EditProfileFragment extends Fragment {
         final MainActivity activity = (MainActivity) getActivity();
         
         if (activity != null) {
-            // === ПРОБИВАЕМ ТЕМНУЮ СТЕНУ ===
-            // Мгновенно включаем глобальный фон под прозрачным фрагментом, 
-            // пока ProfileFragment скрыт навигатором.
             activity.updateGlobalBackground(true);
             LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_EDIT_PROFILE_OPENED"));
         }
@@ -418,6 +415,12 @@ public class EditProfileFragment extends Fragment {
         return view;
     }
 
+    // === ВЕРНУЛИ КРИТИЧЕСКИ ВАЖНУЮ ФУНКЦИЮ ===
+    private void cleanupFiles(File photo, File bg) {
+        if (photo != null && photo.exists()) photo.delete();
+        if (bg != null && bg.exists()) bg.delete();
+    }
+
     private void cleanupTempCacheDir(MainActivity activity) {
         Utils.backgroundExecutor.execute(() -> {
             File cacheDir = activity.getCacheDir();
@@ -509,9 +512,6 @@ public class EditProfileFragment extends Fragment {
             if (!activity.navigator.hasSubScreen()) {
                 activity.headerManager.resetHeader();
                 
-                // === ПЛАВНАЯ ПЕРЕДАЧА ЭСТАФЕТЫ ===
-                // Выключаем дублирующий глобальный фон с микро-задержкой, 
-                // чтобы ProfileFragment успел отрисовать свой внутренний фон.
                 new Handler(Looper.getMainLooper()).postDelayed(() -> {
                     if (activity.navigator != null && !activity.navigator.hasSubScreen()) {
                         activity.updateGlobalBackground(false);
