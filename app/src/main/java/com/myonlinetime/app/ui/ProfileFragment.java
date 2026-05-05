@@ -155,8 +155,9 @@ public class ProfileFragment extends Fragment {
             StatsHelper.applyCollapseLogic(originalView.findViewById(R.id.profile_about), appsContainerLocal, btnExpand, btnCollapse);
         });
 
-        followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(myUid, "followers")));
-        followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(myUid, "following")));
+        // === ИСПРАВЛЕНИЕ: Открываем FollowsFragment с вкладками ===
+        followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(myUid, true)));
+        followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(myUid, false)));
 
         btnEdit.setOnClickListener(v -> {
             TextView nameView = originalView.findViewById(R.id.profile_name);
