@@ -5,6 +5,14 @@
     android:background="@color/bgDynamic"
     android:nestedScrollingEnabled="true">
 
+    <ProgressBar
+        android:id="@+id/follows_loading_spinner"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_centerInParent="true"
+        android:indeterminateTint="@color/textDynamic"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/follows_status_text"
         android:layout_width="wrap_content"
@@ -18,6 +26,7 @@
         android:id="@+id/follows_results_list"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:paddingHorizontal="16dp"
         android:clipToPadding="false"
         android:paddingBottom="@dimen/bottom_nav_clearance" />
 </RelativeLayout>
