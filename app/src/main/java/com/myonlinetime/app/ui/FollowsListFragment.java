@@ -7,7 +7,6 @@ import android.view.ViewGroup;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -25,7 +24,7 @@ import java.util.List;
 public class FollowsListFragment extends Fragment {
 
     private String targetUid;
-    private String listType; // "followers" или "following"
+    private String listType; 
     private UserListAdapter adapter;
     private TextView statusText;
     private ProgressBar loadingSpinner;
@@ -43,8 +42,8 @@ public class FollowsListFragment extends Fragment {
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.layout_follows_list, container, false);
         
-        targetUid = getArguments().getString("UID");
-        listType = getArguments().getString("TYPE");
+        targetUid = getArguments() != null ? getArguments().getString("UID") : "";
+        listType = getArguments() != null ? getArguments().getString("TYPE") : "";
 
         RecyclerView recyclerView = view.findViewById(R.id.follows_results_list);
         statusText = view.findViewById(R.id.follows_status_text);
@@ -56,10 +55,8 @@ public class FollowsListFragment extends Fragment {
         GoogleSignInAccount acct = activity != null ? GoogleSignIn.getLastSignedInAccount(activity) : null;
         final String myUid = acct != null ? acct.getId() : "";
 
-        // ИСПРАВЛЕНИЕ: Передаем слушатель кликов, чтобы компилятор не ругался
         adapter = new UserListAdapter(activity, clickedUser -> {
             if (activity != null && activity.navigator != null) {
-                // Защита от открытия своего профиля
                 if (clickedUser.uid != null && clickedUser.uid.equals(myUid)) {
                     activity.navigator.switchScreen(4, myUid);
                 } else {
@@ -80,9 +77,34 @@ public class FollowsListFragment extends Fragment {
         
         recyclerView.setAdapter(adapter);
 
+        updateHeader(); // Принудительно ставим шапку при открытии
         loadData();
 
         return view;
+    }
+
+    // === ИСПРАВЛЕНИЕ: Так как мы больше не используем родительский FollowsFragment,
+    // этот список обязан сам ставить себе шапку!
+    private void updateHeader() {
+        MainActivity activity = (MainActivity) getActivity();
+        if (activity != null) {
+            activity.mainHeader.setVisibility(View.VISIBLE);
+            String title = listType.equals("followers") ? 
+                    getString(R.string.followers) : getString(R.string.following);
+            activity.headerManager.showBackButton(title, v -> activity.onBackPressed());
+        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (!isHidden()) updateHeader();
+    }
+
+    @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        if (!hidden) updateHeader();
     }
 
     private void loadData() {
@@ -92,34 +114,24 @@ public class FollowsListFragment extends Fragment {
         statusText.setVisibility(View.GONE);
         if (loadingSpinner != null) loadingSpinner.setVisibility(View.VISIBLE);
 
-        GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
-        if (acct != null) {
-            // Быстрое использование токена, если он уже есть в памяти (ускоряет загрузку)
-            if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
-                fetchList(activity.vpsToken);
-            } else {
+        if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
+            fetchList(activity, activity.vpsToken);
+        } else {
+            GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
+            if (acct != null) {
                 VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
                     @Override
                     public void onSuccess(String token) {
                         activity.vpsToken = token;
-                        fetchList(token);
+                        fetchList(activity, token);
                     }
-                    @Override public void onError(String error) {
-                        if (!isAdded()) return;
-                        if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-                        statusText.setVisibility(View.VISIBLE);
-                        statusText.setText(getString(R.string.err_loading));
-                    }
+                    @Override public void onError(String error) { showError(); }
                 });
-            }
-        } else {
-            if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-            statusText.setVisibility(View.VISIBLE);
-            statusText.setText(getString(R.string.err_loading));
+            } else { showError(); }
         }
     }
 
-    private void fetchList(String token) {
+    private void fetchList(MainActivity activity, String token) {
         VpsApi.getList(token, targetUid, listType, new VpsApi.SearchCallback() {
             @Override public void onFound(List<User> users) {
                 if (!isAdded()) return;
@@ -135,5 +147,10 @@ public class FollowsListFragment extends Fragment {
         });
     }
 
-    // МЕТОД onResume И hideBgRunnable УДАЛЕНЫ ПОЛНОСТЬЮ — ФОНОМ УПРАВЛЯЕТ FollowsFragment!
-            }
+    private void showError() {
+        if (!isAdded()) return;
+        if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+        statusText.setVisibility(View.VISIBLE);
+        statusText.setText(getString(R.string.err_loading));
+    }
+                    }
