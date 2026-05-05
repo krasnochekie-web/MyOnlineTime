@@ -106,7 +106,8 @@ public class VpsApi {
         enqueueCall(request, callback);
     }
 
-    public static void saveUserProfile(String ourServerToken, String nickname, String about, File photoFile, File bgFile, final Callback callback) {
+    // === ИСПРАВЛЕНИЕ: Добавлен параметр long ticket ===
+    public static void saveUserProfile(String ourServerToken, String nickname, String about, File photoFile, File bgFile, long ticket, final Callback callback) {
         // === ЖЕСТКИЙ ОБРЫВ ПРЕДЫДУЩИХ ЗАГРУЗОК ===
         // Если юзер быстро выбрал другой фон, убиваем старый запрос на корню
         for (Call call : client.dispatcher().queuedCalls()) {
@@ -120,6 +121,9 @@ public class VpsApi {
 
         if (nickname != null) builder.addFormDataPart("nickname", nickname);
         if (about != null) builder.addFormDataPart("about", about);
+        
+        // === ПЕРЕДАЕМ БИЛЕТ НА СЕРВЕР ===
+        builder.addFormDataPart("ticket", String.valueOf(ticket));
 
         if (photoFile != null && photoFile.exists()) {
             builder.addFormDataPart("photo", photoFile.getName(),
