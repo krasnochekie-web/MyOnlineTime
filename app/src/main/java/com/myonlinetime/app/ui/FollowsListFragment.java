@@ -24,7 +24,7 @@ import java.util.List;
 public class FollowsListFragment extends Fragment {
 
     private String targetUid;
-    private String listType; 
+    private String listType; // "followers" или "following"
     private UserListAdapter adapter;
     private TextView statusText;
     private ProgressBar loadingSpinner;
@@ -42,8 +42,8 @@ public class FollowsListFragment extends Fragment {
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.layout_follows_list, container, false);
         
-        targetUid = getArguments() != null ? getArguments().getString("UID") : "";
-        listType = getArguments() != null ? getArguments().getString("TYPE") : "";
+        targetUid = getArguments().getString("UID");
+        listType = getArguments().getString("TYPE");
 
         RecyclerView recyclerView = view.findViewById(R.id.follows_results_list);
         statusText = view.findViewById(R.id.follows_status_text);
@@ -62,8 +62,6 @@ public class FollowsListFragment extends Fragment {
                 } else {
                     String currentTitle = listType.equals("followers") ? 
                             getString(R.string.followers) : getString(R.string.following);
-                            
-                    // === ПЕРЕДАЕМ БАЗОВУЮ ИНФУ ИЗ КАРТОЧКИ ДЛЯ МГНОВЕННОГО ОТОБРАЖЕНИЯ ===
                     activity.navigator.openSubScreen(OtherProfileFragment.newInstance(
                             clickedUser.uid, 
                             currentTitle,
@@ -76,7 +74,7 @@ public class FollowsListFragment extends Fragment {
         });
         
         recyclerView.setAdapter(adapter);
-        
+
         loadData();
 
         return view;
@@ -85,19 +83,20 @@ public class FollowsListFragment extends Fragment {
     private void loadData() {
         final MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
-        
+
         statusText.setVisibility(View.GONE);
         if (loadingSpinner != null) loadingSpinner.setVisibility(View.VISIBLE);
 
         if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
-            fetchList(activity, activity.vpsToken);
+            fetchList(activity.vpsToken);
         } else {
             GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
             if (acct != null) {
                 VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
-                    @Override public void onSuccess(String token) { 
-                        activity.vpsToken = token; 
-                        fetchList(activity, token); 
+                    @Override
+                    public void onSuccess(String token) {
+                        activity.vpsToken = token;
+                        fetchList(token);
                     }
                     @Override public void onError(String error) { showError(); }
                 });
@@ -105,7 +104,7 @@ public class FollowsListFragment extends Fragment {
         }
     }
 
-    private void fetchList(MainActivity activity, String token) {
+    private void fetchList(String token) {
         VpsApi.getList(token, targetUid, listType, new VpsApi.SearchCallback() {
             @Override public void onFound(List<User> users) {
                 if (!isAdded()) return;
@@ -127,4 +126,6 @@ public class FollowsListFragment extends Fragment {
         statusText.setVisibility(View.VISIBLE);
         statusText.setText(getString(R.string.err_loading));
     }
+
+    // МЕТОД onResume И hideBgRunnable УДАЛЕНЫ ПОЛНОСТЬЮ — ФОНОМ УПРАВЛЯЕТ FollowsFragment!
 }
