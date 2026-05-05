@@ -185,8 +185,9 @@ public class OtherProfileFragment extends Fragment {
             StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
         });
 
-        followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "followers")));
-        followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "following")));
+        // === ИСПРАВЛЕНИЕ НАВИГАЦИИ: ОТКРЫВАЕМ РОДИТЕЛЬСКИЙ ФРАГМЕНТ С ВКЛАДКАМИ ===
+        followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(targetUid, true)));
+        followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(targetUid, false)));
 
         btnFollow.setOnTouchListener((v, event) -> {
             if (event.getAction() == android.view.MotionEvent.ACTION_DOWN) {
@@ -222,7 +223,7 @@ public class OtherProfileFragment extends Fragment {
              }
         });
 
-        // === 3. ФОНОВЫЙ ЗАПРОС ДЛЯ ПОЛУЧЕНИЯ САМЫХ СВЕЖИХ ДАННЫХ (Без моргания UI) ===
+        // === 3. ФОНОВЫЙ ЗАПРОС ДЛЯ ПОЛУЧЕНИЯ САМЫХ СВЕЖИХ ДАННЫХ ===
         if (activity.vpsToken != null) {
             VpsApi.getUser(activity, activity.vpsToken, targetUid, new VpsApi.UserCallback() {
                 @Override
