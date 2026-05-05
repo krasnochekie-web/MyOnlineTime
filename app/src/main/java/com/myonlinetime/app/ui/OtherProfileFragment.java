@@ -39,6 +39,10 @@ public class OtherProfileFragment extends Fragment {
     private String targetUid = "";
     private String backTitle = "";
 
+    // === ПЕРЕМЕННЫЕ ДЛЯ ЗАПОМИНАНИЯ КАСАНИЯ (Идеальный Ripple) ===
+    private float lastTouchX = 0;
+    private float lastTouchY = 0;
+
     private static class AppUiData {
         String pkgName;
         String appName;
@@ -120,6 +124,15 @@ public class OtherProfileFragment extends Fragment {
 
         followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "followers")));
         followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsListFragment.newInstance(targetUid, "following")));
+
+        // === ПЕРЕХВАТ КООРДИНАТ КАСАНИЯ ===
+        btnFollow.setOnTouchListener((v, event) -> {
+            if (event.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+                lastTouchX = event.getX();
+                lastTouchY = event.getY();
+            }
+            return false; // Возвращаем false, чтобы сработал onClickListener
+        });
 
         if (activity.vpsToken != null) {
             VpsApi.getUser(activity, activity.vpsToken, targetUid, new VpsApi.UserCallback() {
@@ -205,7 +218,6 @@ public class OtherProfileFragment extends Fragment {
             Glide.with(activity).load(R.drawable.bg_edit_circle).circleCrop().into(avatarView);
             return;
         }
-        // ПРОСТО ГРУЗИМ ССЫЛКУ! НИКАКОГО BASE64!
         Glide.with(activity).load(photoUrl).circleCrop().error(R.drawable.bg_edit_circle).into(avatarView);
     }
 
@@ -394,25 +406,43 @@ public class OtherProfileFragment extends Fragment {
         });
     }
 
+    // === ИНЪЕКЦИЯ КООРДИНАТ ДЛЯ ИДЕАЛЬНОЙ ВОЛНЫ ===
     private void updateFollowButton(android.widget.Button btnFollow, boolean isFollowing) {
+        Context ctx = btnFollow.getContext();
         if (isFollowing) {
-            btnFollow.setText(btnFollow.getContext().getString(R.string.btn_unfollow));
-            btnFollow.setBackgroundResource(R.drawable.bg_button_gray);
+            btnFollow.setText(ctx.getString(R.string.btn_unfollow));
+            btnFollow.setTextColor(androidx.core.content.ContextCompat.getColor(ctx, R.color.textGrayDynamic));
+
+            android.graphics.drawable.Drawable bg = androidx.core.content.ContextCompat.getDrawable(ctx, R.drawable.bg_button_gray);
+            if (bg != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                bg.setHotspot(lastTouchX, lastTouchY);
+            }
+            btnFollow.setBackground(bg);
             
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                btnFollow.setForeground(androidx.core.content.ContextCompat.getDrawable(btnFollow.getContext(), R.drawable.ripple_button_gray));
+                android.graphics.drawable.Drawable fg = androidx.core.content.ContextCompat.getDrawable(ctx, R.drawable.ripple_button_gray);
+                if (fg != null) {
+                    fg.setHotspot(lastTouchX, lastTouchY);
+                    btnFollow.setForeground(fg);
+                }
             }
-            
-            btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textGrayDynamic));
         } else {
-            btnFollow.setText(btnFollow.getContext().getString(R.string.btn_follow));
-            btnFollow.setBackgroundResource(R.drawable.bg_button_grapefruit);
+            btnFollow.setText(ctx.getString(R.string.btn_follow));
+            btnFollow.setTextColor(androidx.core.content.ContextCompat.getColor(ctx, R.color.textWhiteStatic));
+
+            android.graphics.drawable.Drawable bg = androidx.core.content.ContextCompat.getDrawable(ctx, R.drawable.bg_button_grapefruit);
+            if (bg != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                bg.setHotspot(lastTouchX, lastTouchY);
+            }
+            btnFollow.setBackground(bg);
             
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                btnFollow.setForeground(androidx.core.content.ContextCompat.getDrawable(btnFollow.getContext(), R.drawable.ripple_button_grapefruit));
+                android.graphics.drawable.Drawable fg = androidx.core.content.ContextCompat.getDrawable(ctx, R.drawable.ripple_button_grapefruit);
+                if (fg != null) {
+                    fg.setHotspot(lastTouchX, lastTouchY);
+                    btnFollow.setForeground(fg);
+                }
             }
-            
-            btnFollow.setTextColor(btnFollow.getContext().getResources().getColor(R.color.textWhiteStatic));
         }
     }
 }
