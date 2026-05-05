@@ -24,7 +24,7 @@ import java.util.List;
 public class FollowsListFragment extends Fragment {
 
     private String targetUid;
-    private String listType; 
+    private String listType; // "followers" или "following"
     private UserListAdapter adapter;
     private TextView statusText;
     private ProgressBar loadingSpinner;
@@ -55,6 +55,7 @@ public class FollowsListFragment extends Fragment {
         GoogleSignInAccount acct = activity != null ? GoogleSignIn.getLastSignedInAccount(activity) : null;
         final String myUid = acct != null ? acct.getId() : "";
 
+        // Адаптер со слушателем и передачей 5 параметров
         adapter = new UserListAdapter(activity, clickedUser -> {
             if (activity != null && activity.navigator != null) {
                 if (clickedUser.uid != null && clickedUser.uid.equals(myUid)) {
@@ -63,7 +64,6 @@ public class FollowsListFragment extends Fragment {
                     String currentTitle = listType.equals("followers") ? 
                             getString(R.string.followers) : getString(R.string.following);
                             
-                    // Передача 5 параметров для Telegram-эффекта
                     activity.navigator.openSubScreen(OtherProfileFragment.newInstance(
                             clickedUser.uid, 
                             currentTitle,
@@ -77,34 +77,9 @@ public class FollowsListFragment extends Fragment {
         
         recyclerView.setAdapter(adapter);
 
-        updateHeader(); // Принудительно ставим шапку при открытии
         loadData();
 
         return view;
-    }
-
-    // === ИСПРАВЛЕНИЕ: Так как мы больше не используем родительский FollowsFragment,
-    // этот список обязан сам ставить себе шапку!
-    private void updateHeader() {
-        MainActivity activity = (MainActivity) getActivity();
-        if (activity != null) {
-            activity.mainHeader.setVisibility(View.VISIBLE);
-            String title = listType.equals("followers") ? 
-                    getString(R.string.followers) : getString(R.string.following);
-            activity.headerManager.showBackButton(title, v -> activity.onBackPressed());
-        }
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (!isHidden()) updateHeader();
-    }
-
-    @Override
-    public void onHiddenChanged(boolean hidden) {
-        super.onHiddenChanged(hidden);
-        if (!hidden) updateHeader();
     }
 
     private void loadData() {
@@ -114,24 +89,34 @@ public class FollowsListFragment extends Fragment {
         statusText.setVisibility(View.GONE);
         if (loadingSpinner != null) loadingSpinner.setVisibility(View.VISIBLE);
 
-        if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
-            fetchList(activity, activity.vpsToken);
-        } else {
-            GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
-            if (acct != null) {
+        GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
+        if (acct != null) {
+            // Быстрое использование токена, если он уже есть в памяти
+            if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
+                fetchList(activity.vpsToken);
+            } else {
                 VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
                     @Override
                     public void onSuccess(String token) {
                         activity.vpsToken = token;
-                        fetchList(activity, token);
+                        fetchList(token);
                     }
-                    @Override public void onError(String error) { showError(); }
+                    @Override public void onError(String error) {
+                        if (!isAdded()) return;
+                        if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+                        statusText.setVisibility(View.VISIBLE);
+                        statusText.setText(getString(R.string.err_loading));
+                    }
                 });
-            } else { showError(); }
+            }
+        } else {
+            if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+            statusText.setVisibility(View.VISIBLE);
+            statusText.setText(getString(R.string.err_loading));
         }
     }
 
-    private void fetchList(MainActivity activity, String token) {
+    private void fetchList(String token) {
         VpsApi.getList(token, targetUid, listType, new VpsApi.SearchCallback() {
             @Override public void onFound(List<User> users) {
                 if (!isAdded()) return;
@@ -147,10 +132,6 @@ public class FollowsListFragment extends Fragment {
         });
     }
 
-    private void showError() {
-        if (!isAdded()) return;
-        if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-        statusText.setVisibility(View.VISIBLE);
-        statusText.setText(getString(R.string.err_loading));
-    }
-                    }
+    // НИКАКИХ onResume И updateHeader ЗДЕСЬ БОЛЬШЕ НЕТ. РАБОТАЕМ СТРОГО ВНУТРИ VIEWPAGER2.
+            }
+                                                     
