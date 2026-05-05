@@ -51,14 +51,12 @@ public class FollowsListFragment extends Fragment {
 
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         
-        // Получаем текущий UID, чтобы понимать, где наш профиль
-        MainActivity activity = (MainActivity) getActivity();
+        final MainActivity activity = (MainActivity) getActivity();
         GoogleSignInAccount acct = activity != null ? GoogleSignIn.getLastSignedInAccount(activity) : null;
         final String myUid = acct != null ? acct.getId() : "";
 
         adapter = new UserListAdapter(activity, clickedUser -> {
             if (activity != null && activity.navigator != null) {
-                // Защита от открытия собственного профиля через OtherProfileFragment
                 if (clickedUser.uid != null && clickedUser.uid.equals(myUid)) {
                     activity.navigator.switchScreen(4, myUid);
                 } else {
@@ -71,32 +69,9 @@ public class FollowsListFragment extends Fragment {
         
         recyclerView.setAdapter(adapter);
         
-        updateHeader();
         loadData();
 
         return view;
-    }
-
-    private void updateHeader() {
-        MainActivity activity = (MainActivity) getActivity();
-        if (activity != null) {
-            activity.mainHeader.setVisibility(View.VISIBLE);
-            String title = listType.equals("followers") ? 
-                    getString(R.string.followers) : getString(R.string.following);
-            activity.headerManager.showBackButton(title, v -> activity.onBackPressed());
-        }
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (!isHidden()) updateHeader();
-    }
-
-    @Override
-    public void onHiddenChanged(boolean hidden) {
-        super.onHiddenChanged(hidden);
-        if (!hidden) updateHeader();
     }
 
     private void loadData() {
@@ -144,4 +119,6 @@ public class FollowsListFragment extends Fragment {
         statusText.setVisibility(View.VISIBLE);
         statusText.setText(getString(R.string.err_loading));
     }
+
+    // МЕТОД onResume И hideBgRunnable УДАЛЕНЫ ПОЛНОСТЬЮ — ФОНОМ УПРАВЛЯЕТ FollowsFragment!
 }
