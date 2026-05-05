@@ -5,15 +5,6 @@
     android:background="@color/bgDynamic"
     android:nestedScrollingEnabled="true">
 
-    <!-- Интегрированный спиннер загрузки (никак не сдвигает остальные элементы) -->
-    <ProgressBar
-        android:id="@+id/follows_loading_spinner"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_centerInParent="true"
-        android:indeterminateTint="@color/textDynamic"
-        android:visibility="gone" />
-
     <TextView
         android:id="@+id/follows_status_text"
         android:layout_width="wrap_content"
@@ -23,7 +14,6 @@
         android:textSize="12sp"
         android:visibility="gone" />
 
-    <!-- Отступы сохранены строго как в старом файле (без paddingTop) -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/follows_results_list"
         android:layout_width="match_parent"
