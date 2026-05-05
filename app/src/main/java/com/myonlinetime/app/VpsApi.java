@@ -106,10 +106,7 @@ public class VpsApi {
         enqueueCall(request, callback);
     }
 
-    // === ИСПРАВЛЕНИЕ: Добавлен параметр long ticket ===
     public static void saveUserProfile(String ourServerToken, String nickname, String about, File photoFile, File bgFile, long ticket, final Callback callback) {
-        // === ЖЕСТКИЙ ОБРЫВ ПРЕДЫДУЩИХ ЗАГРУЗОК ===
-        // Если юзер быстро выбрал другой фон, убиваем старый запрос на корню
         for (Call call : client.dispatcher().queuedCalls()) {
             if ("upload_profile_task".equals(call.request().tag())) call.cancel();
         }
@@ -122,7 +119,6 @@ public class VpsApi {
         if (nickname != null) builder.addFormDataPart("nickname", nickname);
         if (about != null) builder.addFormDataPart("about", about);
         
-        // === ПЕРЕДАЕМ БИЛЕТ НА СЕРВЕР ===
         builder.addFormDataPart("ticket", String.valueOf(ticket));
 
         if (photoFile != null && photoFile.exists()) {
@@ -137,7 +133,7 @@ public class VpsApi {
 
         Request request = createAuthedRequest("save_user", ourServerToken)
                 .post(builder.build())
-                .tag("upload_profile_task") // === ВЕШАЕМ ТЕГ ДЛЯ ИДЕНТИФИКАЦИИ ===
+                .tag("upload_profile_task")
                 .build();
                 
         enqueueCall(request, callback);
@@ -152,7 +148,11 @@ public class VpsApi {
     }
 
     public static void getUser(Context context, String ourServerToken, String uid, final UserCallback callback) {
-        HttpUrl url = HttpUrl.parse(BASE_URL + "get_user").newBuilder().addQueryParameter("uid", uid).build();
+        // === АНТИ-КЭШ ПРОБИВ ===
+        HttpUrl url = HttpUrl.parse(BASE_URL + "get_user").newBuilder()
+                .addQueryParameter("uid", uid)
+                .addQueryParameter("t", String.valueOf(System.currentTimeMillis()))
+                .build();
         Request request = createAuthedRequest(url, ourServerToken).build();
         client.newCall(request).enqueue(new okhttp3.Callback() {
             @Override public void onFailure(Call call, IOException e) { 
@@ -175,7 +175,10 @@ public class VpsApi {
     }
 
     public static void searchUsers(String ourServerToken, String query, final SearchCallback callback) {
-        HttpUrl url = HttpUrl.parse(BASE_URL + "search_users").newBuilder().addQueryParameter("q", query).build();
+        HttpUrl url = HttpUrl.parse(BASE_URL + "search_users").newBuilder()
+                .addQueryParameter("q", query)
+                .addQueryParameter("t", String.valueOf(System.currentTimeMillis()))
+                .build();
         Request request = createAuthedRequest(url, ourServerToken).build();
         client.newCall(request).enqueue(new okhttp3.Callback() {
             @Override public void onFailure(Call call, IOException e) { 
@@ -240,7 +243,10 @@ public class VpsApi {
     }
 
     public static void getCounts(String ourServerToken, String uid, final Callback callback) {
-        HttpUrl url = HttpUrl.parse(BASE_URL + "get_counts").newBuilder().addQueryParameter("uid", uid).build();
+        HttpUrl url = HttpUrl.parse(BASE_URL + "get_counts").newBuilder()
+                .addQueryParameter("uid", uid)
+                .addQueryParameter("t", String.valueOf(System.currentTimeMillis()))
+                .build();
         Request request = createAuthedRequest(url, ourServerToken).build();
         enqueueCall(request, callback);
     }
@@ -249,6 +255,7 @@ public class VpsApi {
         HttpUrl url = HttpUrl.parse(BASE_URL + "get_list").newBuilder()
                 .addQueryParameter("uid", uid)
                 .addQueryParameter("type", type)
+                .addQueryParameter("t", String.valueOf(System.currentTimeMillis()))
                 .build();
         Request request = createAuthedRequest(url, ourServerToken).build();
         client.newCall(request).enqueue(new okhttp3.Callback() {
@@ -303,7 +310,6 @@ public class VpsApi {
     private static void enqueueCall(Request request, final Callback callback) {
         client.newCall(request).enqueue(new okhttp3.Callback() {
             @Override public void onFailure(Call call, IOException e) { 
-                // === ТИХАЯ СМЕРТЬ ОТМЕНЕННОГО ЗАПРОСА ===
                 if (call.isCanceled()) return; 
                 postError(callback, e.getMessage()); 
             }
