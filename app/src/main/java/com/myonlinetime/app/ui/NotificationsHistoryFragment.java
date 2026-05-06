@@ -1,13 +1,14 @@
 package com.myonlinetime.app.ui;
 
-import android.content.Context;
-import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -17,6 +18,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
+import com.myonlinetime.app.VpsApi;
 import com.myonlinetime.app.models.NotificationModels;
 
 import org.json.JSONArray;
@@ -27,19 +29,11 @@ import java.util.List;
 
 public class NotificationsHistoryFragment extends Fragment {
 
-    private static final String PREFS_NAME = "AppPrefs";
-    private static final String KEY_HISTORY = "notif_history_array";
-    
     private Runnable hideBgRunnable;
     private RecyclerView recycler;
     private TextView emptyText;
     private NotificationsAdapter adapter;
-
-    private final SharedPreferences.OnSharedPreferenceChangeListener prefsListener = (prefs, key) -> {
-        if (KEY_HISTORY.equals(key) && isAdded()) {
-            loadHistory(); 
-        }
-    };
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
     @Nullable
     @Override
@@ -58,76 +52,92 @@ public class NotificationsHistoryFragment extends Fragment {
     }
 
     private void loadHistory() {
-        SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        String historyJson = prefs.getString(KEY_HISTORY, "[]");
-        
-        List<NotificationModels.NotificationItem> items = new ArrayList<>();
-        try {
-            JSONArray array = new JSONArray(historyJson);
-            for (int i = array.length() - 1; i >= 0; i--) {
-                JSONObject obj = array.getJSONObject(i);
-                String type = obj.optString("type", "time"); 
-                
-                if ("time".equals(type)) {
-                    items.add(new NotificationModels.TimeNotification(
-                            obj.optString("mainText"),
-                            obj.optString("actionText"),
-                            obj.optLong("timestamp")
-                    ));
-                } else if ("follower".equals(type)) {
-                    items.add(new NotificationModels.FollowerNotification(
-                            obj.optLong("timestamp"),
-                            obj.optString("uid"),
-                            obj.optString("nickname"),
-                            obj.optString("photo"),
-                            obj.optBoolean("isFollowing", false)
-                    ));
-                }
-            }
-        } catch (Exception e) { e.printStackTrace(); }
-
-        if (items.isEmpty()) {
-            recycler.setVisibility(View.GONE);
-            emptyText.setVisibility(View.VISIBLE);
-        } else {
-            recycler.setVisibility(View.VISIBLE);
-            emptyText.setVisibility(View.GONE);
-            
-            if (adapter == null) {
-                adapter = new NotificationsAdapter(items, (MainActivity) getActivity());
-                recycler.setAdapter(adapter);
-            } else {
-                adapter.updateItems(items);
-            }
-            markAllAsRead();
+        MainActivity activity = (MainActivity) getActivity();
+        if (activity == null || activity.vpsToken == null) {
+            showEmptyState();
+            return;
         }
+
+        VpsApi.getNotificationsHistory(activity.vpsToken, new VpsApi.Callback() {
+            @Override
+            public void onSuccess(String result) {
+                uiHandler.post(() -> {
+                    if (!isAdded()) return;
+                    try {
+                        JSONArray array = new JSONArray(result);
+                        List<NotificationModels.NotificationItem> items = new ArrayList<>();
+                        boolean hasUnread = false;
+
+                        for (int i = 0; i < array.length(); i++) {
+                            JSONObject obj = array.getJSONObject(i);
+                            String type = obj.optString("type", "time");
+                            
+                            if (!obj.optBoolean("isRead", false)) hasUnread = true;
+
+                            if ("time".equals(type)) {
+                                items.add(new NotificationModels.TimeNotification(
+                                        obj.optString("mainText"),
+                                        obj.optString("actionText"),
+                                        obj.optLong("timestamp")
+                                ));
+                            } else if ("follower".equals(type)) {
+                                items.add(new NotificationModels.FollowerNotification(
+                                        obj.optLong("timestamp"),
+                                        obj.optString("uid"),
+                                        obj.optString("nickname"),
+                                        obj.optString("photo"),
+                                        obj.optBoolean("isFollowing", false)
+                                ));
+                            }
+                        }
+
+                        if (items.isEmpty()) {
+                            showEmptyState();
+                        } else {
+                            recycler.setVisibility(View.VISIBLE);
+                            emptyText.setVisibility(View.GONE);
+                            
+                            if (adapter == null) {
+                                adapter = new NotificationsAdapter(items, activity);
+                                recycler.setAdapter(adapter);
+                            } else {
+                                adapter.updateItems(items);
+                            }
+                            
+                            if (hasUnread) markAllAsRead(activity);
+                        }
+                    } catch (Exception e) {
+                        showEmptyState();
+                    }
+                });
+            }
+
+            @Override
+            public void onError(String error) {
+                uiHandler.post(() -> {
+                    if (isAdded()) {
+                        showEmptyState();
+                        Toast.makeText(getContext(), getString(R.string.err_server) + error, Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        });
     }
 
-    private void markAllAsRead() {
-        SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        String historyJson = prefs.getString(KEY_HISTORY, "[]");
-        try {
-            JSONArray array = new JSONArray(historyJson);
-            if (array.length() == 0) return;
+    private void showEmptyState() {
+        recycler.setVisibility(View.GONE);
+        emptyText.setVisibility(View.VISIBLE);
+    }
 
-            boolean changed = false;
-            for (int i = 0; i < array.length(); i++) {
-                JSONObject obj = array.getJSONObject(i);
-                if (!obj.optBoolean("isRead", false)) {
-                    obj.put("isRead", true);
-                    changed = true;
-                }
+    private void markAllAsRead(MainActivity activity) {
+        VpsApi.markNotificationsRead(activity.vpsToken, new VpsApi.Callback() {
+            @Override public void onSuccess(String result) {
+                uiHandler.post(() -> {
+                    if (isAdded()) activity.updateNotificationBadge();
+                });
             }
-            if (changed) {
-                prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
-                prefs.edit().putString(KEY_HISTORY, array.toString()).apply();
-                prefs.registerOnSharedPreferenceChangeListener(prefsListener);
-                
-                if (getActivity() instanceof MainActivity) {
-                    ((MainActivity) getActivity()).updateNotificationBadge();
-                }
-            }
-        } catch (Exception e) {}
+            @Override public void onError(String error) {}
+        });
     }
 
     private void setupHeader() {
@@ -161,6 +171,7 @@ public class NotificationsHistoryFragment extends Fragment {
 
         if (!hidden) {
             setupHeader(); 
+            loadHistory(); // Обновляем историю при каждом возврате на экран
             if (hideBgRunnable == null) {
                 hideBgRunnable = () -> {
                     if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
@@ -176,9 +187,6 @@ public class NotificationsHistoryFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .registerOnSharedPreferenceChangeListener(prefsListener);
-
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
             if (hideBgRunnable == null) {
@@ -189,12 +197,5 @@ public class NotificationsHistoryFragment extends Fragment {
             if (getView() != null) getView().postDelayed(hideBgRunnable, 300);
             else activity.updateGlobalBackground(false);
         }
-    }
-
-    @Override
-    public void onPause() {
-        super.onPause();
-        requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .unregisterOnSharedPreferenceChangeListener(prefsListener);
     }
 }
