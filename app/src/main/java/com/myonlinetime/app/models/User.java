@@ -42,4 +42,8 @@ public class User {
     @SerializedName("appDescriptions")
     public Map<String, String> appDescriptions;
 
+    // === P2P МАГИЯ ИМЕН: Глобальный словарь для этого пользователя ===
+    @SerializedName("resolvedNames")
+    public Map<String, String> resolvedNames;
+
 }
