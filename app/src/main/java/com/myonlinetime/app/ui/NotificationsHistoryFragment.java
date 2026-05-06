@@ -1,5 +1,7 @@
 package com.myonlinetime.app.ui;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -29,6 +31,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class NotificationsHistoryFragment extends Fragment {
+
+    private static final String PREFS_NAME = "AppPrefs";
+    private static final String KEY_HISTORY = "notif_history_array";
 
     private Runnable hideBgRunnable;
     private RecyclerView recycler;
@@ -62,72 +67,48 @@ public class NotificationsHistoryFragment extends Fragment {
             return;
         }
 
-        // Показываем крутилку перед запросом
-        loadingSpinner.setVisibility(View.VISIBLE);
-        recycler.setVisibility(View.GONE);
-        emptyText.setVisibility(View.GONE);
+        SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        
+        // === 1. МГНОВЕННО ГРУЗИМ КЭШ (Если интернета не будет, останется это) ===
+        String cachedJson = prefs.getString(KEY_HISTORY, "[]");
+        boolean hasCache = !cachedJson.equals("[]");
+        
+        if (hasCache) {
+            parseAndDisplay(cachedJson, false, activity);
+        } else {
+            recycler.setVisibility(View.GONE);
+            emptyText.setVisibility(View.GONE);
+        }
 
+        // Показываем крутилочку (даже если кэш есть, показываем, что ищем свежие данные)
+        loadingSpinner.setVisibility(View.VISIBLE);
+
+        // === 2. ИДЕМ НА СЕРВЕР ЗА СВЕЖИМИ ДАННЫМИ ===
         VpsApi.getNotificationsHistory(activity.vpsToken, new VpsApi.Callback() {
             @Override
             public void onSuccess(String result) {
                 uiHandler.post(() -> {
                     if (!isAdded()) return;
-                    loadingSpinner.setVisibility(View.GONE); // Прячем крутилку
+                    loadingSpinner.setVisibility(View.GONE);
                     
-                    try {
-                        JSONArray array = new JSONArray(result);
-                        List<NotificationModels.NotificationItem> items = new ArrayList<>();
-                        boolean hasUnread = false;
-
-                        for (int i = 0; i < array.length(); i++) {
-                            JSONObject obj = array.getJSONObject(i);
-                            String type = obj.optString("type", "time");
-                            
-                            if (!obj.optBoolean("isRead", false)) hasUnread = true;
-
-                            if ("time".equals(type)) {
-                                items.add(new NotificationModels.TimeNotification(
-                                        obj.optString("mainText"),
-                                        obj.optString("actionText"),
-                                        obj.optLong("timestamp")
-                                ));
-                            } else if ("follower".equals(type)) {
-                                items.add(new NotificationModels.FollowerNotification(
-                                        obj.optLong("timestamp"),
-                                        obj.optString("uid"),
-                                        obj.optString("nickname"),
-                                        obj.optString("photo"),
-                                        obj.optBoolean("isFollowing", false)
-                                ));
-                            }
-                        }
-
-                        if (items.isEmpty()) {
-                            showEmptyState();
-                        } else {
-                            recycler.setVisibility(View.VISIBLE);
-                            emptyText.setVisibility(View.GONE);
-                            
-                            if (adapter == null) {
-                                adapter = new NotificationsAdapter(items, activity);
-                                recycler.setAdapter(adapter);
-                            } else {
-                                adapter.updateItems(items);
-                            }
-                            
-                            if (hasUnread) markAllAsRead(activity);
-                        }
-                    } catch (Exception e) {
-                        showEmptyState();
-                    }
+                    // Сохраняем свежие данные в кэш для будущих запусков без интернета
+                    prefs.edit().putString(KEY_HISTORY, result).apply();
+                    
+                    parseAndDisplay(result, true, activity);
                 });
             }
 
             @Override
             public void onError(String error) {
                 uiHandler.post(() -> {
-                    if (isAdded()) {
-                        loadingSpinner.setVisibility(View.GONE); // Прячем крутилку при ошибке
+                    if (!isAdded()) return;
+                    loadingSpinner.setVisibility(View.GONE);
+                    
+                    if (hasCache) {
+                        // Если кэш есть, просто тихо говорим, что мы в офлайне без хардкора!
+                        Toast.makeText(getContext(), getString(R.string.err_server) + " " + getString(R.string.notif_offline_mode), Toast.LENGTH_SHORT).show();
+                    } else {
+                        // Если и кэша нет, и сервера нет — показываем пустой экран
                         showEmptyState();
                         Toast.makeText(getContext(), getString(R.string.err_server) + error, Toast.LENGTH_SHORT).show();
                     }
@@ -136,17 +117,80 @@ public class NotificationsHistoryFragment extends Fragment {
         });
     }
 
+    private void parseAndDisplay(String jsonResult, boolean isFromServer, MainActivity activity) {
+        try {
+            JSONArray array = new JSONArray(jsonResult);
+            List<NotificationModels.NotificationItem> items = new ArrayList<>();
+            boolean hasUnread = false;
+
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject obj = array.getJSONObject(i);
+                String type = obj.optString("type", "time");
+                
+                if (!obj.optBoolean("isRead", false)) hasUnread = true;
+
+                if ("time".equals(type)) {
+                    items.add(new NotificationModels.TimeNotification(
+                            obj.optString("mainText"),
+                            obj.optString("actionText"),
+                            obj.optLong("timestamp")
+                    ));
+                } else if ("follower".equals(type)) {
+                    items.add(new NotificationModels.FollowerNotification(
+                            obj.optLong("timestamp"),
+                            obj.optString("uid"),
+                            obj.optString("nickname"),
+                            obj.optString("photo"),
+                            obj.optBoolean("isFollowing", false)
+                    ));
+                }
+            }
+
+            if (items.isEmpty()) {
+                showEmptyState();
+            } else {
+                recycler.setVisibility(View.VISIBLE);
+                emptyText.setVisibility(View.GONE);
+                
+                if (adapter == null) {
+                    adapter = new NotificationsAdapter(items, activity);
+                    recycler.setAdapter(adapter);
+                } else {
+                    adapter.updateItems(items);
+                }
+                
+                // Если данные пришли с сервера и есть непрочитанные - помечаем прочитанными
+                if (isFromServer && hasUnread) {
+                    markAllAsRead(activity, array);
+                }
+            }
+        } catch (Exception e) {
+            if (!isFromServer) showEmptyState(); 
+        }
+    }
+
     private void showEmptyState() {
         loadingSpinner.setVisibility(View.GONE);
         recycler.setVisibility(View.GONE);
         emptyText.setVisibility(View.VISIBLE);
     }
 
-    private void markAllAsRead(MainActivity activity) {
+    private void markAllAsRead(MainActivity activity, JSONArray array) {
         VpsApi.markNotificationsRead(activity.vpsToken, new VpsApi.Callback() {
             @Override public void onSuccess(String result) {
                 uiHandler.post(() -> {
-                    if (isAdded()) activity.updateNotificationBadge();
+                    if (!isAdded()) return;
+                    
+                    // Обновляем локальный кэш, чтобы красные точки исчезли и в офлайне
+                    try {
+                        for (int i = 0; i < array.length(); i++) {
+                            array.getJSONObject(i).put("isRead", true);
+                        }
+                        SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                        prefs.edit().putString(KEY_HISTORY, array.toString()).apply();
+                    } catch (Exception ignored) {}
+
+                    activity.updateNotificationBadge();
                 });
             }
             @Override public void onError(String error) {}
@@ -184,7 +228,7 @@ public class NotificationsHistoryFragment extends Fragment {
 
         if (!hidden) {
             setupHeader(); 
-            loadHistory(); // Обновляем историю при каждом возврате на экран
+            loadHistory(); 
             if (hideBgRunnable == null) {
                 hideBgRunnable = () -> {
                     if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
