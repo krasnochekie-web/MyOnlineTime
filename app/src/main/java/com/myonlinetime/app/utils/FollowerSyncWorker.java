@@ -38,10 +38,8 @@ public class FollowerSyncWorker extends Worker {
         final CountDownLatch latch = new CountDownLatch(1);
         final boolean[] success = {false};
 
-        // 1. Авторизуемся в фоне
         VpsApi.authenticateWithGoogle(ctx, account.getIdToken(), new VpsApi.LoginCallback() {
             @Override public void onSuccess(String token) {
-                // 2. Достаем историю
                 VpsApi.getNotificationsHistory(token, new VpsApi.Callback() {
                     @Override public void onSuccess(String result) {
                         try {
@@ -51,7 +49,6 @@ public class FollowerSyncWorker extends Worker {
                             JSONArray newArray = new JSONArray(result);
                             JSONArray oldArray = new JSONArray(oldCache);
                             
-                            // Сравниваем, появились ли новые
                             int newCount = 0;
                             for (int i = 0; i < newArray.length(); i++) {
                                 JSONObject item = newArray.getJSONObject(i);
@@ -63,10 +60,8 @@ public class FollowerSyncWorker extends Worker {
                                 }
                             }
                             
-                            // Обновляем локальный кэш, чтобы бейдж загорелся
                             if (newCount > 0) {
                                 prefs.edit().putString("notif_history_array", result).apply();
-                                // Отправляем сигнал MainActivity обновить колокольчик
                                 ctx.sendBroadcast(new Intent("UPDATE_BADGE_BROADCAST"));
                             }
                         } catch (Exception e) {}
@@ -94,20 +89,27 @@ public class FollowerSyncWorker extends Worker {
     private void sendPush(Context context, String nickname) {
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel ch = new NotificationChannel("followers_ch", "Подписчики", NotificationManager.IMPORTANCE_DEFAULT);
+            NotificationChannel ch = new NotificationChannel(
+                    "followers_ch", 
+                    context.getString(R.string.notif_channel_followers_name), 
+                    NotificationManager.IMPORTANCE_DEFAULT
+            );
             nm.createNotificationChannel(ch);
         }
 
         Intent intent = new Intent(context, MainActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        intent.putExtra("open_tab", "notifications"); // Откроем сразу уведомления
+        intent.putExtra("open_tab", "notifications");
 
         PendingIntent pi = PendingIntent.getActivity(context, 0, intent, Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT);
 
+        String safeNickname = (nickname != null && !nickname.isEmpty()) ? nickname : context.getString(R.string.notif_someone);
+        String pushText = context.getString(R.string.notif_subscribed_to_you, safeNickname);
+
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, "followers_ch")
                 .setSmallIcon(R.drawable.ic_nav_profile)
-                .setContentTitle(context.getString(R.string.new_follower_title))
-                .setContentText((nickname != null ? nickname : "Кто-то") + " подписался на вас!")
+                .setContentTitle(context.getString(R.string.notif_channel_followers_name))
+                .setContentText(pushText)
                 .setColor(ContextCompat.getColor(context, R.color.burgundyRed))
                 .setContentIntent(pi)
                 .setAutoCancel(true);
