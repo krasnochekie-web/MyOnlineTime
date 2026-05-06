@@ -57,7 +57,7 @@ public class ProfileFragment extends Fragment {
     private ImageView myBgImageView; 
     private String myUid = "";
 
-    // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ ЗАЩИТЫ ОТ "ВЕЧНЫХ НУЛЕЙ" ===
+    // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ МГНОВЕННОГО ОБНОВЛЕНИЯ ===
     private TextView txtFollowersCount;
     private TextView txtFollowingCount;
 
@@ -144,30 +144,23 @@ public class ProfileFragment extends Fragment {
         btnFollow.setVisibility(View.GONE);
         btnEdit.setVisibility(View.VISIBLE);
 
+        // Я ВЕРНУЛ ЭТО В ОРИГИНАЛЬНОЕ СОСТОЯНИЕ (Теперь приложения снова загружаются!)
         loadMyStatsRunnable = () -> {
             if (isAdded() && appsContainerLocal != null && weekTimeText != null) {
                 StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
-                // Убираем тонкую полоску для своего профиля после генерации
-                if (appsContainerLocal.getChildCount() == 0) {
-                    appsContainerLocal.setVisibility(View.GONE);
-                    btnExpand.setVisibility(View.GONE);
-                    btnCollapse.setVisibility(View.GONE);
-                } else {
-                    appsContainerLocal.setVisibility(View.VISIBLE);
-                }
             }
         };
 
         btnExpand.setOnClickListener(v -> {
             btnExpand.setVisibility(View.GONE);
             btnCollapse.setVisibility(View.VISIBLE);
-            applyCollapseSafely(originalView.findViewById(R.id.profile_about), appsContainerLocal, btnExpand, btnCollapse);
+            StatsHelper.applyCollapseLogic(originalView.findViewById(R.id.profile_about), appsContainerLocal, btnExpand, btnCollapse);
         });
 
         btnCollapse.setOnClickListener(v -> {
             btnCollapse.setVisibility(View.GONE);
             btnExpand.setVisibility(View.VISIBLE);
-            applyCollapseSafely(originalView.findViewById(R.id.profile_about), appsContainerLocal, btnExpand, btnCollapse);
+            StatsHelper.applyCollapseLogic(originalView.findViewById(R.id.profile_about), appsContainerLocal, btnExpand, btnCollapse);
         });
 
         followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(myUid, true)));
@@ -253,20 +246,9 @@ public class ProfileFragment extends Fragment {
 
         updateUiFromPrefs(activity);
         
-        if (activity.vpsToken != null) fetchProfileDataRunnable.run();
         refreshCounts(activity);
 
         return wrapper; 
-    }
-
-    // === БРОНЕБОЙНАЯ ОБОЛОЧКА ===
-    private void applyCollapseSafely(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
-        StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
-        if (container != null && container.getChildCount() == 0) {
-            container.setVisibility(View.GONE);
-            if (btnExpand != null) btnExpand.setVisibility(View.GONE);
-            if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
-        }
     }
 
     private void updateUiFromPrefs(MainActivity activity) {
@@ -279,7 +261,7 @@ public class ProfileFragment extends Fragment {
 
         nameView.setText(activity.prefs.getString("my_nickname", "..."));
         aboutView.setText(activity.prefs.getString("my_about", ""));
-        applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+        StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
         String b64 = activity.prefs.getString("my_photo_base64", null);
         handleMediaLoading(activity, b64, true, myUid);
@@ -310,9 +292,28 @@ public class ProfileFragment extends Fragment {
         }
     }
 
+    // === ИСПРАВЛЕНИЕ "ВЕЧНЫХ НУЛЕЙ": Запрашиваем токен, если его нет! ===
     private void refreshCounts(MainActivity activity) {
-        if (activity.vpsToken == null) return;
-        VpsApi.getCounts(activity.vpsToken, myUid, new VpsApi.Callback() {
+        if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
+            executeCountsApi(activity, activity.vpsToken);
+            if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
+        } else {
+            GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
+            if (acct != null) {
+                VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
+                    @Override public void onSuccess(String token) {
+                        activity.vpsToken = token;
+                        executeCountsApi(activity, token);
+                        if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
+                    }
+                    @Override public void onError(String e) {}
+                });
+            }
+        }
+    }
+
+    private void executeCountsApi(MainActivity activity, String token) {
+        VpsApi.getCounts(token, myUid, new VpsApi.Callback() {
             @Override public void onSuccess(String result) {
                 uiHandler.post(() -> {
                     if (!isAdded()) return; 
@@ -405,7 +406,6 @@ public class ProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!isHidden()) {
                 updateUiFromPrefs(activity);
-                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
             }
         }
@@ -433,7 +433,6 @@ public class ProfileFragment extends Fragment {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.headerManager.resetHeader();
                 updateUiFromPrefs(activity);
-                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
             }
         }
