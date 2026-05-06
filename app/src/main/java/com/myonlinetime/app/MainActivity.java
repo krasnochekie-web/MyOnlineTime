@@ -664,13 +664,20 @@ public class MainActivity extends AppCompatActivity {
         getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(notifListener);
         
+        // === ЛОГИКА ОТОБРАЖЕНИЯ КОЛОКОЛЬЧИКА В ЗАВИСИМОСТИ ОТ РАЗРЕШЕНИЯ ===
+        View headerBellContainer = findViewById(R.id.header_bell_container);
+
         if (permissionOverlay != null) {
             if (hasPermission()) {
                 permissionOverlay.setVisibility(View.GONE);
+                if (headerBellContainer != null) headerBellContainer.setVisibility(View.VISIBLE); // Показываем колокольчик
+                
                 GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
                 if (account != null) StatsHelper.syncUserProfile(this);
             } else {
                 permissionOverlay.setVisibility(View.VISIBLE);
+                if (headerBellContainer != null) headerBellContainer.setVisibility(View.GONE); // Прячем колокольчик
+                
                 permissionOverlay.bringToFront();
                 mainHeader.bringToFront();
             }
@@ -680,8 +687,7 @@ public class MainActivity extends AppCompatActivity {
             adjustHeaderForWindowMode(isInMultiWindowMode());
         }
 
-        // === ВАЖНО: Обновляем токен при каждом возвращении в приложение! ===
-        // Это защита от ошибки "Token used too late", если приложение долго висело в фоне.
+        // Обновляем токен при каждом возвращении в приложение!
         refreshGoogleAndVpsToken(false);
     }
 
