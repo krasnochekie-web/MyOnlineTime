@@ -43,6 +43,7 @@ public class OtherProfileFragment extends Fragment {
     private float lastTouchY = 0;
     
     private long renderGeneration = 0;
+    private long fragmentCreationTime = 0; // Время старта анимации экрана
 
     public static final android.util.LruCache<String, User> prefetchUserCache = new android.util.LruCache<>(15);
     public static final android.util.LruCache<String, String> prefetchCountsCache = new android.util.LruCache<>(15);
@@ -95,6 +96,8 @@ public class OtherProfileFragment extends Fragment {
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        fragmentCreationTime = System.currentTimeMillis(); // Фиксируем старт экрана
+        
         final MainActivity activity = (MainActivity) getActivity();
         
         final View originalView = inflater.inflate(R.layout.layout_profile, container, false);
@@ -131,7 +134,7 @@ public class OtherProfileFragment extends Fragment {
         View followingClick = originalView.findViewById(R.id.container_following);
 
         TextView tabTopApps = originalView.findViewById(R.id.tab_top_apps);
-        if (tabTopApps != null) tabTopApps.setSelected(true); // Заголовок всегда активен
+        if (tabTopApps != null) tabTopApps.setSelected(true); 
         
         final ImageView btnExpand = originalView.findViewById(R.id.btn_expand_apps);
         final ImageView btnCollapse = originalView.findViewById(R.id.btn_collapse_apps);
@@ -194,7 +197,10 @@ public class OtherProfileFragment extends Fragment {
         });
 
         btnFollow.setOnClickListener(v -> {
-             if (btnFollow.getTag() == null) return;
+             if (btnFollow.getTag() == null || !btnFollow.isEnabled()) return;
+             
+             btnFollow.setEnabled(false); // ЗАЩИТА ОТ СПАМ-КЛИКОВ И НУЛЕЙ
+             
              boolean currentStatus = (boolean) btnFollow.getTag();
              boolean nextStatus = !currentStatus;
              
@@ -211,9 +217,15 @@ public class OtherProfileFragment extends Fragment {
              
              if (activity.vpsToken != null) {
                  VpsApi.setFollow(activity.vpsToken, targetUid, nextStatus, new VpsApi.Callback() {
-                     @Override public void onSuccess(String s) { refreshCounts(activity); }
+                     @Override public void onSuccess(String s) { 
+                         refreshCounts(activity); 
+                         if (isAdded()) btnFollow.setEnabled(true);
+                     }
                      @Override public void onError(String err) {
-                         if (isAdded()) Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
+                         if (isAdded()) {
+                             btnFollow.setEnabled(true);
+                             Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
+                         }
                      }
                  });
              }
@@ -276,8 +288,15 @@ public class OtherProfileFragment extends Fragment {
     private void applyCountsJson(String jsonStr, TextView followersCount, TextView followingCount) {
         try {
             org.json.JSONObject json = new org.json.JSONObject(jsonStr);
-            if (followersCount != null) followersCount.setText(String.valueOf(json.optInt("followers", 0)));
-            if (followingCount != null) followingCount.setText(String.valueOf(json.optInt("following", 0)));
+            // ЖЕСТКАЯ ВАЛИДАЦИЯ ОТ НУЛЕЙ И СБОЕВ
+            if (json.has("followers") && !json.isNull("followers")) {
+                int followers = json.optInt("followers", -1);
+                if (followers >= 0 && followersCount != null) followersCount.setText(String.valueOf(followers));
+            }
+            if (json.has("following") && !json.isNull("following")) {
+                int following = json.optInt("following", -1);
+                if (following >= 0 && followingCount != null) followingCount.setText(String.valueOf(following));
+            }
         } catch (Exception e) {}
     }
 
@@ -298,7 +317,7 @@ public class OtherProfileFragment extends Fragment {
         
         if (getView() != null) {
             TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
-            if (tabTopApps != null) tabTopApps.setSelected(true); // Заголовок всегда горит
+            if (tabTopApps != null) tabTopApps.setSelected(true);
         }
     }
 
@@ -315,7 +334,7 @@ public class OtherProfileFragment extends Fragment {
             
             if (getView() != null) {
                 TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
-                if (tabTopApps != null) tabTopApps.setSelected(true); // Заголовок всегда горит
+                if (tabTopApps != null) tabTopApps.setSelected(true);
             }
         }
     }
@@ -328,7 +347,7 @@ public class OtherProfileFragment extends Fragment {
                 if (myGen != renderGeneration || !isAdded()) return;
                 if (container != null) {
                     container.removeAllViews();
-                    container.setVisibility(View.GONE); 
+                    container.setVisibility(View.GONE); // ИСЧЕЗАЕТ САМА ТОНКАЯ ПОЛОСКА
                 }
                 if (btnExpand != null) btnExpand.setVisibility(View.GONE);
                 if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
@@ -414,7 +433,11 @@ public class OtherProfileFragment extends Fragment {
                 
             } catch (Exception e) { e.printStackTrace(); }
 
-            new Handler(Looper.getMainLooper()).post(() -> {
+            // === УМНАЯ ЗАДЕРЖКА ДЛЯ УСТРАНЕНИЯ РВАНОЙ АНИМАЦИИ ===
+            long elapsed = System.currentTimeMillis() - fragmentCreationTime;
+            long delay = Math.max(0, 350 - elapsed); // Ждем завершения анимации перехода (350мс)
+
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (!isAdded() || myGen != renderGeneration) return;
 
                 if (container != null) {
@@ -423,7 +446,7 @@ public class OtherProfileFragment extends Fragment {
                 }
 
                 if (preloadedData.isEmpty()) {
-                    if (container != null) container.setVisibility(View.GONE);
+                    if (container != null) container.setVisibility(View.GONE); // ИСЧЕЗАЕТ ПОЛОСКА
                     if (btnExpand != null) btnExpand.setVisibility(View.GONE);
                     if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
                 } else {
@@ -478,7 +501,7 @@ public class OtherProfileFragment extends Fragment {
                 }
 
                 StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
-            });
+            }, delay); // Отрисовка сработает строго после того, как экран плавно заехал
         });
     }
 
