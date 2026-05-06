@@ -39,9 +39,6 @@ public class OtherProfileFragment extends Fragment {
     private String targetUid = "";
     private String backTitle = "";
 
-    private TextView txtFollowersCount;
-    private TextView txtFollowingCount;
-
     private float lastTouchX = 0;
     private float lastTouchY = 0;
     
@@ -133,9 +130,6 @@ public class OtherProfileFragment extends Fragment {
         final View btnEdit = originalView.findViewById(R.id.btn_edit_profile);
         final Button btnFollow = originalView.findViewById(R.id.btn_follow);
         
-        txtFollowersCount = originalView.findViewById(R.id.txt_followers_count);
-        txtFollowingCount = originalView.findViewById(R.id.txt_following_count);
-        
         final TextView weekTimeText = originalView.findViewById(R.id.profile_week_time);
         View followersClick = originalView.findViewById(R.id.container_followers);
         View followingClick = originalView.findViewById(R.id.container_following);
@@ -149,6 +143,37 @@ public class OtherProfileFragment extends Fragment {
 
         btnEdit.setVisibility(View.GONE);
 
+        // === УНИЧТОЖЕНИЕ ПОЛОСКИ ДЛЯ ЧУЖОГО ПРОФИЛЯ ===
+        appsContainerLocal.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
+            @Override
+            public void onChildViewAdded(View parent, View child) { updateEmptyState(); }
+            @Override
+            public void onChildViewRemoved(View parent, View child) { updateEmptyState(); }
+            
+            private void updateEmptyState() {
+                uiHandler.post(() -> {
+                    if (!isAdded() || getView() == null) return;
+                    boolean hasApps = appsContainerLocal.getChildCount() > 0;
+                    appsContainerLocal.setVisibility(hasApps ? View.VISIBLE : View.GONE);
+                    TextView currentTab = getView().findViewById(R.id.tab_top_apps);
+                    if (currentTab != null) currentTab.setVisibility(hasApps ? View.VISIBLE : View.GONE);
+                    if (!hasApps) {
+                        btnExpand.setVisibility(View.GONE);
+                        btnCollapse.setVisibility(View.GONE);
+                    }
+                });
+            }
+        });
+        
+        boolean initiallyHasApps = appsContainerLocal.getChildCount() > 0;
+        appsContainerLocal.setVisibility(initiallyHasApps ? View.VISIBLE : View.GONE);
+        if (tabTopApps != null) tabTopApps.setVisibility(initiallyHasApps ? View.VISIBLE : View.GONE);
+        if (!initiallyHasApps) {
+            btnExpand.setVisibility(View.GONE);
+            btnCollapse.setVisibility(View.GONE);
+        }
+
+        // === ИСПРАВЛЕНИЕ МОРГАНИЯ ОПИСАНИЯ ===
         String argName = getArguments() != null ? getArguments().getString("PREFETCH_NICKNAME", "") : "";
         String argAbout = getArguments() != null ? getArguments().getString("PREFETCH_ABOUT", "") : "";
         String argPhoto = getArguments() != null ? getArguments().getString("PREFETCH_PHOTO", "") : "";
@@ -156,10 +181,14 @@ public class OtherProfileFragment extends Fragment {
         if (!argName.isEmpty()) nameView.setText(argName);
         else nameView.setText(activity.getString(R.string.loading));
 
-        if (!argAbout.isEmpty()) {
+        if (!argAbout.trim().isEmpty()) {
             aboutView.setText(argAbout);
             aboutView.setVisibility(View.VISIBLE);
+        } else {
+            aboutView.setText("");
+            aboutView.setVisibility(View.GONE); // Прячем до прихода реальных данных!
         }
+        
         if (!argPhoto.isEmpty()) handleMediaLoading(activity, argPhoto);
 
         User cachedUser = prefetchUserCache.get(targetUid);
@@ -215,11 +244,12 @@ public class OtherProfileFragment extends Fragment {
              prefetchFollowCache.put(targetUid, nextStatus); 
              
              try {
-                 if (txtFollowersCount != null) {
-                     int count = Integer.parseInt(txtFollowersCount.getText().toString());
+                 TextView fCount = getView().findViewById(R.id.txt_followers_count);
+                 if (fCount != null) {
+                     int count = Integer.parseInt(fCount.getText().toString());
                      count = nextStatus ? count + 1 : count - 1;
                      if (count < 0) count = 0;
-                     txtFollowersCount.setText(String.valueOf(count));
+                     fCount.setText(String.valueOf(count));
                  }
              } catch (Exception e) {}
              
@@ -236,11 +266,12 @@ public class OtherProfileFragment extends Fragment {
                                  updateFollowButton(btnFollow, currentStatus);
                                  prefetchFollowCache.put(targetUid, currentStatus);
                                  try {
-                                     if (txtFollowersCount != null) {
-                                         int c = Integer.parseInt(txtFollowersCount.getText().toString());
+                                     TextView fCount = getView().findViewById(R.id.txt_followers_count);
+                                     if (fCount != null) {
+                                         int c = Integer.parseInt(fCount.getText().toString());
                                          c = currentStatus ? c + 1 : c - 1;
                                          if (c < 0) c = 0;
-                                         txtFollowersCount.setText(String.valueOf(c));
+                                         fCount.setText(String.valueOf(c));
                                      }
                                  } catch(Exception e){}
                                  Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
@@ -259,7 +290,13 @@ public class OtherProfileFragment extends Fragment {
                     if (user != null) {
                         prefetchUserCache.put(targetUid, user); 
                         nameView.setText(user.nickname != null ? user.nickname : activity.getString(R.string.no_name));
+                        
                         aboutView.setText(user.about != null ? user.about : "");
+                        if (user.about == null || user.about.trim().isEmpty()) {
+                            aboutView.setVisibility(View.GONE);
+                        } else {
+                            aboutView.setVisibility(View.VISIBLE);
+                        }
                         
                         applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
@@ -294,20 +331,22 @@ public class OtherProfileFragment extends Fragment {
         return wrapper; 
     }
 
-    // === ЖЕЛЕЗНЫЙ БЛОК: Не даем StatsHelper'у воскресить пустую полоску ===
     private void applyCollapseSafely(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
+        StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
         if (container != null && container.getChildCount() == 0) {
             container.setVisibility(View.GONE);
             if (btnExpand != null) btnExpand.setVisibility(View.GONE);
             if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
-            return; // StatsHelper сюда даже не доберется!
         }
-        StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
     }
 
     private void refreshCounts(MainActivity activity) {
         if (activity.vpsToken == null) return;
-        VpsApi.getCounts(activity.vpsToken, targetUid, new VpsApi.Callback() {
+        executeCountsApi(activity, activity.vpsToken);
+    }
+
+    private void executeCountsApi(MainActivity activity, String token) {
+        VpsApi.getCounts(token, targetUid, new VpsApi.Callback() {
             @Override public void onSuccess(String result) {
                 uiHandler.post(() -> {
                     if (!isAdded()) return; 
@@ -315,20 +354,30 @@ public class OtherProfileFragment extends Fragment {
                     applyCountsJson(result);
                 });
             }
-            @Override public void onError(String error) {}
+            @Override public void onError(String error) {
+                uiHandler.postDelayed(() -> {
+                    if (isAdded() && activity.vpsToken != null) {
+                        executeCountsApi(activity, activity.vpsToken);
+                    }
+                }, 1000);
+            }
         });
     }
 
     private void applyCountsJson(String jsonStr) {
         try {
             org.json.JSONObject json = new org.json.JSONObject(jsonStr);
-            if (json.has("followers") && !json.isNull("followers")) {
-                int followers = json.optInt("followers", -1);
-                if (followers >= 0 && txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(followers));
-            }
-            if (json.has("following") && !json.isNull("following")) {
-                int following = json.optInt("following", -1);
-                if (following >= 0 && txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
+            if (getView() != null) {
+                TextView txtFollowersCount = getView().findViewById(R.id.txt_followers_count);
+                TextView txtFollowingCount = getView().findViewById(R.id.txt_following_count);
+                if (json.has("followers") && !json.isNull("followers")) {
+                    int followers = json.optInt("followers", -1);
+                    if (followers >= 0 && txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(followers));
+                }
+                if (json.has("following") && !json.isNull("following")) {
+                    int following = json.optInt("following", -1);
+                    if (following >= 0 && txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
+                }
             }
         } catch (Exception e) {}
     }
@@ -347,11 +396,6 @@ public class OtherProfileFragment extends Fragment {
         super.onResume();
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null && !isHidden()) refreshCounts(activity);
-        
-        if (getView() != null) {
-            TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
-            if (tabTopApps != null) tabTopApps.setSelected(true);
-        }
     }
 
     @Override
@@ -364,11 +408,6 @@ public class OtherProfileFragment extends Fragment {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
             refreshCounts(activity);
-            
-            if (getView() != null) {
-                TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
-                if (tabTopApps != null) tabTopApps.setSelected(true);
-            }
         }
     }
 
@@ -384,6 +423,10 @@ public class OtherProfileFragment extends Fragment {
                 }
                 if (btnExpand != null) btnExpand.setVisibility(View.GONE);
                 if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
+                if (getView() != null) {
+                    TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
+                    if (tabTopApps != null) tabTopApps.setVisibility(View.GONE);
+                }
                 
                 long minutes = serverTotalTime / 1000 / 60;
                 long hours = minutes / 60;
@@ -481,8 +524,16 @@ public class OtherProfileFragment extends Fragment {
                     if (container != null) container.setVisibility(View.GONE);
                     if (btnExpand != null) btnExpand.setVisibility(View.GONE);
                     if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
+                    if (getView() != null) {
+                        TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
+                        if (tabTopApps != null) tabTopApps.setVisibility(View.GONE);
+                    }
                 } else {
                     if (container != null) container.setVisibility(View.VISIBLE);
+                    if (getView() != null) {
+                        TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
+                        if (tabTopApps != null) tabTopApps.setVisibility(View.VISIBLE);
+                    }
                     
                     for (AppUiData data : preloadedData) {
                         View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, container, false);
