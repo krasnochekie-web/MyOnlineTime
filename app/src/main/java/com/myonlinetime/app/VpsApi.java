@@ -9,9 +9,17 @@ import com.google.gson.reflect.TypeToken;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
 import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 
 import okhttp3.Call;
 import okhttp3.HttpUrl;
@@ -26,7 +34,10 @@ import com.myonlinetime.app.models.User;
 
 public class VpsApi {
     private static final String BASE_URL = "https://api.krasnocraft.ru/";
-    private static final OkHttpClient client = new OkHttpClient();
+    
+    // Убрали final, чтобы иметь возможность пересоздать клиент с SSL сертификатом для Android 5.1
+    private static OkHttpClient client = new OkHttpClient(); 
+    
     private static final Gson gson = new Gson();
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
@@ -51,6 +62,36 @@ public class VpsApi {
     public interface Callback { void onSuccess(String result); void onError(String error); }
     public interface BooleanCallback { void onResult(boolean result); }
     public interface LoginCallback { void onSuccess(String ourServerToken); void onError(String error); }
+
+    // === ФИКС ДЛЯ ANDROID 5.1 (SSL TRUST ANCHOR) ===
+    public static void initSslForOldAndroid(Context context) {
+        // Выполняем только на устройствах старее Android 7.0 (API 24)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) return; 
+
+        try {
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            // Файл сертификата должен лежать в res/raw/isrgrootx1.der
+            InputStream certInput = context.getResources().openRawResource(R.raw.isrgrootx1);
+            Certificate ca = cf.generateCertificate(certInput);
+            certInput.close();
+
+            KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+            keyStore.load(null, null);
+            keyStore.setCertificateEntry("ca", ca);
+
+            TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init(keyStore);
+
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, tmf.getTrustManagers(), null);
+
+            client = new OkHttpClient.Builder()
+                    .sslSocketFactory(sslContext.getSocketFactory(), (X509TrustManager) tmf.getTrustManagers()[0])
+                    .build();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
     public static void authenticateWithGoogle(Context context, String googleIdToken, final LoginCallback callback) {
         String jsonBody = "{\"idToken\":\"" + googleIdToken + "\"}";
@@ -110,7 +151,6 @@ public class VpsApi {
     }
 
     public static void saveUserProfile(String ourServerToken, String nickname, String about, File photoFile, File bgFile, long ticket, final Callback callback) {
-        // === ЖЕСТКИЙ ОБРЫВ ПРЕДЫДУЩИХ ЗАГРУЗОК ПО URL ===
         for (Call call : client.dispatcher().queuedCalls()) {
             if (call.request().url().toString().contains("save_user")) call.cancel();
         }
@@ -152,7 +192,6 @@ public class VpsApi {
     }
 
     public static void getUser(Context context, String ourServerToken, String uid, final UserCallback callback) {
-        // === АНТИ-КЭШ ПРОБИВ ===
         HttpUrl url = HttpUrl.parse(BASE_URL + "get_user").newBuilder()
                 .addQueryParameter("uid", uid)
                 .addQueryParameter("t", String.valueOf(System.currentTimeMillis()))
@@ -304,7 +343,7 @@ public class VpsApi {
     }
 
     // ==========================================
-    // НОВЫЕ АПИ ДЛЯ УВЕДОМЛЕНИЙ
+    // НОВЫЕ МЕТОДЫ ДЛЯ УВЕДОМЛЕНИЙ (ХРАНИМ В ОБЛАКЕ)
     // ==========================================
 
     public static void getNotificationsHistory(String ourServerToken, final Callback callback) {
