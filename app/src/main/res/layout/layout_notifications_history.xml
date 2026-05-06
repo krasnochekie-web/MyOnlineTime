@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- УБИРАЕМ paddingTop ОТСЮДА ВООБЩЕ -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bgDynamic"
-    android:paddingTop="@dimen/header_clearance">
+    android:background="@color/bgDynamic"> 
 
-    <!-- КРУТИЛОЧКА -->
     <ProgressBar
         android:id="@+id/loading_spinner"
         android:layout_width="48dp"
@@ -25,12 +24,13 @@
         android:textStyle="bold"
         android:visibility="gone" />
 
+    <!-- ПЕРЕНОСИМ paddingTop СЮДА И ДОБАВЛЯЕМ clipToPadding -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_notifications"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:clipToPadding="false"
-        android:paddingTop="0dp" 
+        android:clipToPadding="false" 
+        android:paddingTop="@dimen/header_clearance" 
         android:paddingBottom="@dimen/bottom_nav_clearance"
         android:overScrollMode="never"
         android:scrollbars="none" />
