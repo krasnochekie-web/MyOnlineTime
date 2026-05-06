@@ -36,7 +36,6 @@ public class FollowerSyncWorker extends Worker {
     public Result doWork() {
         Context ctx = getApplicationContext();
         
-        // === ИСПРАВЛЕНИЕ: Получаем СВЕЖИЙ токен вместо протухшего кэша ===
         String freshToken = null;
         try {
             GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -44,11 +43,9 @@ public class FollowerSyncWorker extends Worker {
                     .requestEmail().build();
             GoogleSignInClient client = GoogleSignIn.getClient(ctx, gso);
             
-            // Запрашиваем новый токен синхронно (мы в фоновом потоке, это безопасно)
             GoogleSignInAccount account = Tasks.await(client.silentSignIn());
             freshToken = account.getIdToken();
         } catch (Exception e) {
-            // Если интернета нет для обмена токена, пробуем старый
             GoogleSignInAccount cached = GoogleSignIn.getLastSignedInAccount(ctx);
             if (cached != null) freshToken = cached.getIdToken();
         }
@@ -74,7 +71,8 @@ public class FollowerSyncWorker extends Worker {
                                 JSONObject item = newArray.getJSONObject(i);
                                 if (!item.optBoolean("isRead", false) && isReallyNew(item, oldArray)) {
                                     if ("follower".equals(item.optString("type"))) {
-                                        sendPush(ctx, item.optString("nickname"));
+                                        // ПЕРЕДАЕМ UID НОВОГО ПОДПИСЧИКА
+                                        sendPush(ctx, item.optString("nickname"), item.optString("uid"));
                                     }
                                     newCount++;
                                 }
@@ -106,7 +104,7 @@ public class FollowerSyncWorker extends Worker {
         return true;
     }
 
-    private void sendPush(Context context, String nickname) {
+    private void sendPush(Context context, String nickname, String uid) {
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel ch = new NotificationChannel(
@@ -119,9 +117,15 @@ public class FollowerSyncWorker extends Worker {
 
         Intent intent = new Intent(context, MainActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        intent.putExtra("open_tab", "notifications");
+        
+        // УКАЗЫВАЕМ ПРИЛОЖЕНИЮ ОТКРЫТЬ ПРОФИЛЬ
+        intent.putExtra("open_tab", "other_profile");
+        intent.putExtra("target_uid", uid);
+        intent.putExtra("target_nickname", nickname);
 
-        PendingIntent pi = PendingIntent.getActivity(context, 0, intent, Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT);
+        // Уникальный код для каждого уведомления, чтобы интенты не склеивались
+        int reqCode = (int) System.currentTimeMillis();
+        PendingIntent pi = PendingIntent.getActivity(context, reqCode, intent, Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT);
 
         String safeNick = (nickname != null && !nickname.trim().isEmpty()) ? nickname : context.getString(R.string.notif_someone);
         String pushText = context.getString(R.string.notif_subscribed_to_you, safeNick);
@@ -134,6 +138,6 @@ public class FollowerSyncWorker extends Worker {
                 .setContentIntent(pi)
                 .setAutoCancel(true);
 
-        nm.notify((int)System.currentTimeMillis(), builder.build());
+        nm.notify(reqCode, builder.build());
     }
 }
