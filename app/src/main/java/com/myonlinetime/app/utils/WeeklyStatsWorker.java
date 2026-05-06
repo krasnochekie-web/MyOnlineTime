@@ -16,11 +16,11 @@ import androidx.core.content.ContextCompat;
 import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
+import com.myonlinetime.app.VpsApi;
 
 import java.util.Calendar;
 import java.util.Map;
@@ -95,29 +95,24 @@ public class WeeklyStatsWorker extends Worker {
 
         String actionText = context.getString(R.string.notif_action_click);
         
-        saveToHistory(prefs, mainText, actionText, now);
+        // Вызываем сохранение на сервер и показ пуша
+        saveToServer(context, mainText, actionText);
         sendNotification(context, mainText, actionText);
 
         return Result.success();
     }
 
-    private void saveToHistory(SharedPreferences prefs, String mainText, String actionText, long timestamp) {
-        try {
-            String historyJson = prefs.getString("notif_history_array", "[]");
-            JSONArray array = new JSONArray(historyJson);
-            
-            JSONObject newNotif = new JSONObject();
-            newNotif.put("type", "time"); // Добавляем тип уведомления
-            newNotif.put("mainText", mainText);
-            newNotif.put("actionText", actionText);
-            newNotif.put("timestamp", timestamp);
-            newNotif.put("isRead", false);
-            
-            array.put(newNotif); 
-            prefs.edit().putString("notif_history_array", array.toString()).apply();
-            
-        } catch (Exception e) {
-            e.printStackTrace();
+    // === СОХРАНЕНИЕ В БАЗУ ДАННЫХ ===
+    private void saveToServer(Context context, String mainText, String actionText) {
+        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(context);
+        if (account != null && account.getIdToken() != null) {
+            VpsApi.authenticateWithGoogle(context, account.getIdToken(), new VpsApi.LoginCallback() {
+                @Override
+                public void onSuccess(String token) {
+                    VpsApi.addTimeNotification(token, mainText, actionText, null);
+                }
+                @Override public void onError(String error) {}
+            });
         }
     }
 
