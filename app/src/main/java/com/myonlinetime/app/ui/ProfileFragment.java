@@ -54,12 +54,11 @@ public class ProfileFragment extends Fragment {
     private final Gson gson = new Gson();
     
     private ImageView avatarView;
-    private ImageView myBgImageView; // Наш локальный фон для эффекта коллажа
+    private ImageView myBgImageView; 
     private String myUid = "";
 
     private View profileContentView;
 
-    // Память для устранения морганий
     private String currentLoadedAvatar = null;
     private String currentLoadedBg = null;
 
@@ -99,7 +98,6 @@ public class ProfileFragment extends Fragment {
         final MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return new View(requireContext());
 
-        // === СОЗДАЕМ ЭФФЕКТ КОЛЛАЖА ===
         FrameLayout wrapper = new FrameLayout(requireContext());
         wrapper.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         
@@ -110,8 +108,8 @@ public class ProfileFragment extends Fragment {
         final View originalView = inflater.inflate(R.layout.layout_profile, wrapper, false);
         profileContentView = originalView;
         
-        wrapper.addView(myBgImageView, 0); // Фон на самом дне (индекс 0)
-        wrapper.addView(originalView, 1);  // Контент поверх фона
+        wrapper.addView(myBgImageView, 0); 
+        wrapper.addView(originalView, 1);  
 
         final GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         if (account == null) return wrapper;
@@ -129,13 +127,39 @@ public class ProfileFragment extends Fragment {
         View followersClick = originalView.findViewById(R.id.container_followers);
         View followingClick = originalView.findViewById(R.id.container_following);
         TextView tabTopApps = originalView.findViewById(R.id.tab_top_apps);
-        if (tabTopApps != null) tabTopApps.setSelected(true);
+        if (tabTopApps != null) tabTopApps.setSelected(true); // Заголовок всегда активен
+        
         final ImageView btnExpand = originalView.findViewById(R.id.btn_expand_apps);
         final ImageView btnCollapse = originalView.findViewById(R.id.btn_collapse_apps);
         final LinearLayout appsContainerLocal = originalView.findViewById(R.id.profile_apps_container);
 
         btnFollow.setVisibility(View.GONE);
         btnEdit.setVisibility(View.VISIBLE);
+
+        // === ИСЧЕЗНОВЕНИЕ ТОЛЬКО КНОПОК И КОНТЕЙНЕРА ===
+        appsContainerLocal.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
+            @Override
+            public void onChildViewAdded(View parent, View child) { updateEmptyState(); }
+            @Override
+            public void onChildViewRemoved(View parent, View child) { updateEmptyState(); }
+            
+            private void updateEmptyState() {
+                uiHandler.post(() -> {
+                    if (!isAdded()) return;
+                    boolean hasApps = appsContainerLocal.getChildCount() > 0;
+                    if (!hasApps) {
+                        btnExpand.setVisibility(View.GONE);
+                        btnCollapse.setVisibility(View.GONE);
+                    }
+                });
+            }
+        });
+        
+        boolean initiallyHasApps = appsContainerLocal.getChildCount() > 0;
+        if (!initiallyHasApps) {
+            btnExpand.setVisibility(View.GONE);
+            btnCollapse.setVisibility(View.GONE);
+        }
 
         loadMyStatsRunnable = () -> {
             if (isAdded() && appsContainerLocal != null && weekTimeText != null) {
@@ -175,7 +199,7 @@ public class ProfileFragment extends Fragment {
 
                     long activeTicket = activity.prefs.getLong("active_upload_ticket", 0);
                     if (activeTicket != 0 && (System.currentTimeMillis() - activeTicket < 60000)) {
-                        return; // Защита от черной стены
+                        return; 
                     }
 
                     if (user != null) {
@@ -259,7 +283,6 @@ public class ProfileFragment extends Fragment {
         String b64 = activity.prefs.getString("my_photo_base64", null);
         handleMediaLoading(activity, b64, true, myUid);
 
-        // === ИДЕАЛЬНЫЙ КЭШ И УСТРАНЕНИЕ МЕРЦАНИЯ ===
         String bgPath = activity.prefs.getString("custom_bg_path_" + myUid, null);
         String remoteBg = activity.prefs.getString("my_bg_base64", null);
         
@@ -270,14 +293,13 @@ public class ProfileFragment extends Fragment {
             newBgKey = myUid + "_remote_bg_" + (remoteBg != null ? String.valueOf(remoteBg.hashCode()) : "empty");
         }
 
-        // Запускаем Glide ТОЛЬКО если фон реально изменился
         if (!newBgKey.equals(currentLoadedBg)) {
             currentLoadedBg = newBgKey;
             
             if (bgPath != null && new File(bgPath).exists()) {
                 Glide.with(this).load(new File(bgPath))
-                     .diskCacheStrategy(DiskCacheStrategy.NONE) // Не плодим копии на жестком диске!
-                     .signature(new ObjectKey(new File(bgPath).lastModified())) // Мгновенная загрузка из ОЗУ при свайпах
+                     .diskCacheStrategy(DiskCacheStrategy.NONE) 
+                     .signature(new ObjectKey(new File(bgPath).lastModified())) 
                      .centerCrop().into(myBgImageView);
             } else if (remoteBg != null && remoteBg.startsWith("http")) {
                 Glide.with(this).load(remoteBg).centerCrop().into(myBgImageView);
@@ -386,6 +408,11 @@ public class ProfileFragment extends Fragment {
             .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_EDIT_PROFILE_OPENED"));
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
             .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_EDIT_PROFILE_CLOSED"));
+        
+        if (getView() != null) {
+            TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
+            if (tabTopApps != null) tabTopApps.setSelected(true); // Заголовок всегда горит
+        }
     }
 
     @Override
@@ -406,6 +433,11 @@ public class ProfileFragment extends Fragment {
                 updateUiFromPrefs(activity);
                 if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
+                
+                if (getView() != null) {
+                    TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
+                    if (tabTopApps != null) tabTopApps.setSelected(true); // Заголовок всегда горит
+                }
             }
         }
     }
