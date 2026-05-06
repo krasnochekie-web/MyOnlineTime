@@ -339,7 +339,7 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
                                 Glide.with(context)
                                      .load(iconUrl)
                                      .placeholder(android.R.drawable.sym_def_app_icon)
-                                     .error(R.drawable.ic_nav_settings) // Если иконку еще никто в мире не загрузил
+                                     .error(android.R.drawable.sym_def_app_icon) // Если иконку еще никто в мире не загрузил
                                      .into(holder.iconView);
                             }
                         });
