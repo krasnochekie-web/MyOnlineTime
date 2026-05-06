@@ -47,23 +47,28 @@ public class WeeklyStatsWorker extends Worker {
             return Result.success();
         }
 
-        // === ПОЛНАЯ СИНХРОНИЗАЦИЯ С ЭКРАНОМ "ВРЕМЯ" И ПРОФИЛЕМ ===
-        // Никаких обрезок до 00:00! Берем точное время прямо сейчас, как это делает интерфейс.
-        long now = System.currentTimeMillis();
-        
+        // === ЖЕСТКОЕ ВЫРАВНИВАНИЕ ПО ПОЛУНОЧИ (Идеальная точность) ===
         Calendar cal = Calendar.getInstance();
-        cal.setTimeInMillis(now);
-        cal.add(Calendar.DAY_OF_YEAR, -7);
-        long startCurrentWeek = cal.getTimeInMillis(); // Ровно 7 суток назад
+        long now = cal.getTimeInMillis();
         
-        cal.add(Calendar.DAY_OF_YEAR, -7);
-        long startPrevWeek = cal.getTimeInMillis(); // Ровно 14 суток назад
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        
+        // Начало текущих суток
+        long startOfToday = cal.getTimeInMillis(); 
+        
+        // Начало 7 суток назад (например, с прошлого Понедельника 00:00)
+        long startCurrentWeek = startOfToday - (6L * 86400000L); 
+        
+        // Начало 14 суток назад
+        long startPrevWeek = startCurrentWeek - (7L * 86400000L); 
 
-        // Считаем через сырые логи (getFilteredExactTimes), чтобы цифры совпали 1 в 1 с Профилем!
+        // Считаем через сырые логи, теперь корзины не разрезаются!
         Map<String, Long> currentWeekMap = UsageMath.getFilteredExactTimes(context, startCurrentWeek, now);
         Map<String, Long> prevWeekMap = UsageMath.getFilteredExactTimes(context, startPrevWeek, startCurrentWeek);
 
-        // Получаем точные суммы
         long currentWeekTime = UsageMath.sumMap(currentWeekMap);
         long previousWeekTime = UsageMath.sumMap(prevWeekMap);
 
@@ -71,7 +76,6 @@ public class WeeklyStatsWorker extends Worker {
             return Result.success();
         }
 
-        // Железобетонная логика разницы
         long diff = currentWeekTime - previousWeekTime;
         long absDiff = Math.abs(diff);
         
@@ -103,6 +107,7 @@ public class WeeklyStatsWorker extends Worker {
             JSONArray array = new JSONArray(historyJson);
             
             JSONObject newNotif = new JSONObject();
+            newNotif.put("type", "time"); // Добавляем тип уведомления
             newNotif.put("mainText", mainText);
             newNotif.put("actionText", actionText);
             newNotif.put("timestamp", timestamp);
@@ -156,4 +161,3 @@ public class WeeklyStatsWorker extends Worker {
         notificationManager.notify(NOTIF_ID, builder.build());
     }
 }
-
