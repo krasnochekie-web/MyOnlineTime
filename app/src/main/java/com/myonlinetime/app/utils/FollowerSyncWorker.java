@@ -9,12 +9,15 @@ import android.content.SharedPreferences;
 import android.os.Build;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 import androidx.work.Worker;
 import androidx.work.WorkerParameters;
-import androidx.core.content.ContextCompat;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.android.gms.auth.api.signin.GoogleSignInClient;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+import com.google.android.gms.tasks.Tasks;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
@@ -32,13 +35,30 @@ public class FollowerSyncWorker extends Worker {
     @Override
     public Result doWork() {
         Context ctx = getApplicationContext();
-        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(ctx);
-        if (account == null || account.getIdToken() == null) return Result.success();
+        
+        // === ИСПРАВЛЕНИЕ: Получаем СВЕЖИЙ токен вместо протухшего кэша ===
+        String freshToken = null;
+        try {
+            GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                    .requestIdToken("603306715003-0ptgu4fqnldcsoon9niprvi772m2ebks.apps.googleusercontent.com")
+                    .requestEmail().build();
+            GoogleSignInClient client = GoogleSignIn.getClient(ctx, gso);
+            
+            // Запрашиваем новый токен синхронно (мы в фоновом потоке, это безопасно)
+            GoogleSignInAccount account = Tasks.await(client.silentSignIn());
+            freshToken = account.getIdToken();
+        } catch (Exception e) {
+            // Если интернета нет для обмена токена, пробуем старый
+            GoogleSignInAccount cached = GoogleSignIn.getLastSignedInAccount(ctx);
+            if (cached != null) freshToken = cached.getIdToken();
+        }
+
+        if (freshToken == null) return Result.success();
 
         final CountDownLatch latch = new CountDownLatch(1);
         final boolean[] success = {false};
 
-        VpsApi.authenticateWithGoogle(ctx, account.getIdToken(), new VpsApi.LoginCallback() {
+        VpsApi.authenticateWithGoogle(ctx, freshToken, new VpsApi.LoginCallback() {
             @Override public void onSuccess(String token) {
                 VpsApi.getNotificationsHistory(token, new VpsApi.Callback() {
                     @Override public void onSuccess(String result) {
@@ -91,7 +111,7 @@ public class FollowerSyncWorker extends Worker {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel ch = new NotificationChannel(
                     "followers_ch", 
-                    context.getString(R.string.notif_channel_followers_name), 
+                    context.getString(R.string.notif_channel_followers), 
                     NotificationManager.IMPORTANCE_DEFAULT
             );
             nm.createNotificationChannel(ch);
@@ -103,12 +123,12 @@ public class FollowerSyncWorker extends Worker {
 
         PendingIntent pi = PendingIntent.getActivity(context, 0, intent, Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT);
 
-        String safeNickname = (nickname != null && !nickname.isEmpty()) ? nickname : context.getString(R.string.notif_someone);
-        String pushText = context.getString(R.string.notif_subscribed_to_you, safeNickname);
+        String safeNick = (nickname != null && !nickname.trim().isEmpty()) ? nickname : context.getString(R.string.notif_someone);
+        String pushText = context.getString(R.string.notif_followed_you, safeNick);
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, "followers_ch")
                 .setSmallIcon(R.drawable.ic_nav_profile)
-                .setContentTitle(context.getString(R.string.notif_channel_followers_name))
+                .setContentTitle(context.getString(R.string.notif_channel_followers))
                 .setContentText(pushText)
                 .setColor(ContextCompat.getColor(context, R.color.burgundyRed))
                 .setContentIntent(pi)
