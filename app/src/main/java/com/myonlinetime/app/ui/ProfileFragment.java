@@ -127,7 +127,7 @@ public class ProfileFragment extends Fragment {
         View followersClick = originalView.findViewById(R.id.container_followers);
         View followingClick = originalView.findViewById(R.id.container_following);
         TextView tabTopApps = originalView.findViewById(R.id.tab_top_apps);
-        if (tabTopApps != null) tabTopApps.setSelected(true); // Заголовок всегда активен
+        if (tabTopApps != null) tabTopApps.setSelected(true); 
         
         final ImageView btnExpand = originalView.findViewById(R.id.btn_expand_apps);
         final ImageView btnCollapse = originalView.findViewById(R.id.btn_collapse_apps);
@@ -136,7 +136,7 @@ public class ProfileFragment extends Fragment {
         btnFollow.setVisibility(View.GONE);
         btnEdit.setVisibility(View.VISIBLE);
 
-        // === ИСЧЕЗНОВЕНИЕ ТОЛЬКО КНОПОК И КОНТЕЙНЕРА ===
+        // === ИСЧЕЗНОВЕНИЕ ТОНКОЙ ПОЛОСКИ ДЛЯ СВОЕГО ПРОФИЛЯ ===
         appsContainerLocal.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
             @Override
             public void onChildViewAdded(View parent, View child) { updateEmptyState(); }
@@ -147,6 +147,7 @@ public class ProfileFragment extends Fragment {
                 uiHandler.post(() -> {
                     if (!isAdded()) return;
                     boolean hasApps = appsContainerLocal.getChildCount() > 0;
+                    appsContainerLocal.setVisibility(hasApps ? View.VISIBLE : View.GONE); // ПРЯЧЕМ КОНТЕЙНЕР
                     if (!hasApps) {
                         btnExpand.setVisibility(View.GONE);
                         btnCollapse.setVisibility(View.GONE);
@@ -156,6 +157,7 @@ public class ProfileFragment extends Fragment {
         });
         
         boolean initiallyHasApps = appsContainerLocal.getChildCount() > 0;
+        appsContainerLocal.setVisibility(initiallyHasApps ? View.VISIBLE : View.GONE); // ПРЯЧЕМ КОНТЕЙНЕР ПРИ СТАРТЕ
         if (!initiallyHasApps) {
             btnExpand.setVisibility(View.GONE);
             btnCollapse.setVisibility(View.GONE);
@@ -316,10 +318,17 @@ public class ProfileFragment extends Fragment {
                 if (!isAdded() || getView() == null) return; 
                 try {
                     org.json.JSONObject json = new org.json.JSONObject(result);
-                    TextView followersCount = getView().findViewById(R.id.txt_followers_count);
-                    TextView followingCount = getView().findViewById(R.id.txt_following_count);
-                    if (followersCount != null) followersCount.setText(String.valueOf(json.optInt("followers", 0)));
-                    if (followingCount != null) followingCount.setText(String.valueOf(json.optInt("following", 0)));
+                    // ЖЕСТКАЯ ВАЛИДАЦИЯ ОТ НУЛЕЙ И СБОЕВ
+                    if (json.has("followers") && !json.isNull("followers")) {
+                        int followers = json.optInt("followers", -1);
+                        TextView followersCount = getView().findViewById(R.id.txt_followers_count);
+                        if (followers >= 0 && followersCount != null) followersCount.setText(String.valueOf(followers));
+                    }
+                    if (json.has("following") && !json.isNull("following")) {
+                        int following = json.optInt("following", -1);
+                        TextView followingCount = getView().findViewById(R.id.txt_following_count);
+                        if (following >= 0 && followingCount != null) followingCount.setText(String.valueOf(following));
+                    }
                 } catch (Exception e) {}
             }
             @Override public void onError(String error) {}
@@ -408,11 +417,6 @@ public class ProfileFragment extends Fragment {
             .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_EDIT_PROFILE_OPENED"));
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
             .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_EDIT_PROFILE_CLOSED"));
-        
-        if (getView() != null) {
-            TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
-            if (tabTopApps != null) tabTopApps.setSelected(true); // Заголовок всегда горит
-        }
     }
 
     @Override
@@ -433,11 +437,6 @@ public class ProfileFragment extends Fragment {
                 updateUiFromPrefs(activity);
                 if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
                 refreshCounts(activity);
-                
-                if (getView() != null) {
-                    TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
-                    if (tabTopApps != null) tabTopApps.setSelected(true); // Заголовок всегда горит
-                }
             }
         }
     }
