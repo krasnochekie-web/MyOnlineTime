@@ -144,12 +144,10 @@ public class OtherProfileFragment extends Fragment {
         final ImageView btnCollapse = originalView.findViewById(R.id.btn_collapse_apps);
         final LinearLayout appsContainerLocal = originalView.findViewById(R.id.profile_apps_container);
         
-        // Получаем ту самую родительскую карточку, которая создавала полоску
         final View appsCardParent = (View) appsContainerLocal.getParent();
 
         btnEdit.setVisibility(View.GONE);
 
-        // === ЖЕСТКОЕ УНИЧТОЖЕНИЕ РОДИТЕЛЬСКОЙ КАРТОЧКИ (ПОЛОСКИ) ===
         appsContainerLocal.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
             @Override
             public void onChildViewAdded(View parent, View child) { updateEmptyState(); }
@@ -494,20 +492,14 @@ public class OtherProfileFragment extends Fragment {
                     data.time = appTime;
                     
                     if (appDescriptions != null) data.description = appDescriptions.get(pkgName);
-                    data.isDeleted = false;
+                    
+                    // ДОБЕРЯЕМ СЕРВЕРУ: Истинная логика проверки удаленных приложений (Корзина)
+                    data.isDeleted = (appTime == 0);
 
                     ApplicationInfo appInfo = null;
                     try {
                         appInfo = pm.getApplicationInfo(pkgName, 0);
-                    } catch (PackageManager.NameNotFoundException e) {
-                        try {
-                            int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
-                            appInfo = pm.getApplicationInfo(pkgName, flag);
-                            boolean isInstalled = (appInfo.flags & ApplicationInfo.FLAG_INSTALLED) != 0;
-                            boolean isSystemApp = (appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
-                            if (!isInstalled && !isSystemApp) data.isDeleted = true; 
-                        } catch (PackageManager.NameNotFoundException ignored) { data.isDeleted = true; }
-                    }
+                    } catch (PackageManager.NameNotFoundException ignored) {}
 
                     String cachedName = dbNames.getString(pkgName, null);
                     if (cachedName != null) data.appName = cachedName;
@@ -583,8 +575,18 @@ public class OtherProfileFragment extends Fragment {
                         }
 
                         nameView.setText(data.appName);
-                        if (data.icon != null) iconView.setImageDrawable(data.icon);
-                        else iconView.setImageResource(android.R.drawable.sym_def_app_icon);
+                        
+                        // НОВАЯ P2P ЛОГИКА ОТОБРАЖЕНИЯ ИКОНОК ЧЕРЕЗ GLIDE
+                        if (data.icon != null) {
+                            iconView.setImageDrawable(data.icon);
+                        } else {
+                            String iconUrl = "https://api.krasnocraft.ru/icons/" + data.pkgName + ".png";
+                            Glide.with(activity)
+                                 .load(iconUrl)
+                                 .placeholder(android.R.drawable.sym_def_app_icon)
+                                 .error(R.drawable.ic_nav_settings)
+                                 .into(iconView);
+                        }
                         
                         timeView.setText(Utils.formatTime(activity, data.time));
                         
@@ -613,6 +615,16 @@ public class OtherProfileFragment extends Fragment {
                 }
             }, delay); 
         });
+    }
+
+    private String formatDeletedAppName(String pkg) {
+        try {
+            String[] parts = pkg.split("\\.");
+            String name = parts[parts.length - 1]; 
+            return name.substring(0, 1).toUpperCase() + name.substring(1); 
+        } catch (Exception e) {
+            return pkg;
+        }
     }
 
     private void updateFollowButton(android.widget.Button btnFollow, boolean isFollowing) {
