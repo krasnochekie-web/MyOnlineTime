@@ -39,7 +39,6 @@ public class OtherProfileFragment extends Fragment {
     private String targetUid = "";
     private String backTitle = "";
 
-    // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ ЗАЩИТЫ ОТ "ВЕЧНЫХ НУЛЕЙ" ===
     private TextView txtFollowersCount;
     private TextView txtFollowingCount;
 
@@ -206,8 +205,7 @@ public class OtherProfileFragment extends Fragment {
 
         btnFollow.setOnClickListener(v -> {
              if (btnFollow.getTag() == null || !btnFollow.isEnabled()) return;
-             
-             btnFollow.setEnabled(false); // Блокируем от двойных кликов
+             btnFollow.setEnabled(false); 
              
              boolean currentStatus = (boolean) btnFollow.getTag();
              boolean nextStatus = !currentStatus;
@@ -216,7 +214,6 @@ public class OtherProfileFragment extends Fragment {
              updateFollowButton(btnFollow, nextStatus);
              prefetchFollowCache.put(targetUid, nextStatus); 
              
-             // ЛОКАЛЬНЫЙ ПОДСЧЕТ (защита от задержек сервера)
              try {
                  if (txtFollowersCount != null) {
                      int count = Integer.parseInt(txtFollowersCount.getText().toString());
@@ -229,16 +226,12 @@ public class OtherProfileFragment extends Fragment {
              if (activity.vpsToken != null) {
                  VpsApi.setFollow(activity.vpsToken, targetUid, nextStatus, new VpsApi.Callback() {
                      @Override public void onSuccess(String s) { 
-                         // Никаких refreshCounts()! Локальная цифра уже верная.
-                         uiHandler.post(() -> {
-                             if (isAdded() && btnFollow != null) btnFollow.setEnabled(true);
-                         });
+                         uiHandler.post(() -> { if (isAdded() && btnFollow != null) btnFollow.setEnabled(true); });
                      }
                      @Override public void onError(String err) {
                          uiHandler.post(() -> {
                              if (isAdded()) {
                                  btnFollow.setEnabled(true);
-                                 // Если ошибка - откатываем всё назад
                                  btnFollow.setTag(currentStatus);
                                  updateFollowButton(btnFollow, currentStatus);
                                  prefetchFollowCache.put(targetUid, currentStatus);
@@ -301,15 +294,15 @@ public class OtherProfileFragment extends Fragment {
         return wrapper; 
     }
 
-    // === БРОНЕБОЙНАЯ ОБОЛОЧКА (ЗАЩИТА ОТ ТОНКОЙ ПОЛОСКИ) ===
+    // === ЖЕЛЕЗНЫЙ БЛОК: Не даем StatsHelper'у воскресить пустую полоску ===
     private void applyCollapseSafely(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
-        StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
-        // Если StatsHelper попытался включить пустой контейнер - глушим его
         if (container != null && container.getChildCount() == 0) {
             container.setVisibility(View.GONE);
             if (btnExpand != null) btnExpand.setVisibility(View.GONE);
             if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
+            return; // StatsHelper сюда даже не доберется!
         }
+        StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
     }
 
     private void refreshCounts(MainActivity activity) {
