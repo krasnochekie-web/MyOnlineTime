@@ -18,12 +18,16 @@ import androidx.work.WorkerParameters;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.android.gms.auth.api.signin.GoogleSignInClient;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+import com.google.android.gms.tasks.Tasks;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 
 import java.util.Calendar;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 
 public class WeeklyStatsWorker extends Worker {
 
@@ -95,24 +99,48 @@ public class WeeklyStatsWorker extends Worker {
 
         String actionText = context.getString(R.string.notif_action_click);
         
-        // Вызываем сохранение на сервер и показ пуша
-        saveToServer(context, mainText, actionText);
+        // CountDownLatch гарантирует, что Worker не умрет до завершения сетевого запроса
+        final CountDownLatch latch = new CountDownLatch(1);
+
+        saveToServer(context, mainText, actionText, latch);
         sendNotification(context, mainText, actionText);
+
+        try { latch.await(); } catch (InterruptedException e) {}
 
         return Result.success();
     }
 
-    // === СОХРАНЕНИЕ В БАЗУ ДАННЫХ ===
-    private void saveToServer(Context context, String mainText, String actionText) {
-        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(context);
-        if (account != null && account.getIdToken() != null) {
-            VpsApi.authenticateWithGoogle(context, account.getIdToken(), new VpsApi.LoginCallback() {
+    // === СОХРАНЕНИЕ В БАЗУ ДАННЫХ (С ПОЛУЧЕНИЕМ СВЕЖЕГО ТОКЕНА) ===
+    private void saveToServer(Context context, String mainText, String actionText, CountDownLatch latch) {
+        String freshToken = null;
+        try {
+            GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                    .requestIdToken("603306715003-0ptgu4fqnldcsoon9niprvi772m2ebks.apps.googleusercontent.com")
+                    .requestEmail().build();
+            GoogleSignInClient client = GoogleSignIn.getClient(context, gso);
+            
+            // Запрашиваем новый токен синхронно, так как мы уже в фоновом потоке Worker'а
+            GoogleSignInAccount account = Tasks.await(client.silentSignIn());
+            freshToken = account.getIdToken();
+        } catch (Exception e) {
+            // Фолбэк на кэш, если нет сети
+            GoogleSignInAccount cached = GoogleSignIn.getLastSignedInAccount(context);
+            if (cached != null) freshToken = cached.getIdToken();
+        }
+
+        if (freshToken != null) {
+            VpsApi.authenticateWithGoogle(context, freshToken, new VpsApi.LoginCallback() {
                 @Override
                 public void onSuccess(String token) {
-                    VpsApi.addTimeNotification(token, mainText, actionText, null);
+                    VpsApi.addTimeNotification(token, mainText, actionText, new VpsApi.Callback() {
+                        @Override public void onSuccess(String result) { latch.countDown(); }
+                        @Override public void onError(String error) { latch.countDown(); }
+                    });
                 }
-                @Override public void onError(String error) {}
+                @Override public void onError(String error) { latch.countDown(); }
             });
+        } else {
+            latch.countDown();
         }
     }
 
