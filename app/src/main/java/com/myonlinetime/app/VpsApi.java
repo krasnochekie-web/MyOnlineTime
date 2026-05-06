@@ -371,6 +371,33 @@ public class VpsApi {
     }
 
     // ==========================================
+    // ЗАГРУЗКА ИКОНКИ ПРИЛОЖЕНИЯ ПРЯМЫМ ПОТОКОМ БАЙТ
+    // ==========================================
+    public static void uploadAppIcon(String ourServerToken, String pkgName, byte[] iconBytes) {
+        MultipartBody body = new MultipartBody.Builder().setType(MultipartBody.FORM)
+                .addFormDataPart("pkgName", pkgName)
+                .addFormDataPart("icon", pkgName + ".png",
+                        RequestBody.create(MediaType.parse("image/png"), iconBytes))
+                .build();
+
+        Request request = createAuthedRequest("upload_icon", ourServerToken)
+                .post(body)
+                .build();
+                
+        client.newCall(request).enqueue(new okhttp3.Callback() {
+            @Override public void onFailure(Call call, IOException e) {
+                // Молча игнорируем ошибку, это фоновый процесс
+            }
+            @Override public void onResponse(Call call, Response response) throws IOException {
+                // Обязательно закрываем тело ответа, чтобы избежать утечек памяти
+                if (response.body() != null) {
+                    response.body().close();
+                }
+            }
+        });
+    }
+
+    // ==========================================
     // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
     // ==========================================
 
