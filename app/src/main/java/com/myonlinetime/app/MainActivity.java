@@ -9,8 +9,10 @@ import androidx.fragment.app.FragmentManager;
 import com.myonlinetime.app.utils.StatsHelper;
 import com.myonlinetime.app.utils.SmartHeaderManager;
 import android.app.AppOpsManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -74,6 +76,8 @@ public class MainActivity extends AppCompatActivity {
 
     private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable hideBgRunnable;
+    
+    private BroadcastReceiver badgeReceiver;
 
     private final SharedPreferences.OnSharedPreferenceChangeListener notifListener = (sharedPrefs, key) -> {
         if ("notif_history_array".equals(key)) {
@@ -89,6 +93,24 @@ public class MainActivity extends AppCompatActivity {
 
         super.onCreate(savedInstanceState);
         
+        // === РЕШЕНИЕ ПРОБЛЕМЫ С ANDROID 5.1 (СЕРТИФИКАТЫ) ===
+        VpsApi.initSslForOldAndroid(this);
+        
+        // === СЛУШАТЕЛЬ ДЛЯ МГНОВЕННОГО ОБНОВЛЕНИЯ БЕЙДЖА ОТ ВОРКЕРА ===
+        badgeReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if ("UPDATE_BADGE_BROADCAST".equals(intent.getAction())) {
+                    updateNotificationBadge();
+                }
+            }
+        };
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(badgeReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"), Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(badgeReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"));
+        }
+
         getSupportFragmentManager().registerFragmentLifecycleCallbacks(new FragmentManager.FragmentLifecycleCallbacks() {
             @Override
             public void onFragmentViewCreated(@NonNull FragmentManager fm, @NonNull Fragment f, @NonNull View v, Bundle savedInstanceState) {
@@ -231,6 +253,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        // === ВОРКЕР ВРЕМЕНИ ===
         androidx.work.PeriodicWorkRequest weeklyWorkRequest = new androidx.work.PeriodicWorkRequest.Builder(
                 com.myonlinetime.app.utils.WeeklyStatsWorker.class, 7, java.util.concurrent.TimeUnit.DAYS)
                 .build();
@@ -239,6 +262,17 @@ public class MainActivity extends AppCompatActivity {
                 "WeeklyStatsNotification",
                 androidx.work.ExistingPeriodicWorkPolicy.KEEP,
                 weeklyWorkRequest
+        );
+        
+        // === ВОРКЕР ПОДПИСЧИКОВ (НОВЫЙ) ===
+        androidx.work.PeriodicWorkRequest followerWork = new androidx.work.PeriodicWorkRequest.Builder(
+                com.myonlinetime.app.utils.FollowerSyncWorker.class, 15, java.util.concurrent.TimeUnit.MINUTES)
+                .build();
+                
+        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                "FollowerSync", 
+                androidx.work.ExistingPeriodicWorkPolicy.KEEP, 
+                followerWork
         );
 
         handleNotificationIntent(getIntent());
@@ -654,6 +688,11 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (badgeReceiver != null) {
+            try {
+                unregisterReceiver(badgeReceiver);
+            } catch (Exception ignored) {}
+        }
     }
 
     @Override
@@ -666,13 +705,20 @@ public class MainActivity extends AppCompatActivity {
     private void handleNotificationIntent(Intent intent) {
         if (intent != null && intent.hasExtra("open_tab")) {
             String tab = intent.getStringExtra("open_tab");
-            if ("time".equals(tab)) {
+            if ("time".equals(tab) || "notifications".equals(tab)) {
                 if (navigator != null && navigator.hasSubScreen()) {
                     navigator.closeSubScreen();
                 }
-                updateNavState(3); 
+                updateNavState(3); // Или другой нужный таб, 3 - время
                 navigator.switchScreen(3, null);
                 syncHeaderState(); 
+                
+                // Если надо сразу открыть историю уведомлений, имитируем клик по колокольчику
+                if ("notifications".equals(tab)) {
+                    if (navigator != null) {
+                        navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
+                    }
+                }
                 intent.removeExtra("open_tab");
             }
         }
