@@ -57,6 +57,10 @@ public class ProfileFragment extends Fragment {
     private ImageView myBgImageView; 
     private String myUid = "";
 
+    // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ ЗАЩИТЫ ОТ "ВЕЧНЫХ НУЛЕЙ" ===
+    private TextView txtFollowersCount;
+    private TextView txtFollowingCount;
+
     private View profileContentView;
 
     private String currentLoadedAvatar = null;
@@ -126,6 +130,10 @@ public class ProfileFragment extends Fragment {
         final TextView weekTimeText = originalView.findViewById(R.id.profile_week_time);
         View followersClick = originalView.findViewById(R.id.container_followers);
         View followingClick = originalView.findViewById(R.id.container_following);
+        
+        txtFollowersCount = originalView.findViewById(R.id.txt_followers_count);
+        txtFollowingCount = originalView.findViewById(R.id.txt_following_count);
+
         TextView tabTopApps = originalView.findViewById(R.id.tab_top_apps);
         if (tabTopApps != null) tabTopApps.setSelected(true); 
         
@@ -136,49 +144,30 @@ public class ProfileFragment extends Fragment {
         btnFollow.setVisibility(View.GONE);
         btnEdit.setVisibility(View.VISIBLE);
 
-        // === ИСЧЕЗНОВЕНИЕ ТОНКОЙ ПОЛОСКИ ДЛЯ СВОЕГО ПРОФИЛЯ ===
-        appsContainerLocal.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
-            @Override
-            public void onChildViewAdded(View parent, View child) { updateEmptyState(); }
-            @Override
-            public void onChildViewRemoved(View parent, View child) { updateEmptyState(); }
-            
-            private void updateEmptyState() {
-                uiHandler.post(() -> {
-                    if (!isAdded()) return;
-                    boolean hasApps = appsContainerLocal.getChildCount() > 0;
-                    appsContainerLocal.setVisibility(hasApps ? View.VISIBLE : View.GONE); // ПРЯЧЕМ КОНТЕЙНЕР
-                    if (!hasApps) {
-                        btnExpand.setVisibility(View.GONE);
-                        btnCollapse.setVisibility(View.GONE);
-                    }
-                });
-            }
-        });
-        
-        boolean initiallyHasApps = appsContainerLocal.getChildCount() > 0;
-        appsContainerLocal.setVisibility(initiallyHasApps ? View.VISIBLE : View.GONE); // ПРЯЧЕМ КОНТЕЙНЕР ПРИ СТАРТЕ
-        if (!initiallyHasApps) {
-            btnExpand.setVisibility(View.GONE);
-            btnCollapse.setVisibility(View.GONE);
-        }
-
         loadMyStatsRunnable = () -> {
             if (isAdded() && appsContainerLocal != null && weekTimeText != null) {
                 StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
+                // Убираем тонкую полоску для своего профиля после генерации
+                if (appsContainerLocal.getChildCount() == 0) {
+                    appsContainerLocal.setVisibility(View.GONE);
+                    btnExpand.setVisibility(View.GONE);
+                    btnCollapse.setVisibility(View.GONE);
+                } else {
+                    appsContainerLocal.setVisibility(View.VISIBLE);
+                }
             }
         };
 
         btnExpand.setOnClickListener(v -> {
             btnExpand.setVisibility(View.GONE);
             btnCollapse.setVisibility(View.VISIBLE);
-            StatsHelper.applyCollapseLogic(originalView.findViewById(R.id.profile_about), appsContainerLocal, btnExpand, btnCollapse);
+            applyCollapseSafely(originalView.findViewById(R.id.profile_about), appsContainerLocal, btnExpand, btnCollapse);
         });
 
         btnCollapse.setOnClickListener(v -> {
             btnCollapse.setVisibility(View.GONE);
             btnExpand.setVisibility(View.VISIBLE);
-            StatsHelper.applyCollapseLogic(originalView.findViewById(R.id.profile_about), appsContainerLocal, btnExpand, btnCollapse);
+            applyCollapseSafely(originalView.findViewById(R.id.profile_about), appsContainerLocal, btnExpand, btnCollapse);
         });
 
         followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(myUid, true)));
@@ -270,6 +259,16 @@ public class ProfileFragment extends Fragment {
         return wrapper; 
     }
 
+    // === БРОНЕБОЙНАЯ ОБОЛОЧКА ===
+    private void applyCollapseSafely(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
+        StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
+        if (container != null && container.getChildCount() == 0) {
+            container.setVisibility(View.GONE);
+            if (btnExpand != null) btnExpand.setVisibility(View.GONE);
+            if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
+        }
+    }
+
     private void updateUiFromPrefs(MainActivity activity) {
         if (getView() == null || !isAdded()) return;
         TextView nameView = getView().findViewById(R.id.profile_name);
@@ -280,7 +279,7 @@ public class ProfileFragment extends Fragment {
 
         nameView.setText(activity.prefs.getString("my_nickname", "..."));
         aboutView.setText(activity.prefs.getString("my_about", ""));
-        StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+        applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
         String b64 = activity.prefs.getString("my_photo_base64", null);
         handleMediaLoading(activity, b64, true, myUid);
@@ -315,21 +314,20 @@ public class ProfileFragment extends Fragment {
         if (activity.vpsToken == null) return;
         VpsApi.getCounts(activity.vpsToken, myUid, new VpsApi.Callback() {
             @Override public void onSuccess(String result) {
-                if (!isAdded() || getView() == null) return; 
-                try {
-                    org.json.JSONObject json = new org.json.JSONObject(result);
-                    // ЖЕСТКАЯ ВАЛИДАЦИЯ ОТ НУЛЕЙ И СБОЕВ
-                    if (json.has("followers") && !json.isNull("followers")) {
-                        int followers = json.optInt("followers", -1);
-                        TextView followersCount = getView().findViewById(R.id.txt_followers_count);
-                        if (followers >= 0 && followersCount != null) followersCount.setText(String.valueOf(followers));
-                    }
-                    if (json.has("following") && !json.isNull("following")) {
-                        int following = json.optInt("following", -1);
-                        TextView followingCount = getView().findViewById(R.id.txt_following_count);
-                        if (following >= 0 && followingCount != null) followingCount.setText(String.valueOf(following));
-                    }
-                } catch (Exception e) {}
+                uiHandler.post(() -> {
+                    if (!isAdded()) return; 
+                    try {
+                        org.json.JSONObject json = new org.json.JSONObject(result);
+                        if (json.has("followers") && !json.isNull("followers")) {
+                            int followers = json.optInt("followers", -1);
+                            if (followers >= 0 && txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(followers));
+                        }
+                        if (json.has("following") && !json.isNull("following")) {
+                            int following = json.optInt("following", -1);
+                            if (following >= 0 && txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
+                        }
+                    } catch (Exception e) {}
+                });
             }
             @Override public void onError(String error) {}
         });
