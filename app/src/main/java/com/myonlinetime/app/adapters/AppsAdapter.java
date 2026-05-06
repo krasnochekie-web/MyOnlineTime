@@ -21,9 +21,13 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.bumptech.glide.Glide;
+import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
+import com.myonlinetime.app.VpsApi;
 import com.myonlinetime.app.utils.Utils;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
@@ -45,6 +49,9 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
     private int visibleLimit;
     private boolean hasStartedExpanding = false;
 
+    // === НОВЫЙ ФЛАГ ДЛЯ ОПРЕДЕЛЕНИЯ ВЛАДЕЛЬЦА ПРОФИЛЯ ===
+    private boolean isMyProfile = true; 
+
     private final ExecutorService executorService;
     private final Handler mainHandler;
     
@@ -64,12 +71,16 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         this.executorService = Executors.newFixedThreadPool(4);
         this.mainHandler = new Handler(Looper.getMainLooper());
 
-        // Инициализируем нашу вечную базу данных
         this.dbNames = context.getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
         this.dbIconsDir = new File(context.getFilesDir(), "saved_app_icons");
         if (!this.dbIconsDir.exists()) {
             this.dbIconsDir.mkdirs();
         }
+    }
+
+    // Метод для переключения логики Корзины и Иконок (вызывай его при просмотре чужих профилей!)
+    public void setIsMyProfile(boolean isMyProfile) {
+        this.isMyProfile = isMyProfile;
     }
 
     public void updateData(List<String> newPackages, Map<String, Long> newTimes) {
@@ -118,18 +129,9 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         return new AppViewHolder(view);
     }
 
-    // Сохранение иконки в файл
     private void saveIconToDisk(Drawable drawable, String pkgName) {
         try {
-            Bitmap bitmap;
-            if (drawable instanceof BitmapDrawable) {
-                bitmap = ((BitmapDrawable) drawable).getBitmap();
-            } else {
-                bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
-                Canvas canvas = new Canvas(bitmap);
-                drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
-                drawable.draw(canvas);
-            }
+            Bitmap bitmap = drawableToBitmap(drawable);
             File file = new File(dbIconsDir, pkgName + ".png");
             FileOutputStream out = new FileOutputStream(file);
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
@@ -138,7 +140,38 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         } catch (Exception ignored) { }
     }
 
-    // Умный парсер для совсем уж мертвых пакетов
+    // === P2P МАГИЯ: Загружаем найденную иконку на сервер ===
+    private void uploadIconToServerBackground(Drawable drawable, String pkgName) {
+        try {
+            if (context instanceof MainActivity) {
+                String token = ((MainActivity) context).vpsToken;
+                if (token != null) {
+                    Bitmap bitmap = drawableToBitmap(drawable);
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    // Сжимаем в PNG для идеального качества (или WebP для размера)
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, baos);
+                    byte[] iconBytes = baos.toByteArray();
+                    
+                    // Тихая фоновая отправка
+                    VpsApi.uploadAppIcon(token, pkgName, iconBytes);
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private Bitmap drawableToBitmap(Drawable drawable) {
+        if (drawable instanceof BitmapDrawable) {
+            return ((BitmapDrawable) drawable).getBitmap();
+        }
+        int width = Math.max(1, drawable.getIntrinsicWidth());
+        int height = Math.max(1, drawable.getIntrinsicHeight());
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawable.draw(canvas);
+        return bitmap;
+    }
+
     private String formatDeletedAppName(String pkg) {
         try {
             String[] parts = pkg.split("\\.");
@@ -197,33 +230,42 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         holder.currentPkg = pkg;
         holder.iconView.setImageDrawable(null); 
 
-        // 1. ПРОВЕРЯЕМ, УДАЛЕНО ЛИ ПРИЛОЖЕНИЕ (Умная проверка системных флагов)
+        // 1. УМНАЯ ПРОВЕРКА "КОРЗИНЫ" В ЗАВИСИМОСТИ ОТ ВЛАДЕЛЬЦА
         boolean isDeleted = false;
         ApplicationInfo activeAppInfo = null;
 
-        try {
-            activeAppInfo = pm.getApplicationInfo(pkg, 0);
-        } catch (PackageManager.NameNotFoundException e) {
+        if (isMyProfile) {
+            // ЛОГИКА ДЛЯ ТВОЕГО ПРОФИЛЯ: Прямой запрос к системе телефона
             try {
-                int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
-                           PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
-                activeAppInfo = pm.getApplicationInfo(pkg, flag);
-                
-                // СПАСАЕМ СИСТЕМНЫЕ ПРИЛОЖЕНИЯ: Проверяем, скрыто ли оно оболочкой
-                boolean isInstalled = (activeAppInfo.flags & ApplicationInfo.FLAG_INSTALLED) != 0;
-                boolean isSystemApp = (activeAppInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
-                
-                if (!isInstalled && !isSystemApp) {
-                    isDeleted = true; // Физически удалено пользователем
-                } else {
-                    isDeleted = false; // Просто отключенный/скрытый системный процесс
+                activeAppInfo = pm.getApplicationInfo(pkg, 0);
+            } catch (PackageManager.NameNotFoundException e) {
+                try {
+                    int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
+                               PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
+                    activeAppInfo = pm.getApplicationInfo(pkg, flag);
+                    
+                    boolean isInstalled = (activeAppInfo.flags & ApplicationInfo.FLAG_INSTALLED) != 0;
+                    boolean isSystemApp = (activeAppInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+                    
+                    if (!isInstalled && !isSystemApp) {
+                        isDeleted = true; // Физически удалено тобой
+                    } else {
+                        isDeleted = false; // Скрыто оболочкой
+                    }
+                } catch (PackageManager.NameNotFoundException ignored) {
+                    isDeleted = true; // Система вообще не знает этот пакет
                 }
-            } catch (PackageManager.NameNotFoundException ignored) {
-                isDeleted = true; // Система вообще не знает этот пакет - 100% удален
             }
+        } else {
+            // ЛОГИКА ДЛЯ ЧУЖОГО ПРОФИЛЯ: Доверяем только времени с сервера!
+            if (exactTime != null && exactTime == 0L) {
+                isDeleted = true; // Пользователь удалил приложение у себя
+            }
+            // Всё равно пытаемся найти локальную инфу, чтобы красиво отрисовать имя
+            try { activeAppInfo = pm.getApplicationInfo(pkg, 0); } 
+            catch (PackageManager.NameNotFoundException ignored) {}
         }
 
-        // Показываем или прячем корзину
         if (isDeleted && holder.iconDeleted != null) {
             holder.iconDeleted.setVisibility(View.VISIBLE);
             holder.iconDeleted.setOnClickListener(v -> 
@@ -234,7 +276,7 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
             holder.iconDeleted.setOnClickListener(null);
         }
 
-        // 2. ДОСТАЕМ ИМЯ (RAM -> Диск -> Система)
+        // 2. ДОСТАЕМ ИМЯ
         String finalName = nameCache.get(pkg);
         if (finalName != null) {
             holder.nameView.setText(finalName);
@@ -244,23 +286,21 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
                 nameCache.put(pkg, finalName);
                 holder.nameView.setText(finalName);
             } else if (activeAppInfo != null) {
-                // Впервые видим живое приложение! Сохраняем навсегда в базу
                 finalName = pm.getApplicationLabel(activeAppInfo).toString();
                 dbNames.edit().putString(pkg, finalName).apply();
                 nameCache.put(pkg, finalName);
                 holder.nameView.setText(finalName);
             } else {
-                // Приложение уже удалено, и в базе его нет. Запускаем парсер.
                 holder.nameView.setText(formatDeletedAppName(pkg));
             }
         }
 
-        // 3. ДОСТАЕМ ИКОНКУ (RAM -> Диск -> Система)
+        // 3. ДОСТАЕМ ИКОНКУ (Локально ИЛИ через P2P сервер)
         Drawable cachedIcon = iconCache.get(pkg);
         if (cachedIcon != null) {
             holder.iconView.setImageDrawable(cachedIcon);
         } else {
-            holder.iconView.setImageResource(android.R.drawable.sym_def_app_icon);
+            holder.iconView.setImageResource(android.R.drawable.sym_def_app_icon); // Заглушка на время загрузки
             final ApplicationInfo finalAppInfo = activeAppInfo; 
             
             executorService.execute(() -> {
@@ -268,22 +308,39 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
                     Drawable appIcon = null;
                     File diskIcon = new File(dbIconsDir, pkg + ".png");
                     
-                    // Ищем на диске
+                    // А. Ищем на диске
                     if (diskIcon.exists()) {
                         appIcon = Drawable.createFromPath(diskIcon.getAbsolutePath());
                     } 
-                    // Если на диске нет, но приложение еще живое - достаем из системы и СОХРАНЯЕМ
+                    // Б. Если на диске нет, но приложение у нас есть - достаем из системы
                     else if (finalAppInfo != null) {
                         appIcon = pm.getApplicationIcon(finalAppInfo);
                         saveIconToDisk(appIcon, pkg);
+                        
+                        // Закидываем иконку на сервер для других пользователей! (P2P база)
+                        uploadIconToServerBackground(appIcon, pkg);
                     }
 
+                    // Если иконка нашлась ЛОКАЛЬНО
                     if (appIcon != null) {
                         iconCache.put(pkg, appIcon);
                         final Drawable finalIconToSet = appIcon;
                         mainHandler.post(() -> {
                             if (pkg.equals(holder.currentPkg)) {
                                 holder.iconView.setImageDrawable(finalIconToSet);
+                            }
+                        });
+                    } 
+                    // В. Если приложения у нас НЕТ, тянем иконку с сервера (P2P раздача)
+                    else {
+                        mainHandler.post(() -> {
+                            if (pkg.equals(holder.currentPkg)) {
+                                String iconUrl = "https://api.krasnocraft.ru/icons/" + pkg + ".png";
+                                Glide.with(context)
+                                     .load(iconUrl)
+                                     .placeholder(android.R.drawable.sym_def_app_icon)
+                                     .error(R.drawable.ic_nav_settings) // Если иконку еще никто в мире не загрузил
+                                     .into(holder.iconView);
                             }
                         });
                     }
