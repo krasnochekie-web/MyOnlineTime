@@ -7,6 +7,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -32,6 +33,7 @@ public class NotificationsHistoryFragment extends Fragment {
     private Runnable hideBgRunnable;
     private RecyclerView recycler;
     private TextView emptyText;
+    private ProgressBar loadingSpinner;
     private NotificationsAdapter adapter;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
@@ -44,6 +46,8 @@ public class NotificationsHistoryFragment extends Fragment {
 
         recycler = view.findViewById(R.id.recycler_notifications);
         emptyText = view.findViewById(R.id.empty_notif_text);
+        loadingSpinner = view.findViewById(R.id.loading_spinner);
+        
         recycler.setLayoutManager(new LinearLayoutManager(getContext()));
 
         loadHistory();
@@ -58,11 +62,18 @@ public class NotificationsHistoryFragment extends Fragment {
             return;
         }
 
+        // Показываем крутилку перед запросом
+        loadingSpinner.setVisibility(View.VISIBLE);
+        recycler.setVisibility(View.GONE);
+        emptyText.setVisibility(View.GONE);
+
         VpsApi.getNotificationsHistory(activity.vpsToken, new VpsApi.Callback() {
             @Override
             public void onSuccess(String result) {
                 uiHandler.post(() -> {
                     if (!isAdded()) return;
+                    loadingSpinner.setVisibility(View.GONE); // Прячем крутилку
+                    
                     try {
                         JSONArray array = new JSONArray(result);
                         List<NotificationModels.NotificationItem> items = new ArrayList<>();
@@ -116,6 +127,7 @@ public class NotificationsHistoryFragment extends Fragment {
             public void onError(String error) {
                 uiHandler.post(() -> {
                     if (isAdded()) {
+                        loadingSpinner.setVisibility(View.GONE); // Прячем крутилку при ошибке
                         showEmptyState();
                         Toast.makeText(getContext(), getString(R.string.err_server) + error, Toast.LENGTH_SHORT).show();
                     }
@@ -125,6 +137,7 @@ public class NotificationsHistoryFragment extends Fragment {
     }
 
     private void showEmptyState() {
+        loadingSpinner.setVisibility(View.GONE);
         recycler.setVisibility(View.GONE);
         emptyText.setVisibility(View.VISIBLE);
     }
