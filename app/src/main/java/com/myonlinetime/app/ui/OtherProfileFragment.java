@@ -584,7 +584,7 @@ public class OtherProfileFragment extends Fragment {
                             Glide.with(activity)
                                  .load(iconUrl)
                                  .placeholder(android.R.drawable.sym_def_app_icon)
-                                 .error(R.drawable.ic_nav_settings)
+                                 .error(android.R.drawable.sym_def_app_icon)
                                  .into(iconView);
                         }
                         
