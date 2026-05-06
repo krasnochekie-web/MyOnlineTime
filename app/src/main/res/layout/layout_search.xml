@@ -35,7 +35,7 @@
                 android:drawablePadding="10dp"
                 android:singleLine="true"/>
 
-            <!-- ИДЕАЛЬНАЯ КРУГЛАЯ ВОЛНА: Убрали старый фон, поставили Borderless -->
+            <!-- ИСПРАВЛЕНИЕ: Крестик строго как в твоем диалоге -->
             <ImageView
                 android:id="@+id/search_clear_btn"
                 android:layout_width="25dp"
@@ -43,7 +43,7 @@
                 android:layout_alignParentRight="true"
                 android:layout_centerVertical="true"
                 android:layout_marginRight="10dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                android:background="@drawable/bg_close_circle"
                 android:padding="3.5dp"
                 android:clickable="true"
                 android:focusable="true"
