@@ -39,11 +39,17 @@ public class OtherProfileFragment extends Fragment {
     private String targetUid = "";
     private String backTitle = "";
 
+    // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ ЗАЩИТЫ ОТ "ВЕЧНЫХ НУЛЕЙ" ===
+    private TextView txtFollowersCount;
+    private TextView txtFollowingCount;
+
     private float lastTouchX = 0;
     private float lastTouchY = 0;
     
     private long renderGeneration = 0;
-    private long fragmentCreationTime = 0; // Время старта анимации экрана
+    private long fragmentCreationTime = 0;
+    
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
     public static final android.util.LruCache<String, User> prefetchUserCache = new android.util.LruCache<>(15);
     public static final android.util.LruCache<String, String> prefetchCountsCache = new android.util.LruCache<>(15);
@@ -96,7 +102,7 @@ public class OtherProfileFragment extends Fragment {
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        fragmentCreationTime = System.currentTimeMillis(); // Фиксируем старт экрана
+        fragmentCreationTime = System.currentTimeMillis(); 
         
         final MainActivity activity = (MainActivity) getActivity();
         
@@ -127,8 +133,10 @@ public class OtherProfileFragment extends Fragment {
         
         final View btnEdit = originalView.findViewById(R.id.btn_edit_profile);
         final Button btnFollow = originalView.findViewById(R.id.btn_follow);
-        final TextView followersCount = originalView.findViewById(R.id.txt_followers_count);
-        final TextView followingCount = originalView.findViewById(R.id.txt_following_count);
+        
+        txtFollowersCount = originalView.findViewById(R.id.txt_followers_count);
+        txtFollowingCount = originalView.findViewById(R.id.txt_following_count);
+        
         final TextView weekTimeText = originalView.findViewById(R.id.profile_week_time);
         View followersClick = originalView.findViewById(R.id.container_followers);
         View followingClick = originalView.findViewById(R.id.container_following);
@@ -164,7 +172,7 @@ public class OtherProfileFragment extends Fragment {
         }
 
         String cachedCounts = prefetchCountsCache.get(targetUid);
-        if (cachedCounts != null) applyCountsJson(cachedCounts, followersCount, followingCount);
+        if (cachedCounts != null) applyCountsJson(cachedCounts);
 
         Boolean cachedFollow = prefetchFollowCache.get(targetUid);
         if (cachedFollow != null) {
@@ -176,13 +184,13 @@ public class OtherProfileFragment extends Fragment {
         btnExpand.setOnClickListener(v -> {
             btnExpand.setVisibility(View.GONE);
             btnCollapse.setVisibility(View.VISIBLE);
-            StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+            applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
         });
 
         btnCollapse.setOnClickListener(v -> {
             btnCollapse.setVisibility(View.GONE);
             btnExpand.setVisibility(View.VISIBLE);
-            StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+            applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
         });
 
         followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(targetUid, true)));
@@ -199,7 +207,7 @@ public class OtherProfileFragment extends Fragment {
         btnFollow.setOnClickListener(v -> {
              if (btnFollow.getTag() == null || !btnFollow.isEnabled()) return;
              
-             btnFollow.setEnabled(false); // ЗАЩИТА ОТ СПАМ-КЛИКОВ И НУЛЕЙ
+             btnFollow.setEnabled(false); // Блокируем от двойных кликов
              
              boolean currentStatus = (boolean) btnFollow.getTag();
              boolean nextStatus = !currentStatus;
@@ -208,24 +216,43 @@ public class OtherProfileFragment extends Fragment {
              updateFollowButton(btnFollow, nextStatus);
              prefetchFollowCache.put(targetUid, nextStatus); 
              
+             // ЛОКАЛЬНЫЙ ПОДСЧЕТ (защита от задержек сервера)
              try {
-                 int count = Integer.parseInt(followersCount.getText().toString());
-                 count = nextStatus ? count + 1 : count - 1;
-                 if (count < 0) count = 0;
-                 followersCount.setText(String.valueOf(count));
+                 if (txtFollowersCount != null) {
+                     int count = Integer.parseInt(txtFollowersCount.getText().toString());
+                     count = nextStatus ? count + 1 : count - 1;
+                     if (count < 0) count = 0;
+                     txtFollowersCount.setText(String.valueOf(count));
+                 }
              } catch (Exception e) {}
              
              if (activity.vpsToken != null) {
                  VpsApi.setFollow(activity.vpsToken, targetUid, nextStatus, new VpsApi.Callback() {
                      @Override public void onSuccess(String s) { 
-                         refreshCounts(activity); 
-                         if (isAdded()) btnFollow.setEnabled(true);
+                         // Никаких refreshCounts()! Локальная цифра уже верная.
+                         uiHandler.post(() -> {
+                             if (isAdded() && btnFollow != null) btnFollow.setEnabled(true);
+                         });
                      }
                      @Override public void onError(String err) {
-                         if (isAdded()) {
-                             btnFollow.setEnabled(true);
-                             Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
-                         }
+                         uiHandler.post(() -> {
+                             if (isAdded()) {
+                                 btnFollow.setEnabled(true);
+                                 // Если ошибка - откатываем всё назад
+                                 btnFollow.setTag(currentStatus);
+                                 updateFollowButton(btnFollow, currentStatus);
+                                 prefetchFollowCache.put(targetUid, currentStatus);
+                                 try {
+                                     if (txtFollowersCount != null) {
+                                         int c = Integer.parseInt(txtFollowersCount.getText().toString());
+                                         c = currentStatus ? c + 1 : c - 1;
+                                         if (c < 0) c = 0;
+                                         txtFollowersCount.setText(String.valueOf(c));
+                                     }
+                                 } catch(Exception e){}
+                                 Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
+                             }
+                         });
                      }
                  });
              }
@@ -240,7 +267,8 @@ public class OtherProfileFragment extends Fragment {
                         prefetchUserCache.put(targetUid, user); 
                         nameView.setText(user.nickname != null ? user.nickname : activity.getString(R.string.no_name));
                         aboutView.setText(user.about != null ? user.about : "");
-                        StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+                        
+                        applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
                         if (user.photo != null && user.photo.length() > 5) handleMediaLoading(activity, user.photo);
                         renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
@@ -273,29 +301,41 @@ public class OtherProfileFragment extends Fragment {
         return wrapper; 
     }
 
+    // === БРОНЕБОЙНАЯ ОБОЛОЧКА (ЗАЩИТА ОТ ТОНКОЙ ПОЛОСКИ) ===
+    private void applyCollapseSafely(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
+        StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
+        // Если StatsHelper попытался включить пустой контейнер - глушим его
+        if (container != null && container.getChildCount() == 0) {
+            container.setVisibility(View.GONE);
+            if (btnExpand != null) btnExpand.setVisibility(View.GONE);
+            if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
+        }
+    }
+
     private void refreshCounts(MainActivity activity) {
         if (activity.vpsToken == null) return;
         VpsApi.getCounts(activity.vpsToken, targetUid, new VpsApi.Callback() {
             @Override public void onSuccess(String result) {
-                if (!isAdded() || getView() == null) return; 
-                prefetchCountsCache.put(targetUid, result);
-                applyCountsJson(result, getView().findViewById(R.id.txt_followers_count), getView().findViewById(R.id.txt_following_count));
+                uiHandler.post(() -> {
+                    if (!isAdded()) return; 
+                    prefetchCountsCache.put(targetUid, result);
+                    applyCountsJson(result);
+                });
             }
             @Override public void onError(String error) {}
         });
     }
 
-    private void applyCountsJson(String jsonStr, TextView followersCount, TextView followingCount) {
+    private void applyCountsJson(String jsonStr) {
         try {
             org.json.JSONObject json = new org.json.JSONObject(jsonStr);
-            // ЖЕСТКАЯ ВАЛИДАЦИЯ ОТ НУЛЕЙ И СБОЕВ
             if (json.has("followers") && !json.isNull("followers")) {
                 int followers = json.optInt("followers", -1);
-                if (followers >= 0 && followersCount != null) followersCount.setText(String.valueOf(followers));
+                if (followers >= 0 && txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(followers));
             }
             if (json.has("following") && !json.isNull("following")) {
                 int following = json.optInt("following", -1);
-                if (following >= 0 && followingCount != null) followingCount.setText(String.valueOf(following));
+                if (following >= 0 && txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
             }
         } catch (Exception e) {}
     }
@@ -343,11 +383,11 @@ public class OtherProfileFragment extends Fragment {
         final long myGen = ++renderGeneration;
 
         if (topApps == null || topApps.isEmpty()) {
-            new Handler(Looper.getMainLooper()).post(() -> {
+            uiHandler.post(() -> {
                 if (myGen != renderGeneration || !isAdded()) return;
                 if (container != null) {
                     container.removeAllViews();
-                    container.setVisibility(View.GONE); // ИСЧЕЗАЕТ САМА ТОНКАЯ ПОЛОСКА
+                    container.setVisibility(View.GONE); 
                 }
                 if (btnExpand != null) btnExpand.setVisibility(View.GONE);
                 if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
@@ -433,11 +473,10 @@ public class OtherProfileFragment extends Fragment {
                 
             } catch (Exception e) { e.printStackTrace(); }
 
-            // === УМНАЯ ЗАДЕРЖКА ДЛЯ УСТРАНЕНИЯ РВАНОЙ АНИМАЦИИ ===
             long elapsed = System.currentTimeMillis() - fragmentCreationTime;
-            long delay = Math.max(0, 350 - elapsed); // Ждем завершения анимации перехода (350мс)
+            long delay = Math.max(0, 350 - elapsed); 
 
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            uiHandler.postDelayed(() -> {
                 if (!isAdded() || myGen != renderGeneration) return;
 
                 if (container != null) {
@@ -446,7 +485,7 @@ public class OtherProfileFragment extends Fragment {
                 }
 
                 if (preloadedData.isEmpty()) {
-                    if (container != null) container.setVisibility(View.GONE); // ИСЧЕЗАЕТ ПОЛОСКА
+                    if (container != null) container.setVisibility(View.GONE);
                     if (btnExpand != null) btnExpand.setVisibility(View.GONE);
                     if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
                 } else {
@@ -488,6 +527,7 @@ public class OtherProfileFragment extends Fragment {
                         }
                         if (container != null) container.addView(view);
                     }
+                    applyCollapseSafely(aboutView, container, btnExpand, btnCollapse);
                 }
 
                 long timeToShow = Math.max(serverTotalTime, totalVisibleTime[0]);
@@ -499,9 +539,7 @@ public class OtherProfileFragment extends Fragment {
                     weekTimeText.setText(hours > 0 ? activity.getString(R.string.format_hours_mins, hours, mins) : activity.getString(R.string.format_mins, mins));
                     weekTimeText.setOnClickListener(null); 
                 }
-
-                StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
-            }, delay); // Отрисовка сработает строго после того, как экран плавно заехал
+            }, delay); 
         });
     }
 
