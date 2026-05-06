@@ -202,7 +202,7 @@ public class OtherProfileFragment extends Fragment {
 
         User cachedUser = prefetchUserCache.get(targetUid);
         if (cachedUser != null) {
-            renderOtherUserStats(cachedUser.topApps, cachedUser.totalTime, cachedUser.hiddenApps, cachedUser.appDescriptions, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
+            renderOtherUserStats(cachedUser.topApps, cachedUser.totalTime, cachedUser.hiddenApps, cachedUser.appDescriptions, cachedUser.resolvedNames, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
             if (cachedUser.background != null && cachedUser.background.length() > 5) {
                 Glide.with(activity).load(cachedUser.background).centerCrop().into(bgImageView);
             }
@@ -310,7 +310,7 @@ public class OtherProfileFragment extends Fragment {
                         applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
                         if (user.photo != null && user.photo.length() > 5) handleMediaLoading(activity, user.photo);
-                        renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
+                        renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, user.resolvedNames, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
 
                         if (user.background != null && user.background.length() > 5) {
                             Glide.with(activity).load(user.background).centerCrop().into(bgImageView);
@@ -439,7 +439,7 @@ public class OtherProfileFragment extends Fragment {
         }
     }
 
-    private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
+    private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, Map<String, String> resolvedNames, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
         final long myGen = ++renderGeneration;
 
         if (topApps == null || topApps.isEmpty()) {
@@ -501,13 +501,16 @@ public class OtherProfileFragment extends Fragment {
                         appInfo = pm.getApplicationInfo(pkgName, 0);
                     } catch (PackageManager.NameNotFoundException ignored) {}
 
+                    // === P2P МАГИЯ ИМЕН: Локальный кэш -> Оф. система -> Серверная База -> Умный фолбэк ===
                     String cachedName = dbNames.getString(pkgName, null);
-                    if (cachedName != null) data.appName = cachedName;
-                    else if (appInfo != null) data.appName = pm.getApplicationLabel(appInfo).toString();
-                    else {
-                        String[] parts = pkgName.split("\\.");
-                        String name = parts[parts.length - 1]; 
-                        data.appName = name.substring(0, 1).toUpperCase() + name.substring(1); 
+                    if (cachedName != null) {
+                        data.appName = cachedName;
+                    } else if (appInfo != null) {
+                        data.appName = pm.getApplicationLabel(appInfo).toString();
+                    } else if (resolvedNames != null && resolvedNames.containsKey(pkgName)) {
+                        data.appName = resolvedNames.get(pkgName);
+                    } else {
+                        data.appName = getSmartAppName(pkgName); 
                     }
 
                     if (appInfo != null) {
@@ -617,13 +620,43 @@ public class OtherProfileFragment extends Fragment {
         });
     }
 
-    private String formatDeletedAppName(String pkg) {
-        try {
-            String[] parts = pkg.split("\\.");
-            String name = parts[parts.length - 1]; 
-            return name.substring(0, 1).toUpperCase() + name.substring(1); 
-        } catch (Exception e) {
-            return pkg;
+    // === УМНЫЙ СЛОВАРЬ (Фолбэк) ===
+    private String getSmartAppName(String pkg) {
+        if (pkg == null) return "Unknown";
+        switch (pkg.toLowerCase()) {
+            case "org.telegram.messenger": return "Telegram";
+            case "com.whatsapp": return "WhatsApp";
+            case "com.instagram.android": return "Instagram";
+            case "com.zhiliaoapp.musically":
+            case "com.ss.android.ugc.aweme": return "TikTok";
+            case "com.google.android.youtube": return "YouTube";
+            case "com.yandex.browser": return "Яндекс Браузер";
+            case "com.android.chrome": return "Google Chrome";
+            case "com.vkontakte.android": return "ВКонтакте";
+            case "com.viber.voip": return "Viber";
+            case "com.snapchat.android": return "Snapchat";
+            case "com.spotify.android": return "Spotify";
+            case "com.twitter.android": return "X (Twitter)";
+            case "tv.twitch.android.app": return "Twitch";
+            case "com.discord": return "Discord";
+            case "com.skype.rover": return "Skype";
+            case "com.facebook.katana":
+            case "com.facebook.lite": return "Facebook";
+            case "com.netflix.mediaclient": return "Netflix";
+            case "ru.yandex.music": return "Яндекс Музыка";
+            case "com.miHoYo.GenshinImpact": return "Genshin Impact";
+            case "com.tencent.ig": return "PUBG Mobile";
+            default:
+                try {
+                    String[] parts = pkg.split("\\.");
+                    String name = parts[parts.length - 1]; 
+                    if (name.equalsIgnoreCase("app") || name.equalsIgnoreCase("android") || name.equalsIgnoreCase("messenger") || name.equalsIgnoreCase("lite")) {
+                        name = parts[parts.length - 2]; 
+                    }
+                    return name.substring(0, 1).toUpperCase() + name.substring(1); 
+                } catch (Exception e) {
+                    return pkg;
+                }
         }
     }
 
