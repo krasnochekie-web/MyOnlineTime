@@ -135,7 +135,10 @@ public class OtherProfileFragment extends Fragment {
         View followingClick = originalView.findViewById(R.id.container_following);
 
         TextView tabTopApps = originalView.findViewById(R.id.tab_top_apps);
-        if (tabTopApps != null) tabTopApps.setSelected(true); 
+        if (tabTopApps != null) {
+            tabTopApps.setVisibility(View.VISIBLE); // ЖЕСТКО ЗАФИКСИРОВАНО
+            tabTopApps.setSelected(true); // ЖЕСТКО ВЫДЕЛЕНО
+        }
         
         final ImageView btnExpand = originalView.findViewById(R.id.btn_expand_apps);
         final ImageView btnCollapse = originalView.findViewById(R.id.btn_collapse_apps);
@@ -143,7 +146,7 @@ public class OtherProfileFragment extends Fragment {
 
         btnEdit.setVisibility(View.GONE);
 
-        // === УНИЧТОЖЕНИЕ ПОЛОСКИ ДЛЯ ЧУЖОГО ПРОФИЛЯ ===
+        // === ЖЕСТКОЕ УНИЧТОЖЕНИЕ ПОЛОСКИ БЕЗ ЗАТРАГИВАНИЯ ЗАГОЛОВКА ===
         appsContainerLocal.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
             @Override
             public void onChildViewAdded(View parent, View child) { updateEmptyState(); }
@@ -155,8 +158,6 @@ public class OtherProfileFragment extends Fragment {
                     if (!isAdded() || getView() == null) return;
                     boolean hasApps = appsContainerLocal.getChildCount() > 0;
                     appsContainerLocal.setVisibility(hasApps ? View.VISIBLE : View.GONE);
-                    TextView currentTab = getView().findViewById(R.id.tab_top_apps);
-                    if (currentTab != null) currentTab.setVisibility(hasApps ? View.VISIBLE : View.GONE);
                     if (!hasApps) {
                         btnExpand.setVisibility(View.GONE);
                         btnCollapse.setVisibility(View.GONE);
@@ -167,13 +168,11 @@ public class OtherProfileFragment extends Fragment {
         
         boolean initiallyHasApps = appsContainerLocal.getChildCount() > 0;
         appsContainerLocal.setVisibility(initiallyHasApps ? View.VISIBLE : View.GONE);
-        if (tabTopApps != null) tabTopApps.setVisibility(initiallyHasApps ? View.VISIBLE : View.GONE);
         if (!initiallyHasApps) {
             btnExpand.setVisibility(View.GONE);
             btnCollapse.setVisibility(View.GONE);
         }
 
-        // === ИСПРАВЛЕНИЕ МОРГАНИЯ ОПИСАНИЯ ===
         String argName = getArguments() != null ? getArguments().getString("PREFETCH_NICKNAME", "") : "";
         String argAbout = getArguments() != null ? getArguments().getString("PREFETCH_ABOUT", "") : "";
         String argPhoto = getArguments() != null ? getArguments().getString("PREFETCH_PHOTO", "") : "";
@@ -186,7 +185,7 @@ public class OtherProfileFragment extends Fragment {
             aboutView.setVisibility(View.VISIBLE);
         } else {
             aboutView.setText("");
-            aboutView.setVisibility(View.GONE); // Прячем до прихода реальных данных!
+            aboutView.setVisibility(View.GONE); 
         }
         
         if (!argPhoto.isEmpty()) handleMediaLoading(activity, argPhoto);
@@ -396,6 +395,14 @@ public class OtherProfileFragment extends Fragment {
         super.onResume();
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null && !isHidden()) refreshCounts(activity);
+        
+        if (getView() != null) {
+            TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
+            if (tabTopApps != null) {
+                tabTopApps.setVisibility(View.VISIBLE);
+                tabTopApps.setSelected(true);
+            }
+        }
     }
 
     @Override
@@ -408,6 +415,14 @@ public class OtherProfileFragment extends Fragment {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
             refreshCounts(activity);
+            
+            if (getView() != null) {
+                TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
+                if (tabTopApps != null) {
+                    tabTopApps.setVisibility(View.VISIBLE);
+                    tabTopApps.setSelected(true);
+                }
+            }
         }
     }
 
@@ -423,10 +438,6 @@ public class OtherProfileFragment extends Fragment {
                 }
                 if (btnExpand != null) btnExpand.setVisibility(View.GONE);
                 if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
-                if (getView() != null) {
-                    TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
-                    if (tabTopApps != null) tabTopApps.setVisibility(View.GONE);
-                }
                 
                 long minutes = serverTotalTime / 1000 / 60;
                 long hours = minutes / 60;
@@ -524,16 +535,8 @@ public class OtherProfileFragment extends Fragment {
                     if (container != null) container.setVisibility(View.GONE);
                     if (btnExpand != null) btnExpand.setVisibility(View.GONE);
                     if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
-                    if (getView() != null) {
-                        TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
-                        if (tabTopApps != null) tabTopApps.setVisibility(View.GONE);
-                    }
                 } else {
                     if (container != null) container.setVisibility(View.VISIBLE);
-                    if (getView() != null) {
-                        TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
-                        if (tabTopApps != null) tabTopApps.setVisibility(View.VISIBLE);
-                    }
                     
                     for (AppUiData data : preloadedData) {
                         View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, container, false);
