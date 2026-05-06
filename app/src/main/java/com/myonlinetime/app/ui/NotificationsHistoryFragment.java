@@ -8,32 +8,38 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
+import com.myonlinetime.app.models.NotificationModels;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
-import java.text.SimpleDateFormat;
+
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 
 public class NotificationsHistoryFragment extends Fragment {
 
-    // === ТЕХНИЧЕСКИЙ ХАРДКОР ВЫНЕСЕН В КОНСТАНТЫ ===
     private static final String PREFS_NAME = "AppPrefs";
     private static final String KEY_HISTORY = "notif_history_array";
-    private static final String JSON_MAIN_TEXT = "mainText";
-    private static final String JSON_ACTION_TEXT = "actionText";
-    private static final String JSON_TIMESTAMP = "timestamp";
-    private static final String JSON_IS_READ = "isRead";
-
+    
     private Runnable hideBgRunnable;
+    private RecyclerView recycler;
+    private TextView emptyText;
+    private NotificationsAdapter adapter;
+
+    private final SharedPreferences.OnSharedPreferenceChangeListener prefsListener = (prefs, key) -> {
+        if (KEY_HISTORY.equals(key) && isAdded()) {
+            loadHistory(); 
+        }
+    };
 
     @Nullable
     @Override
@@ -42,22 +48,41 @@ public class NotificationsHistoryFragment extends Fragment {
 
         setupHeader();
 
-        RecyclerView recycler = view.findViewById(R.id.recycler_notifications);
-        TextView emptyText = view.findViewById(R.id.empty_notif_text);
+        recycler = view.findViewById(R.id.recycler_notifications);
+        emptyText = view.findViewById(R.id.empty_notif_text);
+        recycler.setLayoutManager(new LinearLayoutManager(getContext()));
 
+        loadHistory();
+
+        return view;
+    }
+
+    private void loadHistory() {
         SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String historyJson = prefs.getString(KEY_HISTORY, "[]");
         
-        List<NotifItem> items = new ArrayList<>();
+        List<NotificationModels.NotificationItem> items = new ArrayList<>();
         try {
             JSONArray array = new JSONArray(historyJson);
             for (int i = array.length() - 1; i >= 0; i--) {
                 JSONObject obj = array.getJSONObject(i);
-                items.add(new NotifItem(
-                        obj.getString(JSON_MAIN_TEXT),
-                        obj.getString(JSON_ACTION_TEXT),
-                        obj.getLong(JSON_TIMESTAMP)
-                ));
+                String type = obj.optString("type", "time"); 
+                
+                if ("time".equals(type)) {
+                    items.add(new NotificationModels.TimeNotification(
+                            obj.optString("mainText"),
+                            obj.optString("actionText"),
+                            obj.optLong("timestamp")
+                    ));
+                } else if ("follower".equals(type)) {
+                    items.add(new NotificationModels.FollowerNotification(
+                            obj.optLong("timestamp"),
+                            obj.optString("uid"),
+                            obj.optString("nickname"),
+                            obj.optString("photo"),
+                            obj.optBoolean("isFollowing", false)
+                    ));
+                }
             }
         } catch (Exception e) { e.printStackTrace(); }
 
@@ -67,33 +92,42 @@ public class NotificationsHistoryFragment extends Fragment {
         } else {
             recycler.setVisibility(View.VISIBLE);
             emptyText.setVisibility(View.GONE);
-            recycler.setLayoutManager(new LinearLayoutManager(getContext()));
-            recycler.setAdapter(new NotifAdapter(items, (MainActivity) getActivity()));
             
+            if (adapter == null) {
+                adapter = new NotificationsAdapter(items, (MainActivity) getActivity());
+                recycler.setAdapter(adapter);
+            } else {
+                adapter.updateItems(items);
+            }
             markAllAsRead();
         }
-
-        return view;
     }
 
     private void markAllAsRead() {
         SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String historyJson = prefs.getString(KEY_HISTORY, "[]");
-        
         try {
             JSONArray array = new JSONArray(historyJson);
             if (array.length() == 0) return;
 
+            boolean changed = false;
             for (int i = 0; i < array.length(); i++) {
-                array.getJSONObject(i).put(JSON_IS_READ, true);
+                JSONObject obj = array.getJSONObject(i);
+                if (!obj.optBoolean("isRead", false)) {
+                    obj.put("isRead", true);
+                    changed = true;
+                }
             }
-            
-            prefs.edit().putString(KEY_HISTORY, array.toString()).apply();
-            
-            if (getActivity() instanceof MainActivity) {
-                ((MainActivity) getActivity()).updateNotificationBadge();
+            if (changed) {
+                prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
+                prefs.edit().putString(KEY_HISTORY, array.toString()).apply();
+                prefs.registerOnSharedPreferenceChangeListener(prefsListener);
+                
+                if (getActivity() instanceof MainActivity) {
+                    ((MainActivity) getActivity()).updateNotificationBadge();
+                }
             }
-        } catch (Exception e) { e.printStackTrace(); }
+        } catch (Exception e) {}
     }
 
     private void setupHeader() {
@@ -104,17 +138,11 @@ public class NotificationsHistoryFragment extends Fragment {
             activity.headerBackBtn.setVisibility(View.VISIBLE);
             activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow); 
 
-            // Скрываем иконку колокольчика (БЕЗ setOnClickListener(null))
             ImageView bellBtn = activity.findViewById(R.id.header_bell_btn);
-            if (bellBtn != null) {
-                bellBtn.setVisibility(View.GONE);
-            }
+            if (bellBtn != null) bellBtn.setVisibility(View.GONE);
 
-            // Скрываем невидимый контейнер (БЕЗ setOnClickListener(null))
             View bellContainer = activity.findViewById(R.id.header_bell_container);
-            if (bellContainer != null) {
-                bellContainer.setVisibility(View.GONE);
-            }
+            if (bellContainer != null) bellContainer.setVisibility(View.GONE);
         }
     }
 
@@ -133,110 +161,40 @@ public class NotificationsHistoryFragment extends Fragment {
 
         if (!hidden) {
             setupHeader(); 
-            
             if (hideBgRunnable == null) {
                 hideBgRunnable = () -> {
-                    if (isAdded() && !isHidden()) {
-                        activity.updateGlobalBackground(false);
-                    }
+                    if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
                 };
             }
-            if (getView() != null) {
-                getView().postDelayed(hideBgRunnable, 300);
-            } else {
-                activity.updateGlobalBackground(false);
-            }
+            if (getView() != null) getView().postDelayed(hideBgRunnable, 300);
+            else activity.updateGlobalBackground(false);
         } else {
-            if (hideBgRunnable != null && getView() != null) {
-                getView().removeCallbacks(hideBgRunnable);
-            }
+            if (hideBgRunnable != null && getView() != null) getView().removeCallbacks(hideBgRunnable);
         }
     }
 
     @Override
     public void onResume() {
         super.onResume();
+        requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .registerOnSharedPreferenceChangeListener(prefsListener);
+
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
             if (hideBgRunnable == null) {
                 hideBgRunnable = () -> {
-                    if (isAdded() && !isHidden()) {
-                        activity.updateGlobalBackground(false);
-                    }
+                    if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
                 };
             }
-            if (getView() != null) {
-                getView().postDelayed(hideBgRunnable, 300);
-            } else {
-                activity.updateGlobalBackground(false);
-            }
+            if (getView() != null) getView().postDelayed(hideBgRunnable, 300);
+            else activity.updateGlobalBackground(false);
         }
     }
 
-    private static class NotifItem {
-        String mainText; String actionText; long timestamp;
-        NotifItem(String m, String a, long t) { 
-            mainText = m; actionText = a; timestamp = t; 
-        }
-    }
-
-    // =========================================================================
-    // ОБНОВЛЕННЫЙ АДАПТЕР (Имитация нажатия кнопок для родной анимации)
-    // =========================================================================
-    private static class NotifAdapter extends RecyclerView.Adapter<NotifAdapter.ViewHolder> {
-        private final List<NotifItem> items;
-        private final MainActivity activity;
-        private final SimpleDateFormat sdf;
-
-        NotifAdapter(List<NotifItem> items, MainActivity activity) {
-            this.items = items;
-            this.activity = activity;
-            this.sdf = new SimpleDateFormat(activity.getString(R.string.date_format), Locale.getDefault());
-        }
-
-        @NonNull
-        @Override
-        public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_notification_card, parent, false);
-            return new ViewHolder(view);
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-            NotifItem item = items.get(position);
-            holder.mainText.setText(item.mainText);
-            
-            holder.dateText.setText(sdf.format(new Date(item.timestamp)));
-
-            // ВЕШАЕМ КЛИК НА ВСЮ КАРТОЧКУ
-            holder.itemView.setOnClickListener(v -> {
-                if (activity != null) {
-                    // 1. Имитируем клик по кнопке "Назад" (экран уедет вниз)
-                    ImageView backBtn = activity.findViewById(R.id.header_back_btn);
-                    if (backBtn != null) {
-                        backBtn.performClick();
-                    }
-
-                    // 2. Имитируем клик по вкладке "Время" в нижнем меню
-                    View navTime = activity.findViewById(R.id.nav_usage);
-                    if (navTime != null) {
-                        navTime.performClick();
-                    }
-                }
-            });
-        }
-
-        @Override
-        public int getItemCount() { return items.size(); }
-
-        static class ViewHolder extends RecyclerView.ViewHolder {
-            TextView mainText, dateText;
-            
-            ViewHolder(View v) {
-                super(v);
-                mainText = v.findViewById(R.id.notif_text_main);
-                dateText = v.findViewById(R.id.notif_date);
-            }
-        }
+    @Override
+    public void onPause() {
+        super.onPause();
+        requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .unregisterOnSharedPreferenceChangeListener(prefsListener);
     }
 }
