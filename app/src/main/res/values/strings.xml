@@ -8,6 +8,8 @@
     <string name="feed">Feed</string>
     <string name="find">Find</string>
 	<string name="toast_compressing_video">Compressing video… Please wait.</string>
+	<string name="new_follower_title">You have a new follower!</string>
+<string name="btn_unfollow">UNFOLLOW</string>
 	<string name="err_empty_nickname">The nickname cannot be empty</string>
 <string name="err_server_response">Server response processing error</string>
 <string name="video_compressing_warning">Wait, the video is being compressed...</string>
