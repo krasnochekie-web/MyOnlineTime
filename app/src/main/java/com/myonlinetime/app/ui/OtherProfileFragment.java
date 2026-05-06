@@ -136,17 +136,20 @@ public class OtherProfileFragment extends Fragment {
 
         TextView tabTopApps = originalView.findViewById(R.id.tab_top_apps);
         if (tabTopApps != null) {
-            tabTopApps.setVisibility(View.VISIBLE); // ЖЕСТКО ЗАФИКСИРОВАНО
-            tabTopApps.setSelected(true); // ЖЕСТКО ВЫДЕЛЕНО
+            tabTopApps.setVisibility(View.VISIBLE); 
+            tabTopApps.setSelected(true); 
         }
         
         final ImageView btnExpand = originalView.findViewById(R.id.btn_expand_apps);
         final ImageView btnCollapse = originalView.findViewById(R.id.btn_collapse_apps);
         final LinearLayout appsContainerLocal = originalView.findViewById(R.id.profile_apps_container);
+        
+        // Получаем ту самую родительскую карточку, которая создавала полоску
+        final View appsCardParent = (View) appsContainerLocal.getParent();
 
         btnEdit.setVisibility(View.GONE);
 
-        // === ЖЕСТКОЕ УНИЧТОЖЕНИЕ ПОЛОСКИ БЕЗ ЗАТРАГИВАНИЯ ЗАГОЛОВКА ===
+        // === ЖЕСТКОЕ УНИЧТОЖЕНИЕ РОДИТЕЛЬСКОЙ КАРТОЧКИ (ПОЛОСКИ) ===
         appsContainerLocal.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
             @Override
             public void onChildViewAdded(View parent, View child) { updateEmptyState(); }
@@ -157,7 +160,11 @@ public class OtherProfileFragment extends Fragment {
                 uiHandler.post(() -> {
                     if (!isAdded() || getView() == null) return;
                     boolean hasApps = appsContainerLocal.getChildCount() > 0;
-                    appsContainerLocal.setVisibility(hasApps ? View.VISIBLE : View.GONE);
+                    if (appsCardParent != null) {
+                        appsCardParent.setVisibility(hasApps ? View.VISIBLE : View.GONE);
+                    } else {
+                        appsContainerLocal.setVisibility(hasApps ? View.VISIBLE : View.GONE);
+                    }
                     if (!hasApps) {
                         btnExpand.setVisibility(View.GONE);
                         btnCollapse.setVisibility(View.GONE);
@@ -167,7 +174,12 @@ public class OtherProfileFragment extends Fragment {
         });
         
         boolean initiallyHasApps = appsContainerLocal.getChildCount() > 0;
-        appsContainerLocal.setVisibility(initiallyHasApps ? View.VISIBLE : View.GONE);
+        if (appsCardParent != null) {
+            appsCardParent.setVisibility(initiallyHasApps ? View.VISIBLE : View.GONE);
+        } else {
+            appsContainerLocal.setVisibility(initiallyHasApps ? View.VISIBLE : View.GONE);
+        }
+        
         if (!initiallyHasApps) {
             btnExpand.setVisibility(View.GONE);
             btnCollapse.setVisibility(View.GONE);
@@ -333,7 +345,10 @@ public class OtherProfileFragment extends Fragment {
     private void applyCollapseSafely(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
         StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
         if (container != null && container.getChildCount() == 0) {
-            container.setVisibility(View.GONE);
+            View parent = (View) container.getParent();
+            if (parent != null) parent.setVisibility(View.GONE);
+            else container.setVisibility(View.GONE);
+            
             if (btnExpand != null) btnExpand.setVisibility(View.GONE);
             if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
         }
@@ -434,7 +449,9 @@ public class OtherProfileFragment extends Fragment {
                 if (myGen != renderGeneration || !isAdded()) return;
                 if (container != null) {
                     container.removeAllViews();
-                    container.setVisibility(View.GONE); 
+                    View parent = (View) container.getParent();
+                    if (parent != null) parent.setVisibility(View.GONE);
+                    else container.setVisibility(View.GONE);
                 }
                 if (btnExpand != null) btnExpand.setVisibility(View.GONE);
                 if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
@@ -532,11 +549,19 @@ public class OtherProfileFragment extends Fragment {
                 }
 
                 if (preloadedData.isEmpty()) {
-                    if (container != null) container.setVisibility(View.GONE);
+                    if (container != null) {
+                        View parent = (View) container.getParent();
+                        if (parent != null) parent.setVisibility(View.GONE);
+                        else container.setVisibility(View.GONE);
+                    }
                     if (btnExpand != null) btnExpand.setVisibility(View.GONE);
                     if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
                 } else {
-                    if (container != null) container.setVisibility(View.VISIBLE);
+                    if (container != null) {
+                        View parent = (View) container.getParent();
+                        if (parent != null) parent.setVisibility(View.VISIBLE);
+                        else container.setVisibility(View.VISIBLE);
+                    }
                     
                     for (AppUiData data : preloadedData) {
                         View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, container, false);
