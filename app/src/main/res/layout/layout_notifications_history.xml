@@ -5,6 +5,15 @@
     android:background="@color/bgDynamic"
     android:paddingTop="@dimen/header_clearance">
 
+    <!-- КРУТИЛОЧКА -->
+    <ProgressBar
+        android:id="@+id/loading_spinner"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="center"
+        android:indeterminateTint="@color/grapefruit"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/empty_notif_text"
         android:layout_width="wrap_content"
@@ -13,7 +22,8 @@
         android:text="@string/empty_notifications"
         android:textColor="@color/textGrayDynamic"
         android:textSize="16sp"
-        android:textStyle="bold" />
+        android:textStyle="bold"
+        android:visibility="gone" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_notifications"
