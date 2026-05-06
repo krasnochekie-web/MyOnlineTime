@@ -295,6 +295,17 @@ public class MainActivity extends AppCompatActivity {
                         public void onSuccess(String ourServerToken) {
                             vpsToken = ourServerToken;
                             StatsHelper.syncUserProfile(MainActivity.this);
+
+                            // === P2P МАГИЯ: Отправляем наш локальный словарь на сервер ===
+                            Utils.backgroundExecutor.execute(() -> {
+                                try {
+                                    SharedPreferences dbNames = getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
+                                    java.util.Map<String, ?> allNames = dbNames.getAll();
+                                    if (!allNames.isEmpty()) {
+                                        VpsApi.syncAppNames(ourServerToken, new org.json.JSONObject(allNames));
+                                    }
+                                } catch (Exception ignored) {}
+                            });
                         }
                         @Override
                         public void onError(String error) { }
@@ -651,8 +662,23 @@ public class MainActivity extends AppCompatActivity {
         loadUserAvatarToBottomNav(); 
         updateNotificationBadge(); 
         
+        // === ИСПРАВЛЕНИЕ МЕРЦАНИЯ ФОНА ===
+        boolean hideGlobalBg = false;
+        if (navigator != null && navigator.hasSubScreen()) {
+            Fragment current = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
+            if (current != null) {
+                String fragName = current.getClass().getSimpleName();
+                // Если мы на экране, который должен быть сплошным - прячем твой фон заранее!
+                if (fragName.contains("OtherProfile") || fragName.contains("Notifications") || fragName.contains("Follows")) {
+                    hideGlobalBg = true;
+                }
+            }
+        }
+
         if (previewBgPath != null && navigator != null && navigator.hasSubScreen()) {
             previewBackground(previewBgPath);
+        } else if (hideGlobalBg) {
+            updateGlobalBackground(false); // Запрещаем мерцание!
         } else {
             updateGlobalBackground(true);
         }
@@ -672,6 +698,7 @@ public class MainActivity extends AppCompatActivity {
             adjustHeaderForWindowMode(isInMultiWindowMode());
         }
 
+        // Обновляем токен при каждом возвращении в приложение
         refreshGoogleAndVpsToken(false);
     }
 
@@ -692,7 +719,7 @@ public class MainActivity extends AppCompatActivity {
         handleNotificationIntent(intent);
     }
     
-    // === ИСПРАВЛЕННЫЙ МЕТОД ОБРАБОТКИ ПУШЕЙ ===
+    // === ИСПРАВЛЕННЫЙ МЕТОД ОБРАБОТКИ ПУШЕЙ (ПРОФИЛЬ ПОДПИСЧИКА) ===
     private void handleNotificationIntent(Intent intent) {
         if (intent != null && intent.hasExtra("open_tab")) {
             String tab = intent.getStringExtra("open_tab");
