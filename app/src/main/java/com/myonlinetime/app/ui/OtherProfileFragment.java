@@ -41,13 +41,13 @@ public class OtherProfileFragment extends Fragment {
 
     private float lastTouchX = 0;
     private float lastTouchY = 0;
+    
+    private long renderGeneration = 0;
 
-    // === УМНЫЙ КЭШ ПРЕДЗАГРУЗКИ НА 15 ПРОФИЛЕЙ (ЗАЩИТА ОТ OOM) ===
     public static final android.util.LruCache<String, User> prefetchUserCache = new android.util.LruCache<>(15);
     public static final android.util.LruCache<String, String> prefetchCountsCache = new android.util.LruCache<>(15);
     public static final android.util.LruCache<String, Boolean> prefetchFollowCache = new android.util.LruCache<>(15);
 
-    // Метод для фоновой предзагрузки из адаптера (без влияния на UI)
     public static void prefetchProfile(String vpsToken, String uid) {
         if (vpsToken == null || uid == null || uid.isEmpty()) return;
         
@@ -79,7 +79,6 @@ public class OtherProfileFragment extends Fragment {
         boolean isDeleted;
     }
 
-    // === ТЕПЕРЬ МЫ ПРИНИМАЕМ БАЗОВЫЕ ДАННЫЕ ДЛЯ МГНОВЕННОГО ОТОБРАЖЕНИЯ ===
     public static OtherProfileFragment newInstance(String targetUid, String backTitle, String nickname, String about, String photo) {
         OtherProfileFragment fragment = new OtherProfileFragment();
         Bundle args = new Bundle();
@@ -132,15 +131,14 @@ public class OtherProfileFragment extends Fragment {
         View followingClick = originalView.findViewById(R.id.container_following);
 
         TextView tabTopApps = originalView.findViewById(R.id.tab_top_apps);
-        if (tabTopApps != null) tabTopApps.setSelected(true);
-
+        if (tabTopApps != null) tabTopApps.setSelected(true); // Заголовок всегда активен
+        
         final ImageView btnExpand = originalView.findViewById(R.id.btn_expand_apps);
         final ImageView btnCollapse = originalView.findViewById(R.id.btn_collapse_apps);
         final LinearLayout appsContainerLocal = originalView.findViewById(R.id.profile_apps_container);
 
         btnEdit.setVisibility(View.GONE);
 
-        // === 1. МГНОВЕННОЕ ОТОБРАЖЕНИЕ (TELEGRAM ЭФФЕКТ) ===
         String argName = getArguments() != null ? getArguments().getString("PREFETCH_NICKNAME", "") : "";
         String argAbout = getArguments() != null ? getArguments().getString("PREFETCH_ABOUT", "") : "";
         String argPhoto = getArguments() != null ? getArguments().getString("PREFETCH_PHOTO", "") : "";
@@ -154,7 +152,6 @@ public class OtherProfileFragment extends Fragment {
         }
         if (!argPhoto.isEmpty()) handleMediaLoading(activity, argPhoto);
 
-        // === 2. ПРОВЕРКА КЭША ПРЕДЗАГРУЗКИ ===
         User cachedUser = prefetchUserCache.get(targetUid);
         if (cachedUser != null) {
             renderOtherUserStats(cachedUser.topApps, cachedUser.totalTime, cachedUser.hiddenApps, cachedUser.appDescriptions, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
@@ -185,7 +182,6 @@ public class OtherProfileFragment extends Fragment {
             StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
         });
 
-        // === ИСПРАВЛЕНИЕ НАВИГАЦИИ: ОТКРЫВАЕМ РОДИТЕЛЬСКИЙ ФРАГМЕНТ С ВКЛАДКАМИ ===
         followersClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(targetUid, true)));
         followingClick.setOnClickListener(v -> activity.navigator.openSubScreen(FollowsFragment.newInstance(targetUid, false)));
 
@@ -204,7 +200,7 @@ public class OtherProfileFragment extends Fragment {
              
              btnFollow.setTag(nextStatus); 
              updateFollowButton(btnFollow, nextStatus);
-             prefetchFollowCache.put(targetUid, nextStatus); // Обновляем кэш мгновенно
+             prefetchFollowCache.put(targetUid, nextStatus); 
              
              try {
                  int count = Integer.parseInt(followersCount.getText().toString());
@@ -223,14 +219,13 @@ public class OtherProfileFragment extends Fragment {
              }
         });
 
-        // === 3. ФОНОВЫЙ ЗАПРОС ДЛЯ ПОЛУЧЕНИЯ САМЫХ СВЕЖИХ ДАННЫХ ===
         if (activity.vpsToken != null) {
             VpsApi.getUser(activity, activity.vpsToken, targetUid, new VpsApi.UserCallback() {
                 @Override
                 public void onLoaded(User user) {
                     if (!isAdded()) return;
                     if (user != null) {
-                        prefetchUserCache.put(targetUid, user); // Обновляем кэш
+                        prefetchUserCache.put(targetUid, user); 
                         nameView.setText(user.nickname != null ? user.nickname : activity.getString(R.string.no_name));
                         aboutView.setText(user.about != null ? user.about : "");
                         StatsHelper.applyCollapseLogic(aboutView, appsContainerLocal, btnExpand, btnCollapse);
@@ -303,7 +298,7 @@ public class OtherProfileFragment extends Fragment {
         
         if (getView() != null) {
             TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
-            if (tabTopApps != null) tabTopApps.setSelected(true);
+            if (tabTopApps != null) tabTopApps.setSelected(true); // Заголовок всегда горит
         }
     }
 
@@ -320,21 +315,24 @@ public class OtherProfileFragment extends Fragment {
             
             if (getView() != null) {
                 TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
-                if (tabTopApps != null) tabTopApps.setSelected(true);
+                if (tabTopApps != null) tabTopApps.setSelected(true); // Заголовок всегда горит
             }
         }
     }
 
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
-        if (container != null) {
-            container.setLayoutTransition(null);
-            container.removeAllViews();
-        }
-        if (activity == null) return;
+        final long myGen = ++renderGeneration;
 
         if (topApps == null || topApps.isEmpty()) {
             new Handler(Looper.getMainLooper()).post(() -> {
-                if (container != null) container.setVisibility(View.GONE); 
+                if (myGen != renderGeneration || !isAdded()) return;
+                if (container != null) {
+                    container.removeAllViews();
+                    container.setVisibility(View.GONE); 
+                }
+                if (btnExpand != null) btnExpand.setVisibility(View.GONE);
+                if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
+                
                 long minutes = serverTotalTime / 1000 / 60;
                 long hours = minutes / 60;
                 long mins = minutes % 60;
@@ -352,7 +350,6 @@ public class OtherProfileFragment extends Fragment {
             try {
                 PackageManager pm = activity.getPackageManager();
                 SharedPreferences dbNames = activity.getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
-
                 Map<String, ?> safeTopApps = (Map<String, ?>) topApps;
 
                 for (Map.Entry<String, ?> entry : safeTopApps.entrySet()) {
@@ -408,9 +405,7 @@ public class OtherProfileFragment extends Fragment {
                 
                 Collections.sort(preloadedData, new Comparator<AppUiData>() {
                     @Override
-                    public int compare(AppUiData o1, AppUiData o2) {
-                        return Long.compare(o2.time, o1.time);
-                    }
+                    public int compare(AppUiData o1, AppUiData o2) { return Long.compare(o2.time, o1.time); }
                 });
                 
                 if (preloadedData.size() > 10) {
@@ -420,10 +415,17 @@ public class OtherProfileFragment extends Fragment {
             } catch (Exception e) { e.printStackTrace(); }
 
             new Handler(Looper.getMainLooper()).post(() -> {
-                if (!isAdded()) return;
+                if (!isAdded() || myGen != renderGeneration) return;
+
+                if (container != null) {
+                    container.setLayoutTransition(null);
+                    container.removeAllViews();
+                }
 
                 if (preloadedData.isEmpty()) {
                     if (container != null) container.setVisibility(View.GONE);
+                    if (btnExpand != null) btnExpand.setVisibility(View.GONE);
+                    if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
                 } else {
                     if (container != null) container.setVisibility(View.VISIBLE);
                     
