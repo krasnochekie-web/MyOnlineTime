@@ -54,6 +54,12 @@ public class NotificationsHistoryFragment extends Fragment {
         loadingSpinner = view.findViewById(R.id.loading_spinner);
         
         recycler.setLayoutManager(new LinearLayoutManager(getContext()));
+        
+        // === АНТИ-ЛАГ ОПТИМИЗАЦИЯ ДЛЯ ПЛАВНОГО СКРОЛЛА ===
+        recycler.setHasFixedSize(true);
+        recycler.setItemViewCacheSize(20);
+        recycler.getRecycledViewPool().setMaxRecycledViews(NotificationModels.NotificationItem.TYPE_TIME, 20);
+        recycler.getRecycledViewPool().setMaxRecycledViews(NotificationModels.NotificationItem.TYPE_FOLLOWER, 20);
 
         loadHistory();
 
@@ -69,7 +75,7 @@ public class NotificationsHistoryFragment extends Fragment {
 
         SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         
-        // === 1. МГНОВЕННО ГРУЗИМ КЭШ (Если интернета не будет, останется это) ===
+        // === 1. МГНОВЕННО ГРУЗИМ КЭШ ===
         String cachedJson = prefs.getString(KEY_HISTORY, "[]");
         boolean hasCache = !cachedJson.equals("[]");
         
@@ -80,7 +86,6 @@ public class NotificationsHistoryFragment extends Fragment {
             emptyText.setVisibility(View.GONE);
         }
 
-        // Показываем крутилочку (даже если кэш есть, показываем, что ищем свежие данные)
         loadingSpinner.setVisibility(View.VISIBLE);
 
         // === 2. ИДЕМ НА СЕРВЕР ЗА СВЕЖИМИ ДАННЫМИ ===
@@ -91,7 +96,7 @@ public class NotificationsHistoryFragment extends Fragment {
                     if (!isAdded()) return;
                     loadingSpinner.setVisibility(View.GONE);
                     
-                    // Сохраняем свежие данные в кэш для будущих запусков без интернета
+                    // Сохраняем свежие данные
                     prefs.edit().putString(KEY_HISTORY, result).apply();
                     
                     parseAndDisplay(result, true, activity);
@@ -104,13 +109,18 @@ public class NotificationsHistoryFragment extends Fragment {
                     if (!isAdded()) return;
                     loadingSpinner.setVisibility(View.GONE);
                     
+                    // Умная проверка: сеть отвалилась или сервер прислал ошибку 500?
+                    boolean isNetworkIssue = error != null && (error.toLowerCase().contains("timeout") || 
+                                                               error.toLowerCase().contains("connect") || 
+                                                               error.toLowerCase().contains("host") || 
+                                                               error.toLowerCase().contains("failed"));
+                    
                     if (hasCache) {
-                        // Если кэш есть, просто тихо говорим, что мы в офлайне без хардкора!
-                        Toast.makeText(getContext(), getString(R.string.err_server) + " " + getString(R.string.notif_offline_mode), Toast.LENGTH_SHORT).show();
+                        String message = isNetworkIssue ? getString(R.string.notif_offline_mode) : error;
+                        Toast.makeText(getContext(), getString(R.string.err_server) + " " + message, Toast.LENGTH_SHORT).show();
                     } else {
-                        // Если и кэша нет, и сервера нет — показываем пустой экран
                         showEmptyState();
-                        Toast.makeText(getContext(), getString(R.string.err_server) + error, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getContext(), getString(R.string.err_server) + " " + error, Toast.LENGTH_SHORT).show();
                     }
                 });
             }
@@ -159,7 +169,6 @@ public class NotificationsHistoryFragment extends Fragment {
                     adapter.updateItems(items);
                 }
                 
-                // Если данные пришли с сервера и есть непрочитанные - помечаем прочитанными
                 if (isFromServer && hasUnread) {
                     markAllAsRead(activity, array);
                 }
@@ -181,7 +190,6 @@ public class NotificationsHistoryFragment extends Fragment {
                 uiHandler.post(() -> {
                     if (!isAdded()) return;
                     
-                    // Обновляем локальный кэш, чтобы красные точки исчезли и в офлайне
                     try {
                         for (int i = 0; i < array.length(); i++) {
                             array.getJSONObject(i).put("isRead", true);
