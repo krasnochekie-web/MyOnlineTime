@@ -7,6 +7,7 @@
 	<string name="settings_clear_storage">Clear data</string>
     <string name="feed">Feed</string>
     <string name="find">Find</string>
+	<string name="notif_offline_mode">(Offline)</string>
 	<string name="toast_compressing_video">Compressing video… Please wait.</string>
 	<string name="new_follower_title">You have a new follower!</string>
 	<string name="err_empty_nickname">The nickname cannot be empty</string>
@@ -24,7 +25,7 @@
 <string name="err_file_size_limit">Selected file exceeds the data limit of</string>
 <string name="err_processing_file">Error processing file</string>
 	<string name="toast_app_deleted">Deleted</string>
-	<string name="text_for_a_week">За неделю</string>
+	<string name="text_for_a_week">In a week</string>
 <string name="placeholder_dots">...</string>
 <string name="placeholder_zero">0</string>
 	<string name="placeholder_days_hours">0d 0h</string>
