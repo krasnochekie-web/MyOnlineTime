@@ -260,7 +260,7 @@ public class MainActivity extends AppCompatActivity {
         
         androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
                 "WeeklyStatsNotification",
-                androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                androidx.work.ExistingPeriodicWorkPolicy.REPLACE, // ИСПРАВЛЕНО ЗДЕСЬ
                 weeklyWorkRequest
         );
         
@@ -271,7 +271,7 @@ public class MainActivity extends AppCompatActivity {
                 
         androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
                 "FollowerSync", 
-                androidx.work.ExistingPeriodicWorkPolicy.KEEP, 
+                androidx.work.ExistingPeriodicWorkPolicy.REPLACE, // ИСПРАВЛЕНО ЗДЕСЬ
                 followerWork
         );
 
