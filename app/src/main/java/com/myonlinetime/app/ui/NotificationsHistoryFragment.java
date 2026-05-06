@@ -74,60 +74,50 @@ public class NotificationsHistoryFragment extends Fragment {
         }
 
         SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        
-        // === 1. МГНОВЕННО ГРУЗИМ КЭШ ===
         String cachedJson = prefs.getString(KEY_HISTORY, "[]");
-        boolean hasCache = !cachedJson.equals("[]");
+        
+        // Убеждаемся, что кэш не пустой (длина больше 5 символов отсекает пустые массивы "[]")
+        boolean hasCache = !cachedJson.equals("[]") && cachedJson.length() > 5;
         
         if (hasCache) {
-            parseAndDisplay(cachedJson, false, activity);
+            // === 1. МГНОВЕННАЯ ЗАГРУЗКА ИЗ КЭША ===
+            // Никаких спиннеров и запросов к серверу! Воркер уже всё скачал.
+            loadingSpinner.setVisibility(View.GONE);
+            parseAndDisplay(cachedJson, activity);
         } else {
+            // === 2. ИДЕМ НА СЕРВЕР ТОЛЬКО ЕСЛИ КЭШ АБСОЛЮТНО ПУСТОЙ ===
             recycler.setVisibility(View.GONE);
             emptyText.setVisibility(View.GONE);
-        }
+            loadingSpinner.setVisibility(View.VISIBLE);
 
-        loadingSpinner.setVisibility(View.VISIBLE);
+            VpsApi.getNotificationsHistory(activity.vpsToken, new VpsApi.Callback() {
+                @Override
+                public void onSuccess(String result) {
+                    uiHandler.post(() -> {
+                        if (!isAdded()) return;
+                        loadingSpinner.setVisibility(View.GONE);
+                        
+                        // Сохраняем свежие данные
+                        prefs.edit().putString(KEY_HISTORY, result).apply();
+                        
+                        parseAndDisplay(result, activity);
+                    });
+                }
 
-        // === 2. ИДЕМ НА СЕРВЕР ЗА СВЕЖИМИ ДАННЫМИ ===
-        VpsApi.getNotificationsHistory(activity.vpsToken, new VpsApi.Callback() {
-            @Override
-            public void onSuccess(String result) {
-                uiHandler.post(() -> {
-                    if (!isAdded()) return;
-                    loadingSpinner.setVisibility(View.GONE);
-                    
-                    // Сохраняем свежие данные
-                    prefs.edit().putString(KEY_HISTORY, result).apply();
-                    
-                    parseAndDisplay(result, true, activity);
-                });
-            }
-
-            @Override
-            public void onError(String error) {
-                uiHandler.post(() -> {
-                    if (!isAdded()) return;
-                    loadingSpinner.setVisibility(View.GONE);
-                    
-                    // Умная проверка: сеть отвалилась или сервер прислал ошибку 500?
-                    boolean isNetworkIssue = error != null && (error.toLowerCase().contains("timeout") || 
-                                                               error.toLowerCase().contains("connect") || 
-                                                               error.toLowerCase().contains("host") || 
-                                                               error.toLowerCase().contains("failed"));
-                    
-                    if (hasCache) {
-                        String message = isNetworkIssue ? getString(R.string.notif_offline_mode) : error;
-                        Toast.makeText(getContext(), getString(R.string.err_server) + " " + message, Toast.LENGTH_SHORT).show();
-                    } else {
+                @Override
+                public void onError(String error) {
+                    uiHandler.post(() -> {
+                        if (!isAdded()) return;
+                        loadingSpinner.setVisibility(View.GONE);
                         showEmptyState();
                         Toast.makeText(getContext(), getString(R.string.err_server) + " " + error, Toast.LENGTH_SHORT).show();
-                    }
-                });
-            }
-        });
+                    });
+                }
+            });
+        }
     }
 
-    private void parseAndDisplay(String jsonResult, boolean isFromServer, MainActivity activity) {
+    private void parseAndDisplay(String jsonResult, MainActivity activity) {
         try {
             JSONArray array = new JSONArray(jsonResult);
             List<NotificationModels.NotificationItem> items = new ArrayList<>();
@@ -169,12 +159,13 @@ public class NotificationsHistoryFragment extends Fragment {
                     adapter.updateItems(items);
                 }
                 
-                if (isFromServer && hasUnread) {
+                // Если мы отрисовали список и там есть непрочитанные — тихо помечаем прочитанными в фоне
+                if (hasUnread) {
                     markAllAsRead(activity, array);
                 }
             }
         } catch (Exception e) {
-            if (!isFromServer) showEmptyState(); 
+            showEmptyState(); 
         }
     }
 
@@ -191,6 +182,7 @@ public class NotificationsHistoryFragment extends Fragment {
                     if (!isAdded()) return;
                     
                     try {
+                        // Локально меняем статус на прочитано, чтобы бейдж не загорался снова
                         for (int i = 0; i < array.length(); i++) {
                             array.getJSONObject(i).put("isRead", true);
                         }
@@ -238,7 +230,7 @@ public class NotificationsHistoryFragment extends Fragment {
 
         if (!hidden) {
             setupHeader(); 
-            loadHistory(); 
+            loadHistory(); // Теперь это мгновенно достает данные из памяти
             if (hideBgRunnable == null) {
                 hideBgRunnable = () -> {
                     if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
