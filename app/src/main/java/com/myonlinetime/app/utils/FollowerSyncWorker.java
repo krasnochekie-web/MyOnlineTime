@@ -111,7 +111,7 @@ public class FollowerSyncWorker extends Worker {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel ch = new NotificationChannel(
                     "followers_ch", 
-                    context.getString(R.string.notif_channel_followers), 
+                    context.getString(R.string.notif_channel_followers_name), 
                     NotificationManager.IMPORTANCE_DEFAULT
             );
             nm.createNotificationChannel(ch);
@@ -124,11 +124,11 @@ public class FollowerSyncWorker extends Worker {
         PendingIntent pi = PendingIntent.getActivity(context, 0, intent, Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT);
 
         String safeNick = (nickname != null && !nickname.trim().isEmpty()) ? nickname : context.getString(R.string.notif_someone);
-        String pushText = context.getString(R.string.notif_followed_you, safeNick);
+        String pushText = context.getString(R.string.notif_subscribed_to_you, safeNick);
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, "followers_ch")
                 .setSmallIcon(R.drawable.ic_nav_profile)
-                .setContentTitle(context.getString(R.string.notif_channel_followers))
+                .setContentTitle(context.getString(R.string.notif_channel_followers_name))
                 .setContentText(pushText)
                 .setColor(ContextCompat.getColor(context, R.color.burgundyRed))
                 .setContentIntent(pi)
