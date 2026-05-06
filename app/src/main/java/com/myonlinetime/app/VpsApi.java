@@ -42,6 +42,9 @@ public class VpsApi {
     
     private static class AppVisibilityPayload { String pkgName; boolean isHidden; }
     private static class AppDescriptionPayload { String pkgName; String description; }
+    
+    // Payload для отправки уведомления о времени
+    private static class TimeNotificationPayload { String mainText; String actionText; }
 
     public interface UserCallback { void onLoaded(User user); void onError(String error); }
     public interface SearchCallback { void onFound(List<User> users); }
@@ -105,9 +108,9 @@ public class VpsApi {
         Request request = createAuthedRequest("save_user", ourServerToken).post(RequestBody.create(JSON, gson.toJson(payload))).build();
         enqueueCall(request, callback);
     }
-public static void saveUserProfile(String ourServerToken, String nickname, String about, File photoFile, File bgFile, long ticket, final Callback callback) {
+
+    public static void saveUserProfile(String ourServerToken, String nickname, String about, File photoFile, File bgFile, long ticket, final Callback callback) {
         // === ЖЕСТКИЙ ОБРЫВ ПРЕДЫДУЩИХ ЗАГРУЗОК ПО URL ===
-        // Гарантированно прерывает старый процесс, даже если OkHttp потерял теги
         for (Call call : client.dispatcher().queuedCalls()) {
             if (call.request().url().toString().contains("save_user")) call.cancel();
         }
@@ -139,6 +142,7 @@ public static void saveUserProfile(String ourServerToken, String nickname, Strin
                 
         enqueueCall(request, callback);
     }
+
     public static void deleteBackground(String ourServerToken, final Callback callback) {
         RequestBody body = RequestBody.create(JSON, "{}");
         Request request = createAuthedRequest("delete_background", ourServerToken)
@@ -298,6 +302,38 @@ public static void saveUserProfile(String ourServerToken, String nickname, Strin
                 .build();
         enqueueCall(request, callback);
     }
+
+    // ==========================================
+    // НОВЫЕ АПИ ДЛЯ УВЕДОМЛЕНИЙ
+    // ==========================================
+
+    public static void getNotificationsHistory(String ourServerToken, final Callback callback) {
+        HttpUrl url = HttpUrl.parse(BASE_URL + "get_notifications_history").newBuilder()
+                .addQueryParameter("t", String.valueOf(System.currentTimeMillis()))
+                .build();
+        Request request = createAuthedRequest(url, ourServerToken).build();
+        enqueueCall(request, callback);
+    }
+
+    public static void markNotificationsRead(String ourServerToken, final Callback callback) {
+        RequestBody body = RequestBody.create(JSON, "{}");
+        Request request = createAuthedRequest("mark_notifications_read", ourServerToken).post(body).build();
+        enqueueCall(request, callback);
+    }
+
+    public static void addTimeNotification(String ourServerToken, String mainText, String actionText, final Callback callback) {
+        TimeNotificationPayload payload = new TimeNotificationPayload();
+        payload.mainText = mainText;
+        payload.actionText = actionText;
+        Request request = createAuthedRequest("add_time_notification", ourServerToken)
+                .post(RequestBody.create(JSON, gson.toJson(payload)))
+                .build();
+        enqueueCall(request, callback);
+    }
+
+    // ==========================================
+    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+    // ==========================================
 
     private static Request.Builder createAuthedRequest(String path, String token) {
         return new Request.Builder().url(BASE_URL + path).header("Authorization", "Bearer " + token);
