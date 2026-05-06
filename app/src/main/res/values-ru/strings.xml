@@ -9,7 +9,6 @@
     <string name="time">Время</string>
 	<string name="notif_max_count">99+</string>	
 	<string name="new_follower_title">У вас новый подписчик!</string>
-<string name="btn_unfollow">ОТПИСАТЬСЯ</string>
 	<string name="toast_compressing_video">Сжатие видео… Пожалуйста, подождите.</string>
 	<string name="err_empty_nickname">Никнейм не может быть пустым</string>
 <string name="err_server_response">Ошибка обработки ответа сервера</string>
