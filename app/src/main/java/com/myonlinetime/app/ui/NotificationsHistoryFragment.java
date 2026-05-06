@@ -218,11 +218,6 @@ public class NotificationsHistoryFragment extends Fragment {
 
             View bellContainer = activity.findViewById(R.id.header_bell_container);
             if (bellContainer != null) bellContainer.setVisibility(View.GONE);
-
-            // Убираем черную полоску (тень)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                activity.mainHeader.setElevation(0f); 
-            }
         }
     }
 
@@ -232,11 +227,6 @@ public class NotificationsHistoryFragment extends Fragment {
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
             activity.headerManager.resetHeader(); 
-            
-            // Возвращаем тень для остальных экранов
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                activity.mainHeader.setElevation(4f * getResources().getDisplayMetrics().density); 
-            }
         }
     }
 
