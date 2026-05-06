@@ -40,6 +40,9 @@ public class NotificationsAdapter extends RecyclerView.Adapter<RecyclerView.View
         this.items.addAll(initialItems);
         this.activity = activity;
         this.sdf = new SimpleDateFormat(activity.getString(R.string.date_format), Locale.getDefault());
+        
+        // === ВАЖНО: Включаем стабильные ID для плавной анимации и скролла ===
+        setHasStableIds(true); 
     }
 
     public void updateItems(List<NotificationModels.NotificationItem> newItems) {
@@ -51,6 +54,18 @@ public class NotificationsAdapter extends RecyclerView.Adapter<RecyclerView.View
     @Override
     public int getItemViewType(int position) {
         return items.get(position).getType();
+    }
+
+    // === Уникальный идентификатор для каждой карточки на основе времени ===
+    @Override
+    public long getItemId(int position) {
+        NotificationModels.NotificationItem item = items.get(position);
+        if (item instanceof NotificationModels.TimeNotification) {
+            return ((NotificationModels.TimeNotification) item).timestamp;
+        } else if (item instanceof NotificationModels.FollowerNotification) {
+            return ((NotificationModels.FollowerNotification) item).timestamp;
+        }
+        return position;
     }
 
     @NonNull
@@ -164,7 +179,7 @@ public class NotificationsAdapter extends RecyclerView.Adapter<RecyclerView.View
                                 item.isFollowing = !nextStatus;
                                 updateFollowButtonUI(btnFollow, item.isFollowing, activity);
                                 updateStatusInPrefs(item.uid, item.isFollowing, activity);
-                                Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_SHORT).show();
+                                Toast.makeText(activity, activity.getString(R.string.err_server) + " " + err, Toast.LENGTH_SHORT).show();
                             });
                         }
                     });
