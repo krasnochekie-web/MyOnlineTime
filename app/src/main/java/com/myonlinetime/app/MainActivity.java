@@ -264,7 +264,7 @@ public class MainActivity extends AppCompatActivity {
                 weeklyWorkRequest
         );
         
-        // === ВОРКЕР ПОДПИСЧИКОВ (НОВЫЙ) ===
+        // === ВОРКЕР ПОДПИСЧИКОВ ===
         androidx.work.PeriodicWorkRequest followerWork = new androidx.work.PeriodicWorkRequest.Builder(
                 com.myonlinetime.app.utils.FollowerSyncWorker.class, 15, java.util.concurrent.TimeUnit.MINUTES)
                 .build();
@@ -290,8 +290,6 @@ public class MainActivity extends AppCompatActivity {
                 final GoogleSignInAccount account = task.getResult(ApiException.class);
                 if (account != null && account.getIdToken() != null) {
                     
-                    // ГЛАВНОЕ ИСПРАВЛЕНИЕ: Отправляем СВЕЖИЙ токен на сервер
-                    // Это вернет нам vpsToken, даже если приложение было перезапущено!
                     VpsApi.authenticateWithGoogle(MainActivity.this, account.getIdToken(), new VpsApi.LoginCallback() {
                         @Override
                         public void onSuccess(String ourServerToken) {
@@ -302,7 +300,6 @@ public class MainActivity extends AppCompatActivity {
                         public void onError(String error) { }
                     });
 
-                    // Загружаем статистику только если это первый старт
                     if (isStartup && navigator != null) {
                         Looper.myQueue().addIdleHandler(() -> {
                             Utils.backgroundExecutor.execute(() -> {
@@ -318,7 +315,6 @@ public class MainActivity extends AppCompatActivity {
                 vpsToken = null;
             }
             
-            // Обновляем визуал интерфейса после фоновой проверки
             loadUserAvatarToBottomNav(); 
             enforceLoginOverlays();
         });
@@ -664,30 +660,18 @@ public class MainActivity extends AppCompatActivity {
         getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(notifListener);
         
-        // === ЛОГИКА ОТОБРАЖЕНИЯ КОЛОКОЛЬЧИКА В ЗАВИСИМОСТИ ОТ РАЗРЕШЕНИЯ ===
-        View headerBellContainer = findViewById(R.id.header_bell_container);
-
-        if (permissionOverlay != null) {
-            if (hasPermission()) {
-                permissionOverlay.setVisibility(View.GONE);
-                if (headerBellContainer != null) headerBellContainer.setVisibility(View.VISIBLE); // Показываем колокольчик
-                
-                GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
-                if (account != null) StatsHelper.syncUserProfile(this);
-            } else {
-                permissionOverlay.setVisibility(View.VISIBLE);
-                if (headerBellContainer != null) headerBellContainer.setVisibility(View.GONE); // Прячем колокольчик
-                
-                permissionOverlay.bringToFront();
-                mainHeader.bringToFront();
-            }
+        if (hasPermission()) {
+            GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+            if (account != null) StatsHelper.syncUserProfile(this);
         }
+        
+        // ЖЕЛЕЗНЫЙ ВЫЗОВ: Включает и выключает все нужные оверлеи и колокольчик!
+        enforceLoginOverlays();
         
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
             adjustHeaderForWindowMode(isInMultiWindowMode());
         }
 
-        // Обновляем токен при каждом возвращении в приложение!
         refreshGoogleAndVpsToken(false);
     }
 
@@ -708,20 +692,36 @@ public class MainActivity extends AppCompatActivity {
         handleNotificationIntent(intent);
     }
     
+    // === ИСПРАВЛЕННЫЙ МЕТОД ОБРАБОТКИ ПУШЕЙ ===
     private void handleNotificationIntent(Intent intent) {
         if (intent != null && intent.hasExtra("open_tab")) {
             String tab = intent.getStringExtra("open_tab");
-            if ("time".equals(tab) || "notifications".equals(tab)) {
+            
+            if ("time".equals(tab) || "notifications".equals(tab) || "other_profile".equals(tab)) {
                 if (navigator != null && navigator.hasSubScreen()) {
                     navigator.closeSubScreen();
                 }
-                updateNavState(3); // Или другой нужный таб, 3 - время
-                navigator.switchScreen(3, null);
-                syncHeaderState(); 
                 
-                // Если надо сразу открыть историю уведомлений, имитируем клик по колокольчику
-                if ("notifications".equals(tab)) {
-                    if (navigator != null) {
+                if ("other_profile".equals(tab)) {
+                    // Открываем профиль подписчика поверх текущего экрана
+                    String targetUid = intent.getStringExtra("target_uid");
+                    String targetNickname = intent.getStringExtra("target_nickname");
+                    if (targetUid != null && navigator != null) {
+                        navigator.openSubScreen(com.myonlinetime.app.ui.OtherProfileFragment.newInstance(
+                                targetUid, 
+                                getString(R.string.title_notifications), 
+                                targetNickname, 
+                                "", 
+                                ""
+                        ));
+                    }
+                } else {
+                    // Открываем время или историю уведомлений
+                    updateNavState(3); 
+                    navigator.switchScreen(3, null);
+                    syncHeaderState(); 
+                    
+                    if ("notifications".equals(tab) && navigator != null) {
                         navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
                     }
                 }
@@ -834,7 +834,31 @@ public class MainActivity extends AppCompatActivity {
     public void enforceLoginOverlays() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         boolean noAuth = (account == null);
+        boolean hasPerm = hasPermission();
 
+        // === 1. ГЛОБАЛЬНЫЙ КОНТРОЛЬ КОЛОКОЛЬЧИКА ===
+        // Прячем колокольчик, если нет разрешения на сбор статистики ИЛИ нет авторизации
+        View headerBellContainer = findViewById(R.id.header_bell_container);
+        if (headerBellContainer != null) {
+            if (!hasPerm || noAuth) {
+                headerBellContainer.setVisibility(View.GONE);
+            } else {
+                headerBellContainer.setVisibility(View.VISIBLE);
+            }
+        }
+
+        // === 2. ГЛОБАЛЬНЫЙ КОНТРОЛЬ ЭКРАНА РАЗРЕШЕНИЙ ===
+        if (permissionOverlay != null) {
+            if (!hasPerm) {
+                permissionOverlay.setVisibility(View.VISIBLE);
+                permissionOverlay.bringToFront();
+                mainHeader.bringToFront();
+            } else {
+                permissionOverlay.setVisibility(View.GONE);
+            }
+        }
+
+        // === 3. КОНТРОЛЬ ЭКРАНА АВТОРИЗАЦИИ ===
         View oldGlobalOverlay = container.findViewWithTag("login_screen_overlay");
         if (oldGlobalOverlay != null && oldGlobalOverlay.getParent() == container) {
             container.removeView(oldGlobalOverlay);
