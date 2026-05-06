@@ -148,7 +148,7 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
                 if (token != null) {
                     Bitmap bitmap = drawableToBitmap(drawable);
                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    // Сжимаем в PNG для идеального качества (или WebP для размера)
+                    // Сжимаем в PNG для идеального качества
                     bitmap.compress(Bitmap.CompressFormat.PNG, 100, baos);
                     byte[] iconBytes = baos.toByteArray();
                     
@@ -172,13 +172,43 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         return bitmap;
     }
 
-    private String formatDeletedAppName(String pkg) {
-        try {
-            String[] parts = pkg.split("\\.");
-            String name = parts[parts.length - 1]; 
-            return name.substring(0, 1).toUpperCase() + name.substring(1); 
-        } catch (Exception e) {
-            return pkg;
+    // === УМНЫЙ СЛОВАРЬ (Фолбэк) ===
+    private String getSmartAppName(String pkg) {
+        if (pkg == null) return "Unknown";
+        switch (pkg.toLowerCase()) {
+            case "org.telegram.messenger": return "Telegram";
+            case "com.whatsapp": return "WhatsApp";
+            case "com.instagram.android": return "Instagram";
+            case "com.zhiliaoapp.musically":
+            case "com.ss.android.ugc.aweme": return "TikTok";
+            case "com.google.android.youtube": return "YouTube";
+            case "com.yandex.browser": return "Яндекс Браузер";
+            case "com.android.chrome": return "Google Chrome";
+            case "com.vkontakte.android": return "ВКонтакте";
+            case "com.viber.voip": return "Viber";
+            case "com.snapchat.android": return "Snapchat";
+            case "com.spotify.android": return "Spotify";
+            case "com.twitter.android": return "X (Twitter)";
+            case "tv.twitch.android.app": return "Twitch";
+            case "com.discord": return "Discord";
+            case "com.skype.rover": return "Skype";
+            case "com.facebook.katana":
+            case "com.facebook.lite": return "Facebook";
+            case "com.netflix.mediaclient": return "Netflix";
+            case "ru.yandex.music": return "Яндекс Музыка";
+            case "com.miHoYo.GenshinImpact": return "Genshin Impact";
+            case "com.tencent.ig": return "PUBG Mobile";
+            default:
+                try {
+                    String[] parts = pkg.split("\\.");
+                    String name = parts[parts.length - 1]; 
+                    if (name.equalsIgnoreCase("app") || name.equalsIgnoreCase("android") || name.equalsIgnoreCase("messenger") || name.equalsIgnoreCase("lite")) {
+                        name = parts[parts.length - 2]; 
+                    }
+                    return name.substring(0, 1).toUpperCase() + name.substring(1); 
+                } catch (Exception e) {
+                    return pkg;
+                }
         }
     }
 
@@ -291,7 +321,8 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
                 nameCache.put(pkg, finalName);
                 holder.nameView.setText(finalName);
             } else {
-                holder.nameView.setText(formatDeletedAppName(pkg));
+                // Используем наш новый умный словарь вместо старого парсера
+                holder.nameView.setText(getSmartAppName(pkg));
             }
         }
 
@@ -311,6 +342,8 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
                     // А. Ищем на диске
                     if (diskIcon.exists()) {
                         appIcon = Drawable.createFromPath(diskIcon.getAbsolutePath());
+                        // === ИСПРАВЛЕНИЕ: ПРИНУДИТЕЛЬНАЯ РАЗДАЧА КЭШИРОВАННЫХ ИКОНОК ===
+                        uploadIconToServerBackground(appIcon, pkg);
                     } 
                     // Б. Если на диске нет, но приложение у нас есть - достаем из системы
                     else if (finalAppInfo != null) {
@@ -339,7 +372,7 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
                                 Glide.with(context)
                                      .load(iconUrl)
                                      .placeholder(android.R.drawable.sym_def_app_icon)
-                                     .error(android.R.drawable.sym_def_app_icon) // Если иконку еще никто в мире не загрузил
+                                     .error(android.R.drawable.sym_def_app_icon) // Безопасная системная заглушка
                                      .into(holder.iconView);
                             }
                         });
