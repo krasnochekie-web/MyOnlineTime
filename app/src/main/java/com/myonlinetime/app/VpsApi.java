@@ -413,6 +413,20 @@ public class VpsApi {
             }
         });
     }
+    // ==========================================
+    // P2P: ОТПРАВКА FCM ТОКЕНА ДЛЯ ПУШЕЙ
+    // ==========================================
+    public static void updateFcmToken(String ourServerToken, String fcmToken) {
+        String jsonBody = "{\"fcmToken\":\"" + fcmToken + "\"}";
+        RequestBody body = RequestBody.create(JSON, jsonBody);
+        Request request = createAuthedRequest("update_fcm_token", ourServerToken).post(body).build();
+        client.newCall(request).enqueue(new okhttp3.Callback() {
+            @Override public void onFailure(Call call, java.io.IOException e) {}
+            @Override public void onResponse(Call call, Response response) throws java.io.IOException { 
+                if(response.body() != null) response.body().close(); 
+            }
+        });
+    }
 
     // ==========================================
     // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
