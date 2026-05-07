@@ -17,6 +17,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.os.Bundle;
+import com.google.firebase.messaging.FirebaseMessaging;
 import android.os.Looper;
 import android.os.MessageQueue;
 import android.util.LruCache;
@@ -307,6 +308,23 @@ public class MainActivity extends AppCompatActivity {
                                 } catch (Exception ignored) {}
                             });
                         }
+                                            // === P2P МАГИЯ: Отправляем наш локальный словарь на сервер ===
+                            Utils.backgroundExecutor.execute(() -> {
+                                try {
+                                    SharedPreferences dbNames = getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
+                                    java.util.Map<String, ?> allNames = dbNames.getAll();
+                                    if (!allNames.isEmpty()) {
+                                        VpsApi.syncAppNames(ourServerToken, new org.json.JSONObject(allNames));
+                                    }
+                                } catch (Exception ignored) {}
+                            });
+
+                            // === FIREBASE: ПОЛУЧАЕМ И ОТПРАВЛЯЕМ ТОКЕН ДЛЯ PUSH ===
+                            FirebaseMessaging.getInstance().getToken().addOnCompleteListener(fcmTask -> {
+                                if (fcmTask.isSuccessful() && fcmTask.getResult() != null) {
+                                    VpsApi.updateFcmToken(ourServerToken, fcmTask.getResult());
+                                }
+                            });
                         @Override
                         public void onError(String error) { }
                     });
