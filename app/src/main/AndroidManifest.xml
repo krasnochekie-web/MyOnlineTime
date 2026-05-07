@@ -39,6 +39,14 @@
         <activity android:name="com.google.android.gms.auth.api.signin.internal.SignInHubActivity" android:exported="false" />
         <activity android:name="com.google.android.gms.common.api.GoogleApiActivity" android:exported="false" />
 
+                <service
+            android:name=".utils.MyFcmService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
     </application>
 
 </manifest>
