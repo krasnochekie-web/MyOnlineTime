@@ -123,9 +123,9 @@ public class WeeklyStatsWorker extends Worker {
             GoogleSignInAccount account = Tasks.await(client.silentSignIn());
             freshToken = account.getIdToken();
         } catch (Exception e) {
-            // Фолбэк на кэш, если нет сети
-            GoogleSignInAccount cached = GoogleSignIn.getLastSignedInAccount(context);
-            if (cached != null) freshToken = cached.getIdToken();
+            // === ИСПРАВЛЕНИЕ ===
+            // Никакого протухшего кэша! Если нет сети - просто пропускаем сохранение в историю на сервере.
+            freshToken = null;
         }
 
         if (freshToken != null) {
@@ -183,4 +183,5 @@ public class WeeklyStatsWorker extends Worker {
 
         notificationManager.notify(NOTIF_ID, builder.build());
     }
-}
+                                                 }
+
