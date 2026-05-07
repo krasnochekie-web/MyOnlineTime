@@ -1,0 +1,77 @@
+{
+  "project_info": {
+    "project_number": "603306715003",
+    "firebase_url": "https://uplifted-smile-449518-d0-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "uplifted-smile-449518-d0",
+    "storage_bucket": "uplifted-smile-449518-d0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:603306715003:android:4976c582d29f7c562bffde",
+        "android_client_info": {
+          "package_name": "com.mynewtime.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "603306715003-eienuj9vrlem9er6ha5jj9gsfn083nsu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mynewtime.app",
+            "certificate_hash": "6c309116a266161af813f3e95f161b5c07df5256"
+          }
+        },
+        {
+          "client_id": "603306715003-0ptgu4fqnldcsoon9niprvi772m2ebks.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB6UXYatqFPKm9oSu8gggCsTZFV0gnp6ps"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "603306715003-0ptgu4fqnldcsoon9niprvi772m2ebks.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:603306715003:android:f7f1ba010edc25d12bffde",
+        "android_client_info": {
+          "package_name": "com.myonlinetime.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "603306715003-0ptgu4fqnldcsoon9niprvi772m2ebks.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB6UXYatqFPKm9oSu8gggCsTZFV0gnp6ps"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "603306715003-0ptgu4fqnldcsoon9niprvi772m2ebks.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
