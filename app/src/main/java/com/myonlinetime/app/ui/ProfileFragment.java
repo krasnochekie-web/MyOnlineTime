@@ -119,6 +119,20 @@ public class ProfileFragment extends Fragment {
         if (account == null) return wrapper;
         myUid = account.getId();
 
+        // === МГНОВЕННАЯ ЗАГРУЗКА ФОНА ИЗ КЭША (до отрисовки на экране) ===
+        String bgPath = activity.prefs.getString("custom_bg_path_" + myUid, null);
+        String remoteBg = activity.prefs.getString("my_bg_base64", null);
+        if (bgPath != null && new File(bgPath).exists()) {
+            currentLoadedBg = myUid + "_local_bg_" + new File(bgPath).lastModified();
+            Glide.with(activity).load(new File(bgPath))
+                 .diskCacheStrategy(DiskCacheStrategy.NONE) 
+                 .signature(new ObjectKey(new File(bgPath).lastModified())) 
+                 .centerCrop().into(myBgImageView);
+        } else if (remoteBg != null && remoteBg.startsWith("http")) {
+            currentLoadedBg = myUid + "_remote_bg_" + String.valueOf(remoteBg.hashCode());
+            Glide.with(activity).load(remoteBg).centerCrop().into(myBgImageView);
+        }
+
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.resetHeader();
 
@@ -140,6 +154,40 @@ public class ProfileFragment extends Fragment {
         final ImageView btnExpand = originalView.findViewById(R.id.btn_expand_apps);
         final ImageView btnCollapse = originalView.findViewById(R.id.btn_collapse_apps);
         final LinearLayout appsContainerLocal = originalView.findViewById(R.id.profile_apps_container);
+        
+        // === МАГИЧЕСКИЙ СЛУШАТЕЛЬ ДЛЯ СКРЫТИЯ ПУСТОЙ КАРТОЧКИ ===
+        final View appsCardParent = (View) appsContainerLocal.getParent();
+        appsContainerLocal.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
+            @Override
+            public void onChildViewAdded(View parent, View child) { updateEmptyState(); }
+            @Override
+            public void onChildViewRemoved(View parent, View child) { updateEmptyState(); }
+            
+            private void updateEmptyState() {
+                uiHandler.post(() -> {
+                    if (!isAdded() || getView() == null) return;
+                    boolean hasApps = appsContainerLocal.getChildCount() > 0;
+                    if (appsCardParent != null) {
+                        appsCardParent.setVisibility(hasApps ? View.VISIBLE : View.GONE);
+                    } else {
+                        appsContainerLocal.setVisibility(hasApps ? View.VISIBLE : View.GONE);
+                    }
+                    if (!hasApps) {
+                        btnExpand.setVisibility(View.GONE);
+                        btnCollapse.setVisibility(View.GONE);
+                    }
+                });
+            }
+        });
+        
+        boolean initiallyHasApps = appsContainerLocal.getChildCount() > 0;
+        if (appsCardParent != null) appsCardParent.setVisibility(initiallyHasApps ? View.VISIBLE : View.GONE);
+        else appsContainerLocal.setVisibility(initiallyHasApps ? View.VISIBLE : View.GONE);
+        if (!initiallyHasApps) {
+            btnExpand.setVisibility(View.GONE);
+            btnCollapse.setVisibility(View.GONE);
+        }
+        // ========================================================
 
         btnFollow.setVisibility(View.GONE);
         btnEdit.setVisibility(View.VISIBLE);
@@ -291,10 +339,10 @@ public class ProfileFragment extends Fragment {
         }
     }
 
+    // === ИСПРАВЛЕНИЕ "ПРОТУХШЕГО ЭМУЛЯТОРА": Жесткий запрос токена ===
     private void refreshCounts(MainActivity activity) {
+        // 1. Быстрая загрузка из кэша
         String cachedCounts = OtherProfileFragment.prefetchCountsCache.get(myUid);
-        
-        // 1. Если данные есть в кэше — рисуем их и ВЫХОДИМ, не дергая сервер за счетчиками!
         if (cachedCounts != null) {
             try {
                 org.json.JSONObject json = new org.json.JSONObject(cachedCounts);
@@ -308,25 +356,37 @@ public class ProfileFragment extends Fragment {
                 }
             } catch (Exception ignored) {}
             
-            // Запускаем только обновление имени/фона, счетчики больше не трогаем
             if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
             return;
         }
 
-        // 2. Если кэша нет (первый запуск приложения) — идем на сервер
+        // 2. Идем на сервер с защитой от протухших токенов (как в FollowsFragment)
         if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
             executeCountsApi(activity, activity.vpsToken);
             if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
         } else {
             GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
-            if (acct != null) {
-                VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
-                    @Override public void onSuccess(String token) {
-                        activity.vpsToken = token;
-                        executeCountsApi(activity, token);
-                        if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
-                    }
-                    @Override public void onError(String e) {}
+            if (acct != null && activity.mGoogleSignInClient != null) {
+                // Запрашиваем 100% свежий токен!
+                activity.mGoogleSignInClient.silentSignIn().addOnSuccessListener(freshAccount -> {
+                    VpsApi.authenticateWithGoogle(activity, freshAccount.getIdToken(), new VpsApi.LoginCallback() {
+                        @Override public void onSuccess(String token) {
+                            activity.vpsToken = token;
+                            executeCountsApi(activity, token);
+                            if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
+                        }
+                        @Override public void onError(String e) {}
+                    });
+                }).addOnFailureListener(e -> {
+                    // Фолбэк
+                    VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
+                        @Override public void onSuccess(String token) {
+                            activity.vpsToken = token;
+                            executeCountsApi(activity, token);
+                            if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
+                        }
+                        @Override public void onError(String ex) {}
+                    });
                 });
             }
         }
@@ -347,7 +407,7 @@ public class ProfileFragment extends Fragment {
                             int following = json.optInt("following", -1);
                             if (following >= 0 && txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
                         }
-                        // Сохраняем первые загруженные цифры в общий кэш профиля!
+                        // Сохраняем первые загруженные цифры в общий кэш профиля
                         OtherProfileFragment.prefetchCountsCache.put(myUid, result);
                     } catch (Exception e) {}
                 });
