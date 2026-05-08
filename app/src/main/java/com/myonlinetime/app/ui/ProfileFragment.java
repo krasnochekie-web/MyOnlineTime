@@ -144,7 +144,6 @@ public class ProfileFragment extends Fragment {
         btnFollow.setVisibility(View.GONE);
         btnEdit.setVisibility(View.VISIBLE);
 
-        // Я ВЕРНУЛ ЭТО В ОРИГИНАЛЬНОЕ СОСТОЯНИЕ (Теперь приложения снова загружаются!)
         loadMyStatsRunnable = () -> {
             if (isAdded() && appsContainerLocal != null && weekTimeText != null) {
                 StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
@@ -292,8 +291,29 @@ public class ProfileFragment extends Fragment {
         }
     }
 
-    // === ИСПРАВЛЕНИЕ "ВЕЧНЫХ НУЛЕЙ": Запрашиваем токен, если его нет! ===
     private void refreshCounts(MainActivity activity) {
+        String cachedCounts = OtherProfileFragment.prefetchCountsCache.get(myUid);
+        
+        // 1. Если данные есть в кэше — рисуем их и ВЫХОДИМ, не дергая сервер за счетчиками!
+        if (cachedCounts != null) {
+            try {
+                org.json.JSONObject json = new org.json.JSONObject(cachedCounts);
+                if (json.has("followers") && !json.isNull("followers")) {
+                    int followers = json.optInt("followers", -1);
+                    if (followers >= 0 && txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(followers));
+                }
+                if (json.has("following") && !json.isNull("following")) {
+                    int following = json.optInt("following", -1);
+                    if (following >= 0 && txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
+                }
+            } catch (Exception ignored) {}
+            
+            // Запускаем только обновление имени/фона, счетчики больше не трогаем
+            if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
+            return;
+        }
+
+        // 2. Если кэша нет (первый запуск приложения) — идем на сервер
         if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
             executeCountsApi(activity, activity.vpsToken);
             if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
@@ -327,6 +347,8 @@ public class ProfileFragment extends Fragment {
                             int following = json.optInt("following", -1);
                             if (following >= 0 && txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
                         }
+                        // Сохраняем первые загруженные цифры в общий кэш профиля!
+                        OtherProfileFragment.prefetchCountsCache.put(myUid, result);
                     } catch (Exception e) {}
                 });
             }
