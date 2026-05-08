@@ -23,7 +23,7 @@ public class FollowsFragment extends Fragment {
     private boolean startOnFollowers = true;
     private Runnable hideBgRunnable;
     
-    private ViewPager2 viewPager; // Сделали полем класса для доступа в onHiddenChanged
+    private ViewPager2 viewPager; 
 
     public static FollowsFragment newInstance(String targetUid, boolean isFollowersTab) {
         FollowsFragment fragment = new FollowsFragment();
@@ -47,10 +47,8 @@ public class FollowsFragment extends Fragment {
             startOnFollowers = getArguments().getBoolean("IS_FOLLOWERS_TAB", true);
         }
 
-        // Вызываем новый метод настройки шапки
         setupHeader(activity, startOnFollowers);
 
-        // Находим элементы вкладок
         final TextView txtFollowers = mainLayout.findViewById(R.id.tab_txt_followers);
         final TextView txtFollowing = mainLayout.findViewById(R.id.tab_txt_following);
         final View lineFollowers = mainLayout.findViewById(R.id.tab_line_followers);
@@ -60,7 +58,6 @@ public class FollowsFragment extends Fragment {
         
         viewPager = mainLayout.findViewById(R.id.follows_view_pager);
 
-        // Устанавливаем адаптер
         viewPager.setAdapter(new FragmentStateAdapter(this) {
             @NonNull
             @Override
@@ -72,24 +69,20 @@ public class FollowsFragment extends Fragment {
             public int getItemCount() { return 2; }
         });
 
-        // Слушаем СВАЙПЫ И КЛИКИ
         viewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
                 super.onPageSelected(position);
                 boolean isFollowers = (position == 0);
                 
-                // Обновляем шапку при перелистывании
                 setupHeader(activity, isFollowers);
                 
-                // Умная смена цвета текста
                 int activeColor = ContextCompat.getColor(activity, R.color.burgundyRed);
                 int inactiveColor = ContextCompat.getColor(activity, R.color.tabTextInactive);
                 
                 txtFollowers.setTextColor(isFollowers ? activeColor : inactiveColor);
                 txtFollowing.setTextColor(!isFollowers ? activeColor : inactiveColor);
 
-                // Обновляем остальной UI
                 txtFollowers.setSelected(isFollowers);
                 txtFollowing.setSelected(!isFollowers);
                 lineFollowers.setSelected(isFollowers);
@@ -99,54 +92,45 @@ public class FollowsFragment extends Fragment {
             }
         });
 
-        // Слушаем КЛИКИ по вкладкам
-        mainLayout.findViewById(R.id.tab_followers).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { viewPager.setCurrentItem(0, true); }
-        });
-        mainLayout.findViewById(R.id.tab_following).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) { viewPager.setCurrentItem(1, true); }
-        });
+        mainLayout.findViewById(R.id.tab_followers).setOnClickListener(v -> viewPager.setCurrentItem(0, true));
+        mainLayout.findViewById(R.id.tab_following).setOnClickListener(v -> viewPager.setCurrentItem(1, true));
 
-        // Устанавливаем начальную вкладку
         viewPager.setCurrentItem(startOnFollowers ? 0 : 1, false);
 
-        // === МАГИЯ КЭША ДЛЯ БЕСШОВНОГО UX ===
-        
-        // 1. Мгновенно отрисовываем цифры, если они уже есть в памяти (из OtherProfile)
+        // === ИСТИННАЯ МАГИЯ КЭША ===
         String cachedCounts = OtherProfileFragment.prefetchCountsCache.get(targetUid);
+        
         if (cachedCounts != null) {
+            // 1. Данные уже есть в памяти! Рисуем мгновенно и останавливаемся.
+            // Никаких фоновых запросов, чтобы цифры не "прыгали" перед глазами!
             try {
                 org.json.JSONObject json = new org.json.JSONObject(cachedCounts);
                 countFollowers.setText(String.valueOf(json.optInt("followers", 0)));
                 countFollowing.setText(String.valueOf(json.optInt("following", 0)));
             } catch (Exception ignored) {}
-        }
-
-        // 2. Тихо идем на сервер за свежими цифрами в фоне, используя наш надежный vpsToken
-        if (activity.vpsToken != null) {
-            VpsApi.getCounts(activity.vpsToken, targetUid, new VpsApi.Callback() {
-                @Override public void onSuccess(String result) {
-                    if (!isAdded()) return;
-                    activity.runOnUiThread(() -> {
-                        try {
-                            org.json.JSONObject json = new org.json.JSONObject(result);
-                            countFollowers.setText(String.valueOf(json.optInt("followers", 0)));
-                            countFollowing.setText(String.valueOf(json.optInt("following", 0)));
-                            // Обновляем общий кэш профиля
-                            OtherProfileFragment.prefetchCountsCache.put(targetUid, result);
-                        } catch (Exception e) {}
-                    });
-                }
-                @Override public void onError(String e) {}
-            });
+        } else {
+            // 2. Данных в кэше нет (например, перешли по прямой ссылке). Идем на сервер.
+            if (activity.vpsToken != null) {
+                VpsApi.getCounts(activity.vpsToken, targetUid, new VpsApi.Callback() {
+                    @Override public void onSuccess(String result) {
+                        if (!isAdded()) return;
+                        activity.runOnUiThread(() -> {
+                            try {
+                                org.json.JSONObject json = new org.json.JSONObject(result);
+                                countFollowers.setText(String.valueOf(json.optInt("followers", 0)));
+                                countFollowing.setText(String.valueOf(json.optInt("following", 0)));
+                                OtherProfileFragment.prefetchCountsCache.put(targetUid, result);
+                            } catch (Exception e) {}
+                        });
+                    }
+                    @Override public void onError(String e) {}
+                });
+            }
         }
 
         return mainLayout; 
     }
 
-    // ========================================================
-    // МЕТОД ДЛЯ НАСТРОЙКИ ШАПКИ
-    // ========================================================
     private void setupHeader(MainActivity activity, boolean isFollowers) {
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
@@ -204,4 +188,5 @@ public class FollowsFragment extends Fragment {
             }
         }
     }
-                }
+                                                           }
+                                    
