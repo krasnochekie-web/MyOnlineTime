@@ -25,6 +25,9 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.util.Calendar;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -99,15 +102,52 @@ public class WeeklyStatsWorker extends Worker {
 
         String actionText = context.getString(R.string.notif_action_click);
         
-        // CountDownLatch гарантирует, что Worker не умрет до завершения сетевого запроса
-        final CountDownLatch latch = new CountDownLatch(1);
-
-        saveToServer(context, mainText, actionText, latch);
+        // === ЛОКАЛЬНОЕ СОХРАНЕНИЕ ДЛЯ ОФЛАЙНА И ГОСТЕЙ ===
+        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(context);
+        String currentUid = account != null ? account.getId() : "guest";
+        String cacheKey = "notif_history_array_" + currentUid;
+        
+        saveToLocalHistory(context, cacheKey, mainText, actionText);
         sendNotification(context, mainText, actionText);
 
-        try { latch.await(); } catch (InterruptedException e) {}
+        // === СОХРАНЕНИЕ НА СЕРВЕР ТОЛЬКО ДЛЯ АВТОРИЗОВАННЫХ ===
+        if (account != null) {
+            final CountDownLatch latch = new CountDownLatch(1);
+            saveToServer(context, mainText, actionText, latch);
+            try { latch.await(); } catch (InterruptedException e) {}
+        }
 
         return Result.success();
+    }
+
+    // === НОВЫЙ МЕТОД: ЛОКАЛЬНОЕ СОХРАНЕНИЕ (Работает всегда) ===
+    private void saveToLocalHistory(Context context, String cacheKey, String mainText, String actionText) {
+        try {
+            SharedPreferences prefs = context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
+            String oldCache = prefs.getString(cacheKey, "[]");
+            JSONArray oldArray = new JSONArray(oldCache);
+
+            JSONObject newItem = new JSONObject();
+            newItem.put("type", "time");
+            newItem.put("timestamp", System.currentTimeMillis());
+            newItem.put("isRead", false);
+            newItem.put("mainText", mainText);
+            newItem.put("actionText", actionText);
+
+            JSONArray newArray = new JSONArray();
+            newArray.put(newItem);
+            
+            for (int i = 0; i < oldArray.length(); i++) {
+                newArray.put(oldArray.getJSONObject(i));
+            }
+
+            prefs.edit().putString(cacheKey, newArray.toString()).apply();
+            
+            // Дергаем колокольчик, чтобы он зажегся
+            context.sendBroadcast(new Intent("UPDATE_BADGE_BROADCAST"));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     // === СОХРАНЕНИЕ В БАЗУ ДАННЫХ (С ПОЛУЧЕНИЕМ СВЕЖЕГО ТОКЕНА) ===
@@ -119,12 +159,10 @@ public class WeeklyStatsWorker extends Worker {
                     .requestEmail().build();
             GoogleSignInClient client = GoogleSignIn.getClient(context, gso);
             
-            // Запрашиваем новый токен синхронно, так как мы уже в фоновом потоке Worker'а
             GoogleSignInAccount account = Tasks.await(client.silentSignIn());
             freshToken = account.getIdToken();
         } catch (Exception e) {
-            // === ИСПРАВЛЕНИЕ ===
-            // Никакого протухшего кэша! Если нет сети - просто пропускаем сохранение в историю на сервере.
+            // Никакого протухшего кэша! Нет сети - нет запроса.
             freshToken = null;
         }
 
@@ -183,5 +221,4 @@ public class WeeklyStatsWorker extends Worker {
 
         notificationManager.notify(NOTIF_ID, builder.build());
     }
-                                                 }
-
+            }
