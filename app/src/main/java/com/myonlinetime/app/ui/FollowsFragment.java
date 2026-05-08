@@ -110,47 +110,34 @@ public class FollowsFragment extends Fragment {
         // Устанавливаем начальную вкладку
         viewPager.setCurrentItem(startOnFollowers ? 0 : 1, false);
 
-        // Загружаем счетчики
-        GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
-        if(acct != null && activity.mGoogleSignInClient != null) {
-            // ИСПОЛЬЗУЕМ SILENT SIGN IN И JSON ПАРСЕР
-            activity.mGoogleSignInClient.silentSignIn().addOnSuccessListener(freshAccount -> {
-                VpsApi.authenticateWithGoogle(activity, freshAccount.getIdToken(), new VpsApi.LoginCallback() {
-                    @Override
-                    public void onSuccess(String token) {
-                        VpsApi.getCounts(token, targetUid, new VpsApi.Callback() {
-                            @Override public void onSuccess(String result) {
-                                if (!isAdded()) return;
-                                try {
-                                    org.json.JSONObject json = new org.json.JSONObject(result);
-                                    countFollowers.setText(String.valueOf(json.optInt("followers", 0)));
-                                    countFollowing.setText(String.valueOf(json.optInt("following", 0)));
-                                } catch (Exception e) {}
-                            }
-                            @Override public void onError(String e) {}
-                        });
-                    }
-                    @Override public void onError(String e) {}
-                });
-            }).addOnFailureListener(e -> {
-                // Фолбэк на случай если токен не обновился тихо
-                VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
-                    @Override
-                    public void onSuccess(String token) {
-                        VpsApi.getCounts(token, targetUid, new VpsApi.Callback() {
-                            @Override public void onSuccess(String result) {
-                                if (!isAdded()) return;
-                                try {
-                                    org.json.JSONObject json = new org.json.JSONObject(result);
-                                    countFollowers.setText(String.valueOf(json.optInt("followers", 0)));
-                                    countFollowing.setText(String.valueOf(json.optInt("following", 0)));
-                                } catch (Exception ex) {}
-                            }
-                            @Override public void onError(String ex) {}
-                        });
-                    }
-                    @Override public void onError(String ex) {}
-                });
+        // === МАГИЯ КЭША ДЛЯ БЕСШОВНОГО UX ===
+        
+        // 1. Мгновенно отрисовываем цифры, если они уже есть в памяти (из OtherProfile)
+        String cachedCounts = OtherProfileFragment.prefetchCountsCache.get(targetUid);
+        if (cachedCounts != null) {
+            try {
+                org.json.JSONObject json = new org.json.JSONObject(cachedCounts);
+                countFollowers.setText(String.valueOf(json.optInt("followers", 0)));
+                countFollowing.setText(String.valueOf(json.optInt("following", 0)));
+            } catch (Exception ignored) {}
+        }
+
+        // 2. Тихо идем на сервер за свежими цифрами в фоне, используя наш надежный vpsToken
+        if (activity.vpsToken != null) {
+            VpsApi.getCounts(activity.vpsToken, targetUid, new VpsApi.Callback() {
+                @Override public void onSuccess(String result) {
+                    if (!isAdded()) return;
+                    activity.runOnUiThread(() -> {
+                        try {
+                            org.json.JSONObject json = new org.json.JSONObject(result);
+                            countFollowers.setText(String.valueOf(json.optInt("followers", 0)));
+                            countFollowing.setText(String.valueOf(json.optInt("following", 0)));
+                            // Обновляем общий кэш профиля
+                            OtherProfileFragment.prefetchCountsCache.put(targetUid, result);
+                        } catch (Exception e) {}
+                    });
+                }
+                @Override public void onError(String e) {}
             });
         }
 
@@ -217,4 +204,4 @@ public class FollowsFragment extends Fragment {
             }
         }
     }
-}
+                }
