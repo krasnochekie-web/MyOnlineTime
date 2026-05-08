@@ -8,7 +8,7 @@
     <string name="find">Поиск</string>
     <string name="time">Время</string>
 	<string name="notif_max_count">99+</string>	
-	<string name="notif_channel_followers_name">Подписчики</string>
+	<string name="notif_channel_followers_name">У вас новый подписчик!</string>
 <string name="notif_someone">Кто-то</string>
 <string name="notif_subscribed_to_you">%1$s подписался на вас!</string>
 	<string name="notif_offline_mode">(Офлайн)</string>
