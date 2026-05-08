@@ -112,7 +112,7 @@ public class OtherProfileFragment extends Fragment {
         ImageView bgImageView = new ImageView(activity);
         bgImageView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         bgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        bgImageView.setBackgroundColor(android.graphics.Color.parseColor("#121212")); 
+        // УБРАЛ ЖЕСТКУЮ ЧЕРНУЮ ЗАЛИВКУ ЗДЕСЬ!
 
         wrapper.addView(bgImageView);
         wrapper.addView(originalView);
@@ -205,6 +205,8 @@ public class OtherProfileFragment extends Fragment {
             renderOtherUserStats(cachedUser.topApps, cachedUser.totalTime, cachedUser.hiddenApps, cachedUser.appDescriptions, cachedUser.resolvedNames, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
             if (cachedUser.background != null && cachedUser.background.length() > 5) {
                 Glide.with(activity).load(cachedUser.background).centerCrop().into(bgImageView);
+            } else {
+                bgImageView.setImageDrawable(null); // ОЧИЩАЕМ ЕСЛИ НЕТ ФОНА
             }
         }
 
@@ -291,7 +293,6 @@ public class OtherProfileFragment extends Fragment {
              }
         });
 
-        // === ИСПРАВЛЕНИЕ: ЖДЕМ ТОКЕН ДЛЯ ПОЛНОЙ ЗАГРУЗКИ (Защита от пуша) ===
         Runnable dataLoader = new Runnable() {
             @Override
             public void run() {
@@ -300,11 +301,10 @@ public class OtherProfileFragment extends Fragment {
                 if (act == null) return;
 
                 if (act.vpsToken == null) {
-                    uiHandler.postDelayed(this, 500); // Ждем полсекунды и пробуем снова
+                    uiHandler.postDelayed(this, 500); 
                     return;
                 }
 
-                // Токен есть! Грузим всё остальное
                 VpsApi.getUser(act, act.vpsToken, targetUid, new VpsApi.UserCallback() {
                     @Override
                     public void onLoaded(User user) {
@@ -328,7 +328,7 @@ public class OtherProfileFragment extends Fragment {
                             if (user.background != null && user.background.length() > 5) {
                                 Glide.with(act).load(user.background).centerCrop().into(bgImageView);
                             } else {
-                                bgImageView.setImageDrawable(null); 
+                                bgImageView.setImageDrawable(null); // ОЧИЩАЕМ ЕСЛИ НЕТ ФОНА
                             }
                         } else {
                             nameView.setText(act.getString(R.string.new_user));
@@ -351,7 +351,7 @@ public class OtherProfileFragment extends Fragment {
             }
         };
         
-        dataLoader.run(); // Запускаем нашу умную загрузку
+        dataLoader.run(); 
 
         return wrapper; 
     }
@@ -382,9 +382,7 @@ public class OtherProfileFragment extends Fragment {
                     applyCountsJson(result);
                 });
             }
-            @Override public void onError(String error) {
-                // ПУЛЕМЕТ ОБЕЗВРЕЖЕН: Мы больше не пытаемся бесконечно дергать сервер при ошибке!
-            }
+            @Override public void onError(String error) {}
         });
     }
 
@@ -505,7 +503,6 @@ public class OtherProfileFragment extends Fragment {
                     
                     if (appDescriptions != null) data.description = appDescriptions.get(pkgName);
                     
-                    // ДОБЕРЯЕМ СЕРВЕРУ: Истинная логика проверки удаленных приложений (Корзина)
                     data.isDeleted = (appTime == 0);
 
                     ApplicationInfo appInfo = null;
@@ -513,7 +510,6 @@ public class OtherProfileFragment extends Fragment {
                         appInfo = pm.getApplicationInfo(pkgName, 0);
                     } catch (PackageManager.NameNotFoundException ignored) {}
 
-                    // === P2P МАГИЯ ИМЕН: Локальный кэш -> Оф. система -> Серверная База -> Умный фолбэк ===
                     String cachedName = dbNames.getString(pkgName, null);
                     if (cachedName != null) {
                         data.appName = cachedName;
@@ -591,7 +587,6 @@ public class OtherProfileFragment extends Fragment {
 
                         nameView.setText(data.appName);
                         
-                        // НОВАЯ P2P ЛОГИКА ОТОБРАЖЕНИЯ ИКОНОК ЧЕРЕЗ GLIDE
                         if (data.icon != null) {
                             iconView.setImageDrawable(data.icon);
                         } else {
@@ -632,7 +627,6 @@ public class OtherProfileFragment extends Fragment {
         });
     }
 
-    // === УМНЫЙ СЛОВАРЬ (Фолбэк) ===
     private String getSmartAppName(String pkg) {
         if (pkg == null) return "Unknown";
         switch (pkg.toLowerCase()) {
