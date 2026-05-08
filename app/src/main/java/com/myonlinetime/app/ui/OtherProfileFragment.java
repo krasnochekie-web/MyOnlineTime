@@ -291,51 +291,67 @@ public class OtherProfileFragment extends Fragment {
              }
         });
 
-        if (activity.vpsToken != null) {
-            VpsApi.getUser(activity, activity.vpsToken, targetUid, new VpsApi.UserCallback() {
-                @Override
-                public void onLoaded(User user) {
-                    if (!isAdded()) return;
-                    if (user != null) {
-                        prefetchUserCache.put(targetUid, user); 
-                        nameView.setText(user.nickname != null ? user.nickname : activity.getString(R.string.no_name));
-                        
-                        aboutView.setText(user.about != null ? user.about : "");
-                        if (user.about == null || user.about.trim().isEmpty()) {
-                            aboutView.setVisibility(View.GONE);
-                        } else {
-                            aboutView.setVisibility(View.VISIBLE);
-                        }
-                        
-                        applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
+        // === ИСПРАВЛЕНИЕ: ЖДЕМ ТОКЕН ДЛЯ ПОЛНОЙ ЗАГРУЗКИ (Защита от пуша) ===
+        Runnable dataLoader = new Runnable() {
+            @Override
+            public void run() {
+                if (!isAdded()) return;
+                MainActivity act = (MainActivity) getActivity();
+                if (act == null) return;
 
-                        if (user.photo != null && user.photo.length() > 5) handleMediaLoading(activity, user.photo);
-                        renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, user.resolvedNames, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
-
-                        if (user.background != null && user.background.length() > 5) {
-                            Glide.with(activity).load(user.background).centerCrop().into(bgImageView);
-                        } else {
-                            bgImageView.setImageDrawable(null); 
-                        }
-                    } else {
-                        nameView.setText(activity.getString(R.string.new_user));
-                    }
+                if (act.vpsToken == null) {
+                    uiHandler.postDelayed(this, 500); // Ждем полсекунды и пробуем снова
+                    return;
                 }
-                @Override public void onError(String e) {}
-            });
 
-            refreshCounts(activity);
+                // Токен есть! Грузим всё остальное
+                VpsApi.getUser(act, act.vpsToken, targetUid, new VpsApi.UserCallback() {
+                    @Override
+                    public void onLoaded(User user) {
+                        if (!isAdded()) return;
+                        if (user != null) {
+                            prefetchUserCache.put(targetUid, user); 
+                            nameView.setText(user.nickname != null ? user.nickname : act.getString(R.string.no_name));
+                            
+                            aboutView.setText(user.about != null ? user.about : "");
+                            if (user.about == null || user.about.trim().isEmpty()) {
+                                aboutView.setVisibility(View.GONE);
+                            } else {
+                                aboutView.setVisibility(View.VISIBLE);
+                            }
+                            
+                            applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
-            VpsApi.checkIsFollowing(activity.vpsToken, targetUid, new VpsApi.BooleanCallback() {
-                 @Override public void onResult(final boolean isFollowing) {
-                     if (!isAdded()) return;
-                     prefetchFollowCache.put(targetUid, isFollowing);
-                     btnFollow.setTag(isFollowing);
-                     updateFollowButton(btnFollow, isFollowing);
-                     btnFollow.setVisibility(View.VISIBLE);
-                 }
-            });
-        }
+                            if (user.photo != null && user.photo.length() > 5) handleMediaLoading(act, user.photo);
+                            renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, user.resolvedNames, appsContainerLocal, act, weekTimeText, aboutView, btnExpand, btnCollapse);
+
+                            if (user.background != null && user.background.length() > 5) {
+                                Glide.with(act).load(user.background).centerCrop().into(bgImageView);
+                            } else {
+                                bgImageView.setImageDrawable(null); 
+                            }
+                        } else {
+                            nameView.setText(act.getString(R.string.new_user));
+                        }
+                    }
+                    @Override public void onError(String e) {}
+                });
+
+                refreshCounts(act);
+
+                VpsApi.checkIsFollowing(act.vpsToken, targetUid, new VpsApi.BooleanCallback() {
+                     @Override public void onResult(final boolean isFollowing) {
+                         if (!isAdded()) return;
+                         prefetchFollowCache.put(targetUid, isFollowing);
+                         btnFollow.setTag(isFollowing);
+                         updateFollowButton(btnFollow, isFollowing);
+                         btnFollow.setVisibility(View.VISIBLE);
+                     }
+                });
+            }
+        };
+        
+        dataLoader.run(); // Запускаем нашу умную загрузку
 
         return wrapper; 
     }
@@ -367,11 +383,7 @@ public class OtherProfileFragment extends Fragment {
                 });
             }
             @Override public void onError(String error) {
-                uiHandler.postDelayed(() -> {
-                    if (isAdded() && activity.vpsToken != null) {
-                        executeCountsApi(activity, activity.vpsToken);
-                    }
-                }, 1000);
+                // ПУЛЕМЕТ ОБЕЗВРЕЖЕН: Мы больше не пытаемся бесконечно дергать сервер при ошибке!
             }
         });
     }
