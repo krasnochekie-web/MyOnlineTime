@@ -5,6 +5,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Build;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -13,6 +14,9 @@ import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.util.Map;
 
@@ -38,10 +42,49 @@ public class MyFcmService extends FirebaseMessagingService {
         if ("follower".equals(type)) {
             String nickname = data.get("nickname");
             String targetUid = data.get("uid");
+            String photo = data.get("photo"); // Достаем фото для истории
+            
+            // 1. Показываем всплывающее системное уведомление
             sendFollowerPush(nickname, targetUid);
             
-            // Дергаем колокольчик в приложении (чтобы загорелся красный бейдж)
+            // 2. ВРУЧНУЮ СОХРАНЯЕМ В ИСТОРИЮ (мгновенно, без интернета!)
+            saveToLocalHistory(type, targetUid, nickname, photo);
+            
+            // 3. Дергаем колокольчик в приложении (теперь он найдет isRead: false и загорится!)
             sendBroadcast(new Intent("UPDATE_BADGE_BROADCAST"));
+        }
+    }
+
+    // === НОВАЯ МАГИЯ ДЛЯ ИСТОРИИ И БЕЙДЖА ===
+    private void saveToLocalHistory(String type, String uid, String nickname, String photo) {
+        try {
+            SharedPreferences prefs = getSharedPreferences("AppPrefs", MODE_PRIVATE);
+            String oldCache = prefs.getString("notif_history_array", "[]");
+            JSONArray oldArray = new JSONArray(oldCache);
+
+            // Создаем объект нового уведомления
+            JSONObject newItem = new JSONObject();
+            newItem.put("type", type);
+            newItem.put("timestamp", System.currentTimeMillis());
+            newItem.put("isRead", false); // Обязательно false, чтобы зажегся бейдж!
+            newItem.put("uid", uid != null ? uid : "");
+            newItem.put("nickname", nickname != null ? nickname : "");
+            newItem.put("photo", photo != null ? photo : "");
+            newItem.put("isFollowing", false); // Обновится само при открытии истории
+
+            // Создаем новый массив и кладем свежее уведомление на самый верх (индекс 0)
+            JSONArray newArray = new JSONArray();
+            newArray.put(newItem);
+            
+            // Перекладываем старые уведомления под новое
+            for (int i = 0; i < oldArray.length(); i++) {
+                newArray.put(oldArray.getJSONObject(i));
+            }
+
+            // Перезаписываем кэш
+            prefs.edit().putString("notif_history_array", newArray.toString()).apply();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
@@ -75,9 +118,9 @@ public class MyFcmService extends FirebaseMessagingService {
                 .setColor(ContextCompat.getColor(this, R.color.burgundyRed))
                 .setContentIntent(pi)
                 .setAutoCancel(true)
-                .setPriority(NotificationCompat.PRIORITY_HIGH); // Приоритет поверх всего
+                .setPriority(NotificationCompat.PRIORITY_HIGH);
 
         nm.notify(reqCode, builder.build());
     }
-          }
-                             
+                }
+                                 
