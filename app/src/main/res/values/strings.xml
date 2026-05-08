@@ -8,7 +8,7 @@
     <string name="feed">Feed</string>
     <string name="find">Find</string>
 	<string name="notif_offline_mode">(Offline)</string>
-	<string name="notif_channel_followers_name">Followers</string>
+	<string name="notif_channel_followers_name">You have a new subscriber!</string>
 <string name="notif_someone">Someone</string>
 <string name="notif_subscribed_to_you">%1$s subscribed to you!</string>
 	<string name="toast_compressing_video">Compressing video… Please wait.</string>
