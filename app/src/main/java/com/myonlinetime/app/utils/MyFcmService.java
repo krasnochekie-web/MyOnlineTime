@@ -37,9 +37,23 @@ public class MyFcmService extends FirebaseMessagingService {
         Map<String, String> data = remoteMessage.getData();
         if (data == null || data.isEmpty()) return;
 
+        SharedPreferences prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
+
+        // === 1. ГЛОБАЛЬНЫЙ ТУМБЛЕР ===
+        // Если общие уведомления выключены - убиваем пуш на подлете!
+        if (!prefs.getBoolean("notif_general_enabled", true)) {
+            return; 
+        }
+
         String type = data.get("type");
         
         if ("follower".equals(type)) {
+            // === 2. ТУМБЛЕР ПОДПИСОК ===
+            // Если уведомления о подписках выключены - тоже убиваем!
+            if (!prefs.getBoolean("notif_followers_enabled", true)) {
+                return;
+            }
+
             String nickname = data.get("nickname");
             String targetUid = data.get("uid");
             String photo = data.get("photo"); // Достаем фото для истории
@@ -52,6 +66,13 @@ public class MyFcmService extends FirebaseMessagingService {
             
             // 3. Дергаем колокольчик в приложении (теперь он найдет isRead: false и загорится!)
             sendBroadcast(new Intent("UPDATE_BADGE_BROADCAST"));
+        } 
+        else if ("time".equals(type) || "record".equals(type)) {
+            // === 3. ТУМБЛЕР РЕКОРДОВ (ЗАДЕЛ НА БУДУЩЕЕ ДЛЯ FCM) ===
+            if (!prefs.getBoolean("notif_records_enabled", true)) {
+                return;
+            }
+            // Здесь будет логика для пушей с рекордами, если переведешь их на сервер
         }
     }
 
@@ -128,4 +149,4 @@ public class MyFcmService extends FirebaseMessagingService {
         nm.notify(reqCode, builder.build());
     }
                 }
-                              
+        
