@@ -89,6 +89,13 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         SharedPreferences appPrefs = getSharedPreferences("AppPrefs", MODE_PRIVATE);
+
+        // === 1. ИНИЦИАЛИЗИРУЕМ УМНЫЙ СЕТЕВОЙ КЛИЕНТ (С ПЕРЕХВАТЧИКОМ 401) ===
+        VpsApi.initClient(this);
+
+        // === 2. ДОСТАЕМ КОРОТКИЙ ТОКЕН ИЗ ПАМЯТИ ===
+        vpsToken = appPrefs.getString("vps_access_token", null);
+
         int savedTheme = appPrefs.getInt("selected_theme", AppCompatDelegate.MODE_NIGHT_YES);
         AppCompatDelegate.setDefaultNightMode(savedTheme);
 
@@ -266,8 +273,6 @@ public class MainActivity extends AppCompatActivity {
         );
         
         // === ВОРКЕР ПОДПИСЧИКОВ (УБИВАЕМ НАВСЕГДА) ===
-        // Мы перешли на Firebase (FCM), поэтому старый воркер нам больше не нужен.
-        // Даем команду Android принудительно отменить старую задачу, если она висит в памяти:
         androidx.work.WorkManager.getInstance(this).cancelUniqueWork("FollowerSync");
 
         handleNotificationIntent(getIntent());
@@ -276,8 +281,21 @@ public class MainActivity extends AppCompatActivity {
         refreshGoogleAndVpsToken(true);
     }
 
-    // === НОВЫЙ МЕТОД: АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ ПРОТУХШИХ ТОКЕНОВ И ВОССТАНОВЛЕНИЕ vpsToken ===
+    // === ИСПРАВЛЕННЫЙ МЕТОД: АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ ПРОТУХШИХ ТОКЕНОВ ===
     public void refreshGoogleAndVpsToken(boolean isStartup) {
+        // Если у нас уже есть длинный токен - виртуалка в безопасности!
+        // OkHttp сам обновит короткий токен, когда он протухнет через час.
+        String refreshToken = getSharedPreferences("AppPrefs", MODE_PRIVATE).getString("vps_refresh_token", null);
+
+        if (refreshToken != null) {
+            if (isStartup) {
+                loadUserAvatarToBottomNav();
+                enforceLoginOverlays();
+            }
+            return; // Выходим! Не трогаем мертвые сервисы Google в виртуалке.
+        }
+
+        // Если длинного токена нет (самый первый вход) - тогда идем в Google
         if (mGoogleSignInClient == null) return;
 
         mGoogleSignInClient.silentSignIn().addOnCompleteListener(this, task -> {
@@ -308,7 +326,7 @@ public class MainActivity extends AppCompatActivity {
                                     VpsApi.updateFcmToken(ourServerToken, fcmTask.getResult());
                                 }
                             });
-                        } // <-- Код должен быть ДО этой закрывающей скобки метода onSuccess!
+                        }
 
                         @Override
                         public void onError(String error) { }
@@ -379,6 +397,12 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (prefs != null) prefs.edit().clear().apply();
+
+        // === СТИРАЕМ НАШИ НОВЫЕ ТОКЕНЫ ИЗ ПАМЯТИ ===
+        getSharedPreferences("AppPrefs", MODE_PRIVATE).edit()
+            .remove("vps_access_token")
+            .remove("vps_refresh_token")
+            .apply();
 
         try {
             File dir = getFilesDir();
@@ -671,7 +695,6 @@ public class MainActivity extends AppCompatActivity {
             Fragment current = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
             if (current != null) {
                 String fragName = current.getClass().getSimpleName();
-                // Если мы на экране, который должен быть сплошным - прячем твой фон заранее!
                 if (fragName.contains("OtherProfile") || fragName.contains("Notifications") || fragName.contains("Follows")) {
                     hideGlobalBg = true;
                 }
@@ -681,7 +704,7 @@ public class MainActivity extends AppCompatActivity {
         if (previewBgPath != null && navigator != null && navigator.hasSubScreen()) {
             previewBackground(previewBgPath);
         } else if (hideGlobalBg) {
-            updateGlobalBackground(false); // Запрещаем мерцание!
+            updateGlobalBackground(false); 
         } else {
             updateGlobalBackground(true);
         }
@@ -694,7 +717,6 @@ public class MainActivity extends AppCompatActivity {
             if (account != null) StatsHelper.syncUserProfile(this);
         }
         
-        // ЖЕЛЕЗНЫЙ ВЫЗОВ: Включает и выключает все нужные оверлеи и колокольчик!
         enforceLoginOverlays();
         
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
@@ -722,7 +744,6 @@ public class MainActivity extends AppCompatActivity {
         handleNotificationIntent(intent);
     }
     
-    // === ИСПРАВЛЕННЫЙ МЕТОД ОБРАБОТКИ ПУШЕЙ (ПРОФИЛЬ ПОДПИСЧИКА) ===
     private void handleNotificationIntent(Intent intent) {
         if (intent != null && intent.hasExtra("open_tab")) {
             String tab = intent.getStringExtra("open_tab");
@@ -733,7 +754,6 @@ public class MainActivity extends AppCompatActivity {
                 }
                 
                 if ("other_profile".equals(tab)) {
-                    // Открываем профиль подписчика поверх текущего экрана
                     String targetUid = intent.getStringExtra("target_uid");
                     String targetNickname = intent.getStringExtra("target_nickname");
                     if (targetUid != null && navigator != null) {
@@ -746,7 +766,6 @@ public class MainActivity extends AppCompatActivity {
                         ));
                     }
                 } else {
-                    // Открываем время или историю уведомлений
                     updateNavState(3); 
                     navigator.switchScreen(3, null);
                     syncHeaderState(); 
@@ -867,7 +886,6 @@ public class MainActivity extends AppCompatActivity {
         boolean hasPerm = hasPermission();
 
         // === 1. ГЛОБАЛЬНЫЙ КОНТРОЛЬ КОЛОКОЛЬЧИКА ===
-        // Прячем колокольчик, если нет разрешения на сбор статистики ИЛИ нет авторизации
         View headerBellContainer = findViewById(R.id.header_bell_container);
         if (headerBellContainer != null) {
             if (!hasPerm || noAuth) {
