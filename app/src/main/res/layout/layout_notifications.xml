@@ -44,7 +44,8 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingHorizontal="24dp"
-        android:paddingVertical="20dp">
+        android:paddingTop="20dp"
+        android:paddingBottom="10dp">
 
         <TextView
             android:layout_width="0dp"
@@ -70,7 +71,8 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingHorizontal="24dp"
-        android:paddingVertical="20dp">
+        android:paddingTop="10dp"
+        android:paddingBottom="20dp">
 
         <TextView
             android:layout_width="0dp"
@@ -90,4 +92,4 @@
     </LinearLayout>
 
 </LinearLayout>
-            
+        
