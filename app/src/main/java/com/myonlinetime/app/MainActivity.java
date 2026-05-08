@@ -424,13 +424,17 @@ public class MainActivity extends AppCompatActivity {
             container.post(this::enforceLoginOverlays);
         }
     }
-
-    public void updateNotificationBadge() {
+public void updateNotificationBadge() {
         TextView badge = findViewById(R.id.header_bell_badge);
         if (badge == null) return;
 
+        // === ИСПРАВЛЕНИЕ: Читаем из правильной "папки" текущего аккаунта ===
+        com.google.android.gms.auth.api.signin.GoogleSignInAccount account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(this);
+        String currentUid = account != null ? account.getId() : "guest";
+        String cacheKey = "notif_history_array_" + currentUid;
+
         SharedPreferences appPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
-        String historyJson = appPrefs.getString("notif_history_array", "[]");
+        String historyJson = appPrefs.getString(cacheKey, "[]"); // <-- ТЕПЕРЬ КЛЮЧ ПРАВИЛЬНЫЙ!
         
         int unreadCount = 0;
         try {
@@ -448,7 +452,6 @@ public class MainActivity extends AppCompatActivity {
             badge.setVisibility(View.GONE);
         }
     }
-
     private void initGlobalBackground() {
         View oldVideoView = findViewById(R.id.global_background_video);
         if (oldVideoView != null) oldVideoView.setVisibility(View.GONE);
