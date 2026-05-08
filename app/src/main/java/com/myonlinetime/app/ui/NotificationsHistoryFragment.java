@@ -19,6 +19,8 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
@@ -33,7 +35,6 @@ import java.util.List;
 public class NotificationsHistoryFragment extends Fragment {
 
     private static final String PREFS_NAME = "AppPrefs";
-    private static final String KEY_HISTORY = "notif_history_array";
 
     private Runnable hideBgRunnable;
     private RecyclerView recycler;
@@ -41,6 +42,13 @@ public class NotificationsHistoryFragment extends Fragment {
     private ProgressBar loadingSpinner;
     private NotificationsAdapter adapter;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
+
+    // === ДИНАМИЧЕСКИЙ КЛЮЧ ДЛЯ МУЛЬТИАККАУНТА ===
+    private String getCacheKey() {
+        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(requireContext());
+        String uid = account != null ? account.getId() : "guest";
+        return "notif_history_array_" + uid;
+    }
 
     @Nullable
     @Override
@@ -68,53 +76,59 @@ public class NotificationsHistoryFragment extends Fragment {
 
     private void loadHistory() {
         MainActivity activity = (MainActivity) getActivity();
-        if (activity == null || activity.vpsToken == null) {
-            showEmptyState();
-            return;
-        }
+        if (activity == null) return;
 
+        String cacheKey = getCacheKey();
         SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        String cachedJson = prefs.getString(KEY_HISTORY, "[]");
+        String cachedJson = prefs.getString(cacheKey, "[]");
         
-        // Убеждаемся, что кэш не пустой (длина больше 5 символов отсекает пустые массивы "[]")
+        // Убеждаемся, что кэш не пустой
         boolean hasCache = !cachedJson.equals("[]") && cachedJson.length() > 5;
         
+        // 1. МГНОВЕННАЯ ЗАГРУЗКА ИЗ КЭША (Для офлайна и плавности)
         if (hasCache) {
-            // === 1. МГНОВЕННАЯ ЗАГРУЗКА ИЗ КЭША ===
-            // Никаких спиннеров и запросов к серверу! Воркер уже всё скачал.
             loadingSpinner.setVisibility(View.GONE);
             parseAndDisplay(cachedJson, activity);
         } else {
-            // === 2. ИДЕМ НА СЕРВЕР ТОЛЬКО ЕСЛИ КЭШ АБСОЛЮТНО ПУСТОЙ ===
             recycler.setVisibility(View.GONE);
             emptyText.setVisibility(View.GONE);
             loadingSpinner.setVisibility(View.VISIBLE);
+        }
 
-            VpsApi.getNotificationsHistory(activity.vpsToken, new VpsApi.Callback() {
-                @Override
-                public void onSuccess(String result) {
-                    uiHandler.post(() -> {
-                        if (!isAdded()) return;
-                        loadingSpinner.setVisibility(View.GONE);
-                        
-                        // Сохраняем свежие данные
-                        prefs.edit().putString(KEY_HISTORY, result).apply();
-                        
-                        parseAndDisplay(result, activity);
-                    });
-                }
+        // Если это гость (нет токена), просто остаемся на локальном кэше
+        if (activity.vpsToken == null) {
+            if (!hasCache) showEmptyState();
+            return;
+        }
 
-                @Override
-                public void onError(String error) {
-                    uiHandler.post(() -> {
-                        if (!isAdded()) return;
-                        loadingSpinner.setVisibility(View.GONE);
+        // 2. ИДЕМ НА СЕРВЕР ЗА СВЕЖИМИ ДАННЫМИ (в фоне)
+        VpsApi.getNotificationsHistory(activity.vpsToken, new VpsApi.Callback() {
+            @Override
+            public void onSuccess(String result) {
+                uiHandler.post(() -> {
+                    if (!isAdded()) return;
+                    loadingSpinner.setVisibility(View.GONE);
+                    
+                    // Сохраняем свежие данные в правильный кэш
+                    prefs.edit().putString(cacheKey, result).apply();
+                    
+                    parseAndDisplay(result, activity);
+                });
+            }
+
+            @Override
+            public void onError(String error) {
+                uiHandler.post(() -> {
+                    if (!isAdded()) return;
+                    loadingSpinner.setVisibility(View.GONE);
+                    // Показываем ошибку только если даже кэша нет (полный офлайн при первом входе)
+                    if (!hasCache) {
                         showEmptyState();
                         Toast.makeText(getContext(), getString(R.string.err_server) + " " + error, Toast.LENGTH_SHORT).show();
-                    });
-                }
-            });
-        }
+                    }
+                });
+            }
+        });
     }
 
     private void parseAndDisplay(String jsonResult, MainActivity activity) {
@@ -159,9 +173,9 @@ public class NotificationsHistoryFragment extends Fragment {
                     adapter.updateItems(items);
                 }
                 
-                // Если мы отрисовали список и там есть непрочитанные — тихо помечаем прочитанными в фоне
-                if (hasUnread) {
-                    markAllAsRead(activity, array);
+                // Тихо помечаем прочитанными на сервере, если мы авторизованы
+                if (hasUnread && activity.vpsToken != null) {
+                    markAllAsRead(activity, array, getCacheKey());
                 }
             }
         } catch (Exception e) {
@@ -175,19 +189,18 @@ public class NotificationsHistoryFragment extends Fragment {
         emptyText.setVisibility(View.VISIBLE);
     }
 
-    private void markAllAsRead(MainActivity activity, JSONArray array) {
+    private void markAllAsRead(MainActivity activity, JSONArray array, String cacheKey) {
         VpsApi.markNotificationsRead(activity.vpsToken, new VpsApi.Callback() {
             @Override public void onSuccess(String result) {
                 uiHandler.post(() -> {
                     if (!isAdded()) return;
                     
                     try {
-                        // Локально меняем статус на прочитано, чтобы бейдж не загорался снова
                         for (int i = 0; i < array.length(); i++) {
                             array.getJSONObject(i).put("isRead", true);
                         }
                         SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-                        prefs.edit().putString(KEY_HISTORY, array.toString()).apply();
+                        prefs.edit().putString(cacheKey, array.toString()).apply();
                     } catch (Exception ignored) {}
 
                     activity.updateNotificationBadge();
@@ -230,7 +243,7 @@ public class NotificationsHistoryFragment extends Fragment {
 
         if (!hidden) {
             setupHeader(); 
-            loadHistory(); // Теперь это мгновенно достает данные из памяти
+            loadHistory(); // Мгновенно достает данные из памяти
             if (hideBgRunnable == null) {
                 hideBgRunnable = () -> {
                     if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
@@ -257,4 +270,5 @@ public class NotificationsHistoryFragment extends Fragment {
             else activity.updateGlobalBackground(false);
         }
     }
-}
+            }
+            
