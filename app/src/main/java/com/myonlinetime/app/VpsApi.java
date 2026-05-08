@@ -1,6 +1,7 @@
 package com.myonlinetime.app;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -21,6 +22,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
+import okhttp3.Authenticator;
 import okhttp3.Call;
 import okhttp3.HttpUrl;
 import okhttp3.MediaType;
@@ -29,14 +31,14 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import okhttp3.Route;
 
 import com.myonlinetime.app.models.User;
 
 public class VpsApi {
     private static final String BASE_URL = "https://api.krasnocraft.ru/";
     
-    // Убрали final, чтобы иметь возможность пересоздать клиент с SSL сертификатом для Android 5.1
-    private static OkHttpClient client = new OkHttpClient(); 
+    private static OkHttpClient client; 
     
     private static final Gson gson = new Gson();
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -63,34 +65,98 @@ public class VpsApi {
     public interface BooleanCallback { void onResult(boolean result); }
     public interface LoginCallback { void onSuccess(String ourServerToken); void onError(String error); }
 
-    // === ФИКС ДЛЯ ANDROID 5.1 (SSL TRUST ANCHOR) ===
-    public static void initSslForOldAndroid(Context context) {
-        // Выполняем только на устройствах старее Android 7.0 (API 24)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) return; 
+    // === ИНИЦИАЛИЗАЦИЯ КЛИЕНТА С ПЕРЕХВАТЧИКОМ АВТОРИЗАЦИИ ===
+    public static void initClient(Context context) {
+        if (client != null) return; // Инициализируем только один раз
+        
+        OkHttpClient.Builder builder = new OkHttpClient.Builder();
+        
+        // Добавляем умный перехватчик, который ловит протухшие токены (код 401)
+        builder.authenticator(new Authenticator() {
+            @Override
+            public Request authenticate(Route route, Response response) throws IOException {
+                // Если мы уже пытались обновить токен и снова получили 401 - сдаемся (чтобы не уйти в бесконечный цикл)
+                if (response.priorResponse() != null) return null;
+                
+                String newAccessToken = refreshAccessTokenSynchronously(context);
+                
+                if (newAccessToken != null) {
+                    // Токен обновлен! Повторяем тот же запрос, но уже с новым токеном.
+                    return response.request().newBuilder()
+                            .header("Authorization", "Bearer " + newAccessToken)
+                            .build();
+                }
+                
+                return null; // Если длинный токен тоже протух, запрос упадет с ошибкой (и это нормально)
+            }
+        });
+        
+        // ФИКС ДЛЯ ANDROID 5.1 (SSL TRUST ANCHOR)
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.N) {
+            try {
+                CertificateFactory cf = CertificateFactory.getInstance("X.509");
+                InputStream certInput = context.getResources().openRawResource(R.raw.isrgrootx1);
+                Certificate ca = cf.generateCertificate(certInput);
+                certInput.close();
+
+                KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+                keyStore.load(null, null);
+                keyStore.setCertificateEntry("ca", ca);
+
+                TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+                tmf.init(keyStore);
+
+                SSLContext sslContext = SSLContext.getInstance("TLS");
+                sslContext.init(null, tmf.getTrustManagers(), null);
+
+                builder.sslSocketFactory(sslContext.getSocketFactory(), (X509TrustManager) tmf.getTrustManagers()[0]);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        
+        client = builder.build();
+    }
+
+    // === МЕТОД ДЛЯ ТИХОГО ОБМЕНА ТОКЕНОВ В ФОНЕ ===
+    private static String refreshAccessTokenSynchronously(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
+        String refreshToken = prefs.getString("vps_refresh_token", null);
+        
+        if (refreshToken == null) return null;
 
         try {
-            CertificateFactory cf = CertificateFactory.getInstance("X.509");
-            // Файл сертификата должен лежать в res/raw/isrgrootx1.der
-            InputStream certInput = context.getResources().openRawResource(R.raw.isrgrootx1);
-            Certificate ca = cf.generateCertificate(certInput);
-            certInput.close();
-
-            KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-            keyStore.load(null, null);
-            keyStore.setCertificateEntry("ca", ca);
-
-            TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            tmf.init(keyStore);
-
-            SSLContext sslContext = SSLContext.getInstance("TLS");
-            sslContext.init(null, tmf.getTrustManagers(), null);
-
-            client = new OkHttpClient.Builder()
-                    .sslSocketFactory(sslContext.getSocketFactory(), (X509TrustManager) tmf.getTrustManagers()[0])
+            org.json.JSONObject json = new org.json.JSONObject();
+            json.put("refreshToken", refreshToken);
+            
+            RequestBody body = RequestBody.create(JSON, json.toString());
+            Request request = new Request.Builder()
+                    .url(BASE_URL + "auth/refresh")
+                    .post(body)
                     .build();
+
+            // ВАЖНО: Создаем "голый" клиент без перехватчиков, чтобы не уйти в бесконечный цикл обмена
+            OkHttpClient noAuthClient = new OkHttpClient(); 
+            Response response = noAuthClient.newCall(request).execute();
+
+            if (response.isSuccessful() && response.body() != null) {
+                org.json.JSONObject resJson = new org.json.JSONObject(response.body().string());
+                String newAccessToken = resJson.getString("accessToken");
+                
+                // Сохраняем свежий короткий токен в память
+                prefs.edit().putString("vps_access_token", newAccessToken).apply();
+                
+                // Обновляем токен в живой MainActivity, чтобы UI не сломался
+                if (context instanceof MainActivity) {
+                    ((MainActivity) context).vpsToken = newAccessToken;
+                }
+                
+                return newAccessToken;
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
+        return null;
     }
 
     public static void authenticateWithGoogle(Context context, String googleIdToken, final LoginCallback callback) {
@@ -111,11 +177,20 @@ public class VpsApi {
                 if (response.isSuccessful()) {
                     try {
                         String responseBody = response.body().string();
-                        Map<String, String> result = gson.fromJson(responseBody, new TypeToken<Map<String, String>>(){}.getType());
-                        final String ourServerToken = result.get("accessToken");
+                        org.json.JSONObject result = new org.json.JSONObject(responseBody);
+                        
+                        // === СОХРАНЯЕМ ОБА ТОКЕНА ===
+                        final String accessToken = result.getString("accessToken");
+                        final String refreshToken = result.getString("refreshToken");
+                        
+                        context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit()
+                               .putString("vps_access_token", accessToken)
+                               .putString("vps_refresh_token", refreshToken)
+                               .apply();
+
                         if (callback != null) {
                             mainHandler.post(new Runnable() {
-                                @Override public void run() { callback.onSuccess(ourServerToken); }
+                                @Override public void run() { callback.onSuccess(accessToken); }
                             });
                         }
                     } catch (Exception e) {
@@ -342,10 +417,6 @@ public class VpsApi {
         enqueueCall(request, callback);
     }
 
-    // ==========================================
-    // НОВЫЕ МЕТОДЫ ДЛЯ УВЕДОМЛЕНИЙ (ХРАНИМ В ОБЛАКЕ)
-    // ==========================================
-
     public static void getNotificationsHistory(String ourServerToken, final Callback callback) {
         HttpUrl url = HttpUrl.parse(BASE_URL + "get_notifications_history").newBuilder()
                 .addQueryParameter("t", String.valueOf(System.currentTimeMillis()))
@@ -370,9 +441,6 @@ public class VpsApi {
         enqueueCall(request, callback);
     }
 
-    // ==========================================
-    // P2P ИКОНКИ: БИНАРНАЯ ЗАГРУЗКА (БЕЗ BASE64)
-    // ==========================================
     public static void uploadAppIcon(String ourServerToken, String pkgName, byte[] iconBytes) {
         MultipartBody body = new MultipartBody.Builder().setType(MultipartBody.FORM)
                 .addFormDataPart("pkgName", pkgName)
@@ -380,7 +448,6 @@ public class VpsApi {
                         RequestBody.create(MediaType.parse("image/png"), iconBytes))
                 .build();
 
-        // ИСПРАВЛЕНИЕ: Точный маршрут сервера
         Request request = createAuthedRequest("icons/upload", ourServerToken)
                 .post(body)
                 .build();
@@ -395,9 +462,6 @@ public class VpsApi {
         });
     }
 
-    // ==========================================
-    // P2P СЛОВАРЬ: ВЫГРУЗКА ИМЕН НА СЕРВЕР
-    // ==========================================
     public static void syncAppNames(String ourServerToken, org.json.JSONObject names) {
         RequestBody body = RequestBody.create(JSON, names.toString());
         Request request = createAuthedRequest("sync_app_names", ourServerToken)
@@ -413,9 +477,7 @@ public class VpsApi {
             }
         });
     }
-    // ==========================================
-    // P2P: ОТПРАВКА FCM ТОКЕНА ДЛЯ ПУШЕЙ
-    // ==========================================
+
     public static void updateFcmToken(String ourServerToken, String fcmToken) {
         String jsonBody = "{\"fcmToken\":\"" + fcmToken + "\"}";
         RequestBody body = RequestBody.create(JSON, jsonBody);
@@ -427,10 +489,6 @@ public class VpsApi {
             }
         });
     }
-
-    // ==========================================
-    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
-    // ==========================================
 
     private static Request.Builder createAuthedRequest(String path, String token) {
         return new Request.Builder().url(BASE_URL + path).header("Authorization", "Bearer " + token);
