@@ -47,7 +47,7 @@ public class MyFcmService extends FirebaseMessagingService {
             // 1. Показываем всплывающее системное уведомление
             sendFollowerPush(nickname, targetUid);
             
-            // 2. ВРУЧНУЮ СОХРАНЯЕМ В ИСТОРИЮ (мгновенно, без интернета!)
+            // 2. ВРУЧНУЮ СОХРАНЯЕМ В ИСТОРИЮ (мгновенно, без интернета, в ПРАВИЛЬНЫЙ аккаунт!)
             saveToLocalHistory(type, targetUid, nickname, photo);
             
             // 3. Дергаем колокольчик в приложении (теперь он найдет isRead: false и загорится!)
@@ -55,11 +55,16 @@ public class MyFcmService extends FirebaseMessagingService {
         }
     }
 
-    // === НОВАЯ МАГИЯ ДЛЯ ИСТОРИИ И БЕЙДЖА ===
+    // === ИСПРАВЛЕННАЯ МАГИЯ ДЛЯ ИСТОРИИ (С ПОДДЕРЖКОЙ МУЛЬТИАККАУНТА) ===
     private void saveToLocalHistory(String type, String uid, String nickname, String photo) {
         try {
+            // Узнаем, кто сейчас залогинен, чтобы положить пуш в нужный кэш
+            com.google.android.gms.auth.api.signin.GoogleSignInAccount account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(this);
+            String currentUid = account != null ? account.getId() : "guest";
+            String cacheKey = "notif_history_array_" + currentUid;
+
             SharedPreferences prefs = getSharedPreferences("AppPrefs", MODE_PRIVATE);
-            String oldCache = prefs.getString("notif_history_array", "[]");
+            String oldCache = prefs.getString(cacheKey, "[]");
             JSONArray oldArray = new JSONArray(oldCache);
 
             // Создаем объект нового уведомления
@@ -82,7 +87,7 @@ public class MyFcmService extends FirebaseMessagingService {
             }
 
             // Перезаписываем кэш
-            prefs.edit().putString("notif_history_array", newArray.toString()).apply();
+            prefs.edit().putString(cacheKey, newArray.toString()).apply();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -123,4 +128,4 @@ public class MyFcmService extends FirebaseMessagingService {
         nm.notify(reqCode, builder.build());
     }
                 }
-                                 
+                              
