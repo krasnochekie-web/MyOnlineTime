@@ -101,9 +101,6 @@ public class MainActivity extends AppCompatActivity {
 
         super.onCreate(savedInstanceState);
         
-        // === РЕШЕНИЕ ПРОБЛЕМЫ С ANDROID 5.1 (СЕРТИФИКАТЫ) ===
-        VpsApi.initSslForOldAndroid(this);
-        
         // === СЛУШАТЕЛЬ ДЛЯ МГНОВЕННОГО ОБНОВЛЕНИЯ БЕЙДЖА ОТ ВОРКЕРА ===
         badgeReceiver = new BroadcastReceiver() {
             @Override
