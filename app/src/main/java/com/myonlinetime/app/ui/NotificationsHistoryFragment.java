@@ -43,7 +43,16 @@ public class NotificationsHistoryFragment extends Fragment {
     private NotificationsAdapter adapter;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
-    // === ДИНАМИЧЕСКИЙ КЛЮЧ ДЛЯ МУЛЬТИАККАУНТА ===
+    // === СЛУШАТЕЛЬ ПУШЕЙ В РЕАЛЬНОМ ВРЕМЕНИ ===
+    private final android.content.BroadcastReceiver pushReceiver = new android.content.BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, android.content.Intent intent) {
+            if ("UPDATE_BADGE_BROADCAST".equals(intent.getAction())) {
+                loadHistory(); // Прилетел пуш -> мгновенно обновляем список!
+            }
+        }
+    };
+
     private String getCacheKey() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(requireContext());
         String uid = account != null ? account.getId() : "guest";
@@ -62,8 +71,6 @@ public class NotificationsHistoryFragment extends Fragment {
         loadingSpinner = view.findViewById(R.id.loading_spinner);
         
         recycler.setLayoutManager(new LinearLayoutManager(getContext()));
-        
-        // === АНТИ-ЛАГ ОПТИМИЗАЦИЯ ДЛЯ ПЛАВНОГО СКРОЛЛА ===
         recycler.setHasFixedSize(true);
         recycler.setItemViewCacheSize(20);
         recycler.getRecycledViewPool().setMaxRecycledViews(NotificationModels.NotificationItem.TYPE_TIME, 20);
@@ -82,10 +89,8 @@ public class NotificationsHistoryFragment extends Fragment {
         SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String cachedJson = prefs.getString(cacheKey, "[]");
         
-        // Убеждаемся, что кэш не пустой
         boolean hasCache = !cachedJson.equals("[]") && cachedJson.length() > 5;
         
-        // 1. МГНОВЕННАЯ ЗАГРУЗКА ИЗ КЭША (Для офлайна и плавности)
         if (hasCache) {
             loadingSpinner.setVisibility(View.GONE);
             parseAndDisplay(cachedJson, activity);
@@ -95,23 +100,18 @@ public class NotificationsHistoryFragment extends Fragment {
             loadingSpinner.setVisibility(View.VISIBLE);
         }
 
-        // Если это гость (нет токена), просто остаемся на локальном кэше
         if (activity.vpsToken == null) {
             if (!hasCache) showEmptyState();
             return;
         }
 
-        // 2. ИДЕМ НА СЕРВЕР ЗА СВЕЖИМИ ДАННЫМИ (в фоне)
         VpsApi.getNotificationsHistory(activity.vpsToken, new VpsApi.Callback() {
             @Override
             public void onSuccess(String result) {
                 uiHandler.post(() -> {
                     if (!isAdded()) return;
                     loadingSpinner.setVisibility(View.GONE);
-                    
-                    // Сохраняем свежие данные в правильный кэш
                     prefs.edit().putString(cacheKey, result).apply();
-                    
                     parseAndDisplay(result, activity);
                 });
             }
@@ -121,7 +121,6 @@ public class NotificationsHistoryFragment extends Fragment {
                 uiHandler.post(() -> {
                     if (!isAdded()) return;
                     loadingSpinner.setVisibility(View.GONE);
-                    // Показываем ошибку только если даже кэша нет (полный офлайн при первом входе)
                     if (!hasCache) {
                         showEmptyState();
                         Toast.makeText(getContext(), getString(R.string.err_server) + " " + error, Toast.LENGTH_SHORT).show();
@@ -173,7 +172,6 @@ public class NotificationsHistoryFragment extends Fragment {
                     adapter.updateItems(items);
                 }
                 
-                // Тихо помечаем прочитанными на сервере, если мы авторизованы
                 if (hasUnread && activity.vpsToken != null) {
                     markAllAsRead(activity, array, getCacheKey());
                 }
@@ -190,22 +188,16 @@ public class NotificationsHistoryFragment extends Fragment {
     }
 
     private void markAllAsRead(MainActivity activity, JSONArray array, String cacheKey) {
-        VpsApi.markNotificationsRead(activity.vpsToken, new VpsApi.Callback() {
-            @Override public void onSuccess(String result) {
-                uiHandler.post(() -> {
-                    if (!isAdded()) return;
-                    
-                    try {
-                        for (int i = 0; i < array.length(); i++) {
-                            array.getJSONObject(i).put("isRead", true);
-                        }
-                        SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-                        prefs.edit().putString(cacheKey, array.toString()).apply();
-                    } catch (Exception ignored) {}
-
-                    activity.updateNotificationBadge();
-                });
+        try {
+            for (int i = 0; i < array.length(); i++) {
+                array.getJSONObject(i).put("isRead", true);
             }
+            SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            prefs.edit().putString(cacheKey, array.toString()).apply();
+        } catch (Exception ignored) {}
+
+        VpsApi.markNotificationsRead(activity.vpsToken, new VpsApi.Callback() {
+            @Override public void onSuccess(String result) {}
             @Override public void onError(String error) {}
         });
     }
@@ -223,6 +215,9 @@ public class NotificationsHistoryFragment extends Fragment {
 
             View bellContainer = activity.findViewById(R.id.header_bell_container);
             if (bellContainer != null) bellContainer.setVisibility(View.GONE);
+            
+            // === МГНОВЕННО УБИРАЕМ БЕЙДЖ ===
+            activity.updateNotificationBadge();
         }
     }
 
@@ -230,9 +225,7 @@ public class NotificationsHistoryFragment extends Fragment {
     public void onDestroyView() {
         super.onDestroyView();
         MainActivity activity = (MainActivity) getActivity();
-        if (activity != null) {
-            activity.headerManager.resetHeader(); 
-        }
+        if (activity != null) activity.headerManager.resetHeader(); 
     }
 
     @Override
@@ -243,7 +236,7 @@ public class NotificationsHistoryFragment extends Fragment {
 
         if (!hidden) {
             setupHeader(); 
-            loadHistory(); // Мгновенно достает данные из памяти
+            loadHistory(); 
             if (hideBgRunnable == null) {
                 hideBgRunnable = () -> {
                     if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
@@ -259,6 +252,14 @@ public class NotificationsHistoryFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
+        
+        // Включаем прослушку реал-тайм пушей
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"), Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
+        }
+
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
             if (hideBgRunnable == null) {
@@ -269,6 +270,15 @@ public class NotificationsHistoryFragment extends Fragment {
             if (getView() != null) getView().postDelayed(hideBgRunnable, 300);
             else activity.updateGlobalBackground(false);
         }
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        // Отключаем прослушку
+        try {
+            requireContext().unregisterReceiver(pushReceiver);
+        } catch (Exception ignored) {}
     }
             }
             
