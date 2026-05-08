@@ -16,10 +16,10 @@ import com.myonlinetime.app.R;
 
 public class NotificationsFragment extends Fragment {
 
-    // ВЫНЕСЛИ ТЕХНИЧЕСКИЙ ХАРДКОР В КОНСТАНТЫ
     private static final String PREFS_NAME = "AppPrefs";
     private static final String KEY_GENERAL = "notif_general_enabled";
     private static final String KEY_RECORDS = "notif_records_enabled";
+    private static final String KEY_FOLLOWERS = "notif_followers_enabled"; // НОВЫЙ КЛЮЧ
 
     private SharedPreferences prefs;
 
@@ -32,29 +32,46 @@ public class NotificationsFragment extends Fragment {
 
         SwitchCompat switchGeneral = view.findViewById(R.id.switch_general);
         SwitchCompat switchRecords = view.findViewById(R.id.switch_records);
+        SwitchCompat switchFollowers = view.findViewById(R.id.switch_followers); // НОВЫЙ СВИТЧ
+        
         View containerRecords = view.findViewById(R.id.container_records);
+        View containerFollowers = view.findViewById(R.id.container_followers); // НОВЫЙ КОНТЕЙНЕР
 
         // Восстанавливаем сохраненные значения (по умолчанию всё включено)
         boolean isGeneralEnabled = prefs.getBoolean(KEY_GENERAL, true);
         boolean isRecordsEnabled = prefs.getBoolean(KEY_RECORDS, true);
+        boolean isFollowersEnabled = prefs.getBoolean(KEY_FOLLOWERS, true); // НОВОЕ
 
         switchGeneral.setChecked(isGeneralEnabled);
         switchRecords.setChecked(isRecordsEnabled);
+        switchFollowers.setChecked(isFollowersEnabled); // НОВОЕ
         
         // Визуальное состояние зависимых элементов
         containerRecords.setAlpha(isGeneralEnabled ? 1.0f : 0.5f);
+        containerFollowers.setAlpha(isGeneralEnabled ? 1.0f : 0.5f); // НОВОЕ
+        
         switchRecords.setEnabled(isGeneralEnabled);
+        switchFollowers.setEnabled(isGeneralEnabled); // НОВОЕ
 
         // Слушатель для Общих уведомлений
         switchGeneral.setOnCheckedChangeListener((buttonView, isChecked) -> {
             prefs.edit().putBoolean(KEY_GENERAL, isChecked).apply();
+            
             containerRecords.setAlpha(isChecked ? 1.0f : 0.5f);
+            containerFollowers.setAlpha(isChecked ? 1.0f : 0.5f); // НОВОЕ
+            
             switchRecords.setEnabled(isChecked);
+            switchFollowers.setEnabled(isChecked); // НОВОЕ
         });
 
         // Слушатель для Рекордов
         switchRecords.setOnCheckedChangeListener((buttonView, isChecked) -> {
             prefs.edit().putBoolean(KEY_RECORDS, isChecked).apply();
+        });
+
+        // Слушатель для Подписок
+        switchFollowers.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            prefs.edit().putBoolean(KEY_FOLLOWERS, isChecked).apply();
         });
 
         setupHeader();
@@ -68,11 +85,9 @@ public class NotificationsFragment extends Fragment {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerTitle.setText(getString(R.string.header_settings_sub));
             
-            // Показываем стрелку назад
             activity.headerBackBtn.setVisibility(View.VISIBLE);
             activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow); 
             
-            // На всякий случай оставляем колокольчик видимым (единый стиль)
             ImageView bellBtn = activity.findViewById(R.id.header_bell_btn);
             if (bellBtn != null) {
                 bellBtn.setVisibility(View.VISIBLE);
@@ -83,37 +98,28 @@ public class NotificationsFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        // Возвращаем шапку в исходное состояние при выходе, 
-        // ТОЛЬКО если под нами больше нет других саб-скринов
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null && !activity.navigator.hasSubScreen()) {
             activity.headerManager.resetHeader();
         }
     }
 
-    // ========================================================
-    // ВОССТАНОВЛЕНИЕ ШАПКИ И ФОНА ПРИ ВОЗВРАТЕ ИЗ СТЕКА
-    // ========================================================
     @Override
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
         if (!hidden && getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
             setupHeader();
-            // Выключаем глобальный фон, так как это меню настроек
             activity.updateGlobalBackground(false); 
         }
     }
 
-    // ========================================================
-    // МЕТОД onResume С ПРОВЕРКОЙ
-    // ========================================================
     @Override
     public void onResume() {
         super.onResume();
-        // Проверка !isHidden(), чтобы скрытый фрагмент не выключал фон
         if (!isHidden() && getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).updateGlobalBackground(false); 
         }
     }
-}
+                }
+            
