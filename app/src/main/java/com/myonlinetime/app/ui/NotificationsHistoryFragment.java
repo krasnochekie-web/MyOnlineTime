@@ -43,12 +43,12 @@ public class NotificationsHistoryFragment extends Fragment {
     private NotificationsAdapter adapter;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
-    // === СЛУШАТЕЛЬ ПУШЕЙ В РЕАЛЬНОМ ВРЕМЕНИ ===
+    // === ИСПРАВЛЕНИЕ: МГНОВЕННОЕ ОБНОВЛЕНИЕ СПИСКА ПРИ ПУШЕ ===
     private final android.content.BroadcastReceiver pushReceiver = new android.content.BroadcastReceiver() {
         @Override
         public void onReceive(Context context, android.content.Intent intent) {
             if ("UPDATE_BADGE_BROADCAST".equals(intent.getAction())) {
-                loadHistory(); // Прилетел пуш -> мгновенно обновляем список!
+                loadHistory(); 
             }
         }
     };
@@ -216,7 +216,6 @@ public class NotificationsHistoryFragment extends Fragment {
             View bellContainer = activity.findViewById(R.id.header_bell_container);
             if (bellContainer != null) bellContainer.setVisibility(View.GONE);
             
-            // === МГНОВЕННО УБИРАЕМ БЕЙДЖ ===
             activity.updateNotificationBadge();
         }
     }
@@ -253,12 +252,9 @@ public class NotificationsHistoryFragment extends Fragment {
     public void onResume() {
         super.onResume();
         
-        // Включаем прослушку реал-тайм пушей
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"), Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
-        }
+        // === ИСПРАВЛЕНИЕ: ЖЕЛЕЗОБЕТОННЫЙ ПРИЕМНИК ===
+        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
+            .registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
 
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
@@ -275,10 +271,10 @@ public class NotificationsHistoryFragment extends Fragment {
     @Override
     public void onPause() {
         super.onPause();
-        // Отключаем прослушку
         try {
-            requireContext().unregisterReceiver(pushReceiver);
+            androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
+                .unregisterReceiver(pushReceiver);
         } catch (Exception ignored) {}
     }
-            }
-            
+    }
+                        
