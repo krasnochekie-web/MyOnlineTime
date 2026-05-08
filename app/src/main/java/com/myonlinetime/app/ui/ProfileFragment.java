@@ -124,13 +124,11 @@ public class ProfileFragment extends Fragment {
         String remoteBg = activity.prefs.getString("my_bg_base64", null);
         if (bgPath != null && new File(bgPath).exists()) {
             currentLoadedBg = myUid + "_local_bg_" + new File(bgPath).lastModified();
-            Glide.with(activity).load(new File(bgPath))
-                 .diskCacheStrategy(DiskCacheStrategy.NONE) 
-                 .signature(new ObjectKey(new File(bgPath).lastModified())) 
-                 .centerCrop().into(myBgImageView);
+            // ИСПОЛЬЗУЕМ ТОЛЬКО setImageURI ДЛЯ ИСКЛЮЧЕНИЯ ЗАДЕРЖЕК GLIDE!
+            myBgImageView.setImageURI(android.net.Uri.fromFile(new File(bgPath)));
         } else if (remoteBg != null && remoteBg.startsWith("http")) {
             currentLoadedBg = myUid + "_remote_bg_" + String.valueOf(remoteBg.hashCode());
-            Glide.with(activity).load(remoteBg).centerCrop().into(myBgImageView);
+            Glide.with(activity).load(remoteBg).dontAnimate().centerCrop().into(myBgImageView);
         }
 
         activity.mainHeader.setVisibility(View.VISIBLE);
@@ -237,16 +235,47 @@ public class ProfileFragment extends Fragment {
                         if (user.nickname != null) activity.prefs.edit().putString("my_nickname", user.nickname).apply();
                         if (user.about != null) activity.prefs.edit().putString("my_about", user.about).apply();
 
+                        // === СИНХРОНИЗАЦИЯ АВАТАРКИ (ВКЛЮЧАЯ УДАЛЕНИЕ) ===
                         if (user.photo != null && user.photo.length() > 10) {
                             activity.prefs.edit().putString("my_photo_base64", user.photo).apply();
                             activity.updateAvatarInUI();
+                        } else {
+                            String currentPhoto = activity.prefs.getString("my_photo_base64", "");
+                            if (currentPhoto != null && !currentPhoto.isEmpty() && !currentPhoto.equals("null")) {
+                                activity.prefs.edit().remove("my_photo_base64").remove("custom_avatar_path_" + myUid).apply();
+                                File f = new File(activity.getFilesDir(), "avatar_" + myUid + ".png");
+                                if (f.exists()) f.delete();
+                                activity.updateAvatarInUI();
+                            }
                         }
 
+                        // === СИНХРОНИЗАЦИЯ ФОНА (ВКЛЮЧАЯ УДАЛЕНИЕ НА ДРУГОМ УСТРОЙСТВЕ) ===
                         if (user.background != null && user.background.length() > 10) {
                             String currentBg = activity.prefs.getString("my_bg_base64", "");
                             if (!currentBg.startsWith(user.background)) {
                                 activity.prefs.edit().putString("my_bg_base64", user.background).apply();
                                 activity.syncMyBackground(user.background);
+                            }
+                        } else {
+                            // Фон был удален на сервере! Очищаем локальные файлы без вызова API.
+                            String currentBg = activity.prefs.getString("my_bg_base64", "");
+                            if (currentBg != null && !currentBg.isEmpty() && !currentBg.equals("null")) {
+                                File dir = activity.getFilesDir();
+                                File[] files = dir.listFiles();
+                                if (files != null) {
+                                    for (File f : files) {
+                                        if (f.getName().startsWith("my_bg_" + myUid)) f.delete();
+                                    }
+                                }
+                                activity.prefs.edit()
+                                    .remove("custom_bg_path_" + myUid)
+                                    .remove("custom_bg_is_video_" + myUid)
+                                    .remove("synced_bg_url_" + myUid)
+                                    .remove("my_bg_base64")
+                                    .apply();
+                                
+                                activity.currentBgBase64 = null;
+                                activity.runOnUiThread(() -> activity.updateGlobalBackground(true));
                             }
                         }
 
@@ -327,19 +356,15 @@ public class ProfileFragment extends Fragment {
             currentLoadedBg = newBgKey;
             
             if (bgPath != null && new File(bgPath).exists()) {
-                Glide.with(this).load(new File(bgPath))
-                     .diskCacheStrategy(DiskCacheStrategy.NONE) 
-                     .signature(new ObjectKey(new File(bgPath).lastModified())) 
-                     .centerCrop().into(myBgImageView);
+                myBgImageView.setImageURI(android.net.Uri.fromFile(new File(bgPath)));
             } else if (remoteBg != null && remoteBg.startsWith("http")) {
-                Glide.with(this).load(remoteBg).centerCrop().into(myBgImageView);
+                Glide.with(this).load(remoteBg).dontAnimate().centerCrop().into(myBgImageView);
             } else {
                 myBgImageView.setImageDrawable(null);
             }
         }
     }
 
-    // === ИСПРАВЛЕНИЕ "ПРОТУХШЕГО ЭМУЛЯТОРА": Жесткий запрос токена ===
     private void refreshCounts(MainActivity activity) {
         // 1. Быстрая загрузка из кэша
         String cachedCounts = OtherProfileFragment.prefetchCountsCache.get(myUid);
@@ -360,14 +385,13 @@ public class ProfileFragment extends Fragment {
             return;
         }
 
-        // 2. Идем на сервер с защитой от протухших токенов (как в FollowsFragment)
+        // 2. Идем на сервер с защитой от протухших токенов
         if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
             executeCountsApi(activity, activity.vpsToken);
             if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
         } else {
             GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
             if (acct != null && activity.mGoogleSignInClient != null) {
-                // Запрашиваем 100% свежий токен!
                 activity.mGoogleSignInClient.silentSignIn().addOnSuccessListener(freshAccount -> {
                     VpsApi.authenticateWithGoogle(activity, freshAccount.getIdToken(), new VpsApi.LoginCallback() {
                         @Override public void onSuccess(String token) {
@@ -378,7 +402,6 @@ public class ProfileFragment extends Fragment {
                         @Override public void onError(String e) {}
                     });
                 }).addOnFailureListener(e -> {
-                    // Фолбэк
                     VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
                         @Override public void onSuccess(String token) {
                             activity.vpsToken = token;
@@ -407,7 +430,6 @@ public class ProfileFragment extends Fragment {
                             int following = json.optInt("following", -1);
                             if (following >= 0 && txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
                         }
-                        // Сохраняем первые загруженные цифры в общий кэш профиля
                         OtherProfileFragment.prefetchCountsCache.put(myUid, result);
                     } catch (Exception e) {}
                 });
