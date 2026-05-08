@@ -9,6 +9,7 @@ import android.content.SharedPreferences;
 import android.os.Build;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager; // Нужный импорт
 
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
@@ -22,14 +23,12 @@ import java.util.Map;
 
 public class MyFcmService extends FirebaseMessagingService {
 
-    // Вызывается, когда Google выдает приложению новый уникальный токен
     @Override
     public void onNewToken(String token) {
         super.onNewToken(token);
         getSharedPreferences("AppPrefs", MODE_PRIVATE).edit().putString("fcm_token", token).apply();
     }
 
-    // Вызывается в миллисекунду получения пуша от твоего Node.js сервера
     @Override
     public void onMessageReceived(RemoteMessage remoteMessage) {
         super.onMessageReceived(remoteMessage);
@@ -40,7 +39,6 @@ public class MyFcmService extends FirebaseMessagingService {
         SharedPreferences prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
 
         // === 1. ГЛОБАЛЬНЫЙ ТУМБЛЕР ===
-        // Если общие уведомления выключены - убиваем пуш на подлете!
         if (!prefs.getBoolean("notif_general_enabled", true)) {
             return; 
         }
@@ -49,37 +47,36 @@ public class MyFcmService extends FirebaseMessagingService {
         
         if ("follower".equals(type)) {
             // === 2. ТУМБЛЕР ПОДПИСОК ===
-            // Если уведомления о подписках выключены - тоже убиваем!
             if (!prefs.getBoolean("notif_followers_enabled", true)) {
                 return;
             }
 
             String nickname = data.get("nickname");
             String targetUid = data.get("uid");
-            String photo = data.get("photo"); // Достаем фото для истории
+            String photo = data.get("photo");
             
-            // 1. Показываем всплывающее системное уведомление
+            // 1. Показываем уведомление в шторке
             sendFollowerPush(nickname, targetUid);
             
-            // 2. ВРУЧНУЮ СОХРАНЯЕМ В ИСТОРИЮ (мгновенно, без интернета, в ПРАВИЛЬНЫЙ аккаунт!)
+            // 2. Сохраняем в историю текущего аккаунта
             saveToLocalHistory(type, targetUid, nickname, photo);
             
-            // 3. Дергаем колокольчик в приложении (теперь он найдет isRead: false и загорится!)
-            sendBroadcast(new Intent("UPDATE_BADGE_BROADCAST"));
+            // 3. МГНОВЕННО КРИЧИМ ПРИЛОЖЕНИЮ: "ОБНОВИ ИНТЕРФЕЙС!"
+            // Используем LocalBroadcastManager для максимальной скорости
+            LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent("UPDATE_BADGE_BROADCAST"));
         } 
         else if ("time".equals(type) || "record".equals(type)) {
-            // === 3. ТУМБЛЕР РЕКОРДОВ (ЗАДЕЛ НА БУДУЩЕЕ ДЛЯ FCM) ===
+            // === 3. ТУМБЛЕР РЕКОРДОВ ===
             if (!prefs.getBoolean("notif_records_enabled", true)) {
                 return;
             }
-            // Здесь будет логика для пушей с рекордами, если переведешь их на сервер
+            // Здесь будет логика для рекордов, когда добавишь их на бэкенд
         }
     }
 
-    // === ИСПРАВЛЕННАЯ МАГИЯ ДЛЯ ИСТОРИИ (С ПОДДЕРЖКОЙ МУЛЬТИАККАУНТА) ===
     private void saveToLocalHistory(String type, String uid, String nickname, String photo) {
         try {
-            // Узнаем, кто сейчас залогинен, чтобы положить пуш в нужный кэш
+            // Определяем текущую "папку" истории (по UID залогиненного юзера)
             com.google.android.gms.auth.api.signin.GoogleSignInAccount account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(this);
             String currentUid = account != null ? account.getId() : "guest";
             String cacheKey = "notif_history_array_" + currentUid;
@@ -88,26 +85,22 @@ public class MyFcmService extends FirebaseMessagingService {
             String oldCache = prefs.getString(cacheKey, "[]");
             JSONArray oldArray = new JSONArray(oldCache);
 
-            // Создаем объект нового уведомления
             JSONObject newItem = new JSONObject();
             newItem.put("type", type);
             newItem.put("timestamp", System.currentTimeMillis());
-            newItem.put("isRead", false); // Обязательно false, чтобы зажегся бейдж!
+            newItem.put("isRead", false); // Бейдж загорится, так как это новое уведомление
             newItem.put("uid", uid != null ? uid : "");
             newItem.put("nickname", nickname != null ? nickname : "");
             newItem.put("photo", photo != null ? photo : "");
-            newItem.put("isFollowing", false); // Обновится само при открытии истории
+            newItem.put("isFollowing", false);
 
-            // Создаем новый массив и кладем свежее уведомление на самый верх (индекс 0)
             JSONArray newArray = new JSONArray();
-            newArray.put(newItem);
+            newArray.put(newItem); // Свежее уведомление — всегда первое
             
-            // Перекладываем старые уведомления под новое
             for (int i = 0; i < oldArray.length(); i++) {
                 newArray.put(oldArray.getJSONObject(i));
             }
 
-            // Перезаписываем кэш
             prefs.edit().putString(cacheKey, newArray.toString()).apply();
         } catch (Exception e) {
             e.printStackTrace();
@@ -120,7 +113,7 @@ public class MyFcmService extends FirebaseMessagingService {
             NotificationChannel ch = new NotificationChannel(
                     "followers_ch", 
                     getString(R.string.notif_channel_followers_name), 
-                    NotificationManager.IMPORTANCE_HIGH // HIGH для моментального всплывающего окна!
+                    NotificationManager.IMPORTANCE_HIGH
             );
             nm.createNotificationChannel(ch);
         }
@@ -132,7 +125,10 @@ public class MyFcmService extends FirebaseMessagingService {
         intent.putExtra("target_nickname", nickname);
 
         int reqCode = (int) System.currentTimeMillis();
-        PendingIntent pi = PendingIntent.getActivity(this, reqCode, intent, Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT);
+        PendingIntent pi = PendingIntent.getActivity(this, reqCode, intent, 
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? 
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : 
+                PendingIntent.FLAG_UPDATE_CURRENT);
 
         String safeNick = (nickname != null && !nickname.trim().isEmpty()) ? nickname : getString(R.string.notif_someone);
         String pushText = getString(R.string.notif_subscribed_to_you, safeNick);
@@ -149,4 +145,3 @@ public class MyFcmService extends FirebaseMessagingService {
         nm.notify(reqCode, builder.build());
     }
                 }
-        
