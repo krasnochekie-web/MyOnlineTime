@@ -116,8 +116,17 @@ public class UsageMath {
         return results;
     }
 
-    // === ИСПРАВЛЕНИЕ: ТОЧНАЯ АГРЕГАЦИЯ БЕЗ УДВОЕНИЯ ВРЕМЕНИ ===
+    // === ИСПРАВЛЕНИЕ: УМНАЯ АГРЕГАЦИЯ БЕЗ ЗАВЫШЕНИЙ ===
     public static Map<String, Long> getFilteredStats(Context context, int interval, long start, long end) {
+        long durationDays = (end - start) / (1000 * 60 * 60 * 24);
+        
+        // 1. Для периодов до 8 дней (Неделя) используем ИДЕАЛЬНУЮ точность по миллисекундам!
+        // Android хранит события (Events) около 10-14 дней, поэтому мы можем полностью избежать "корзин".
+        if (durationDays <= 8) {
+            return getFilteredExactTimes(context, start, end);
+        }
+
+        // 2. Для Месяца и Года используем системные корзины, но собираем их ВРУЧНУЮ, отсеивая "мусор"
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
         if (usm == null) return results;
@@ -125,20 +134,31 @@ public class UsageMath {
         Set<String> currentInstalledApps = getInstalledApps(context);
         String launcherPkg = getDefaultLauncher(context);
 
-        Map<String, UsageStats> stats = usm.queryAndAggregateUsageStats(start, end);
-        if (stats != null) {
-            for (Map.Entry<String, UsageStats> entry : stats.entrySet()) {
-                if (entry.getKey() == null) continue;
-                long time = entry.getValue().getTotalTimeInForeground();
-                String pkg = entry.getKey().replaceAll("\\s+", "");
+        // Получаем сырые корзины вместо кривого агрегатора
+        List<UsageStats> statsList = usm.queryUsageStats(interval, start, end);
+        if (statsList != null) {
+            for (UsageStats stats : statsList) {
+                if (stats == null) continue;
                 
+                // ГЛАВНЫЙ ФИЛЬТР: Отсекаем корзины, если приложение в них фактически использовалось ДО начала нашего периода.
+                // Это убивает львиную долю погрешности на стыке месяцев/лет.
+                if (stats.getLastTimeUsed() < start) {
+                    continue; 
+                }
+                
+                String pkg = stats.getPackageName();
+                if (pkg == null) continue;
+                pkg = pkg.replaceAll("\\s+", "");
+                
+                long time = stats.getTotalTimeInForeground();
                 if (time > 0 && isValidApp(context, pkg, currentInstalledApps, launcherPkg)) {
-                    results.put(pkg, time);
+                    long current = results.containsKey(pkg) ? results.get(pkg) : 0L;
+                    results.put(pkg, current + time);
                 }
             }
         }
         
-        return results; // БЕЗ суммирования с safeData, так как системный агрегатор уже всё посчитал правильно!
+        return results;
     }
 
     private static String getDayKey(long timestamp) {
@@ -238,4 +258,5 @@ public class UsageMath {
             return true; 
         }
     }
-}
+            }
+                                                            
