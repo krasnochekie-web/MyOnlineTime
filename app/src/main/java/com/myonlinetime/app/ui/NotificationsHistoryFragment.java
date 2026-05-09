@@ -43,12 +43,18 @@ public class NotificationsHistoryFragment extends Fragment {
     private NotificationsAdapter adapter;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
-    // === ИСПРАВЛЕНИЕ: МГНОВЕННОЕ ОБНОВЛЕНИЕ СПИСКА ПРИ ПУШЕ ===
+    // === ИСПРАВЛЕНИЕ: ЖЕЛЕЗОБЕТОННОЕ ОБНОВЛЕНИЕ РЕАЛ-ТАЙМ ===
     private final android.content.BroadcastReceiver pushReceiver = new android.content.BroadcastReceiver() {
         @Override
         public void onReceive(Context context, android.content.Intent intent) {
             if ("UPDATE_BADGE_BROADCAST".equals(intent.getAction())) {
-                loadHistory(); 
+                // Даем 150мс сервису, чтобы он 100% успел сделать commit() на диск
+                uiHandler.postDelayed(() -> {
+                    loadFromCacheOnly(); 
+                    
+                    MainActivity activity = (MainActivity) getActivity();
+                    if (activity != null) activity.updateNotificationBadge();
+                }, 150);
             }
         }
     };
@@ -81,6 +87,20 @@ public class NotificationsHistoryFragment extends Fragment {
         return view;
     }
 
+    // НОВЫЙ МЕТОД: Читает только из кэша и принудительно перерисовывает адаптер
+    private void loadFromCacheOnly() {
+        MainActivity activity = (MainActivity) getActivity();
+        if (activity == null || !isAdded()) return;
+        
+        String cacheKey = getCacheKey();
+        SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String cachedJson = prefs.getString(cacheKey, "[]");
+        
+        if (!cachedJson.equals("[]") && cachedJson.length() > 5) {
+            parseAndDisplay(cachedJson, activity, true); // true = принудительно обновить UI
+        }
+    }
+
     private void loadHistory() {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
@@ -93,7 +113,7 @@ public class NotificationsHistoryFragment extends Fragment {
         
         if (hasCache) {
             loadingSpinner.setVisibility(View.GONE);
-            parseAndDisplay(cachedJson, activity);
+            parseAndDisplay(cachedJson, activity, false);
         } else {
             recycler.setVisibility(View.GONE);
             emptyText.setVisibility(View.GONE);
@@ -112,7 +132,7 @@ public class NotificationsHistoryFragment extends Fragment {
                     if (!isAdded()) return;
                     loadingSpinner.setVisibility(View.GONE);
                     prefs.edit().putString(cacheKey, result).apply();
-                    parseAndDisplay(result, activity);
+                    parseAndDisplay(result, activity, false);
                 });
             }
 
@@ -130,7 +150,8 @@ public class NotificationsHistoryFragment extends Fragment {
         });
     }
 
-    private void parseAndDisplay(String jsonResult, MainActivity activity) {
+    // ИЗМЕНЕННЫЙ МЕТОД: Добавлен параметр forceRefresh
+    private void parseAndDisplay(String jsonResult, MainActivity activity, boolean forceRefresh) {
         try {
             JSONArray array = new JSONArray(jsonResult);
             List<NotificationModels.NotificationItem> items = new ArrayList<>();
@@ -165,7 +186,8 @@ public class NotificationsHistoryFragment extends Fragment {
                 recycler.setVisibility(View.VISIBLE);
                 emptyText.setVisibility(View.GONE);
                 
-                if (adapter == null) {
+                // Если forceRefresh == true, мы жестко пересоздаем адаптер, чтобы новые данные точно появились
+                if (adapter == null || forceRefresh) {
                     adapter = new NotificationsAdapter(items, activity);
                     recycler.setAdapter(adapter);
                 } else {
@@ -252,7 +274,7 @@ public class NotificationsHistoryFragment extends Fragment {
     public void onResume() {
         super.onResume();
         
-        // === ИСПРАВЛЕНИЕ: ЖЕЛЕЗОБЕТОННЫЙ ПРИЕМНИК ===
+        // Регистрируем локальный приемник для мгновенных обновлений
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
             .registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
 
@@ -265,6 +287,9 @@ public class NotificationsHistoryFragment extends Fragment {
             }
             if (getView() != null) getView().postDelayed(hideBgRunnable, 300);
             else activity.updateGlobalBackground(false);
+            
+            // Если мы вернулись в приложение и история открыта - гасим бейдж
+            activity.updateNotificationBadge();
         }
     }
 
@@ -277,4 +302,4 @@ public class NotificationsHistoryFragment extends Fragment {
         } catch (Exception ignored) {}
     }
     }
-                        
+            
