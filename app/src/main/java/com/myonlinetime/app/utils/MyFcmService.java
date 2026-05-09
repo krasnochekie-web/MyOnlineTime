@@ -9,7 +9,7 @@ import android.content.SharedPreferences;
 import android.os.Build;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager; // Нужный импорт
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
@@ -58,11 +58,10 @@ public class MyFcmService extends FirebaseMessagingService {
             // 1. Показываем уведомление в шторке
             sendFollowerPush(nickname, targetUid);
             
-            // 2. Сохраняем в историю текущего аккаунта
+            // 2. Сохраняем в историю текущего аккаунта (СИНХРОННО!)
             saveToLocalHistory(type, targetUid, nickname, photo);
             
             // 3. МГНОВЕННО КРИЧИМ ПРИЛОЖЕНИЮ: "ОБНОВИ ИНТЕРФЕЙС!"
-            // Используем LocalBroadcastManager для максимальной скорости
             LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent("UPDATE_BADGE_BROADCAST"));
         } 
         else if ("time".equals(type) || "record".equals(type)) {
@@ -70,13 +69,11 @@ public class MyFcmService extends FirebaseMessagingService {
             if (!prefs.getBoolean("notif_records_enabled", true)) {
                 return;
             }
-            // Здесь будет логика для рекордов, когда добавишь их на бэкенд
         }
     }
 
     private void saveToLocalHistory(String type, String uid, String nickname, String photo) {
         try {
-            // Определяем текущую "папку" истории (по UID залогиненного юзера)
             com.google.android.gms.auth.api.signin.GoogleSignInAccount account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(this);
             String currentUid = account != null ? account.getId() : "guest";
             String cacheKey = "notif_history_array_" + currentUid;
@@ -88,20 +85,21 @@ public class MyFcmService extends FirebaseMessagingService {
             JSONObject newItem = new JSONObject();
             newItem.put("type", type);
             newItem.put("timestamp", System.currentTimeMillis());
-            newItem.put("isRead", false); // Бейдж загорится, так как это новое уведомление
+            newItem.put("isRead", false); 
             newItem.put("uid", uid != null ? uid : "");
             newItem.put("nickname", nickname != null ? nickname : "");
             newItem.put("photo", photo != null ? photo : "");
             newItem.put("isFollowing", false);
 
             JSONArray newArray = new JSONArray();
-            newArray.put(newItem); // Свежее уведомление — всегда первое
+            newArray.put(newItem); 
             
             for (int i = 0; i < oldArray.length(); i++) {
                 newArray.put(oldArray.getJSONObject(i));
             }
 
-            prefs.edit().putString(cacheKey, newArray.toString()).apply();
+            // === ИСПРАВЛЕНИЕ: ЖЕЛЕЗОБЕТОННОЕ СИНХРОННОЕ СОХРАНЕНИЕ ===
+            prefs.edit().putString(cacheKey, newArray.toString()).commit();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -145,3 +143,4 @@ public class MyFcmService extends FirebaseMessagingService {
         nm.notify(reqCode, builder.build());
     }
                 }
+                
