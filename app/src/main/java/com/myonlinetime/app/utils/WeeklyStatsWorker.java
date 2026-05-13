@@ -13,6 +13,7 @@ import android.text.style.ForegroundColorSpan;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
@@ -54,7 +55,6 @@ public class WeeklyStatsWorker extends Worker {
             return Result.success();
         }
 
-        // === ЖЕСТКОЕ ВЫРАВНИВАНИЕ ПО ПОЛУНОЧИ (Идеальная точность) ===
         Calendar cal = Calendar.getInstance();
         long now = cal.getTimeInMillis();
         
@@ -63,16 +63,10 @@ public class WeeklyStatsWorker extends Worker {
         cal.set(Calendar.SECOND, 0);
         cal.set(Calendar.MILLISECOND, 0);
         
-        // Начало текущих суток
         long startOfToday = cal.getTimeInMillis(); 
-        
-        // Начало 7 суток назад (например, с прошлого Понедельника 00:00)
         long startCurrentWeek = startOfToday - (6L * 86400000L); 
-        
-        // Начало 14 суток назад
         long startPrevWeek = startCurrentWeek - (7L * 86400000L); 
 
-        // Считаем через сырые логи, теперь корзины не разрезаются!
         Map<String, Long> currentWeekMap = UsageMath.getFilteredExactTimes(context, startCurrentWeek, now);
         Map<String, Long> prevWeekMap = UsageMath.getFilteredExactTimes(context, startPrevWeek, startCurrentWeek);
 
@@ -102,7 +96,6 @@ public class WeeklyStatsWorker extends Worker {
 
         String actionText = context.getString(R.string.notif_action_click);
         
-        // === ЛОКАЛЬНОЕ СОХРАНЕНИЕ ДЛЯ ОФЛАЙНА И ГОСТЕЙ ===
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(context);
         String currentUid = account != null ? account.getId() : "guest";
         String cacheKey = "notif_history_array_" + currentUid;
@@ -110,7 +103,6 @@ public class WeeklyStatsWorker extends Worker {
         saveToLocalHistory(context, cacheKey, mainText, actionText);
         sendNotification(context, mainText, actionText);
 
-        // === СОХРАНЕНИЕ НА СЕРВЕР ТОЛЬКО ДЛЯ АВТОРИЗОВАННЫХ ===
         if (account != null) {
             final CountDownLatch latch = new CountDownLatch(1);
             saveToServer(context, mainText, actionText, latch);
@@ -120,7 +112,6 @@ public class WeeklyStatsWorker extends Worker {
         return Result.success();
     }
 
-    // === НОВЫЙ МЕТОД: ЛОКАЛЬНОЕ СОХРАНЕНИЕ (Работает всегда) ===
     private void saveToLocalHistory(Context context, String cacheKey, String mainText, String actionText) {
         try {
             SharedPreferences prefs = context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
@@ -141,16 +132,16 @@ public class WeeklyStatsWorker extends Worker {
                 newArray.put(oldArray.getJSONObject(i));
             }
 
-            prefs.edit().putString(cacheKey, newArray.toString()).apply();
+            // ИСПРАВЛЕНИЕ 1: commit() вместо apply() для надежности
+            prefs.edit().putString(cacheKey, newArray.toString()).commit();
             
-            // Дергаем колокольчик, чтобы он зажегся
-            context.sendBroadcast(new Intent("UPDATE_BADGE_BROADCAST"));
+            // ИСПРАВЛЕНИЕ 2: LocalBroadcastManager, чтобы экран сразу отреагировал
+            LocalBroadcastManager.getInstance(context).sendBroadcast(new Intent("UPDATE_BADGE_BROADCAST"));
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    // === СОХРАНЕНИЕ В БАЗУ ДАННЫХ (С ПОЛУЧЕНИЕМ СВЕЖЕГО ТОКЕНА) ===
     private void saveToServer(Context context, String mainText, String actionText, CountDownLatch latch) {
         String freshToken = null;
         try {
@@ -162,7 +153,6 @@ public class WeeklyStatsWorker extends Worker {
             GoogleSignInAccount account = Tasks.await(client.silentSignIn());
             freshToken = account.getIdToken();
         } catch (Exception e) {
-            // Никакого протухшего кэша! Нет сети - нет запроса.
             freshToken = null;
         }
 
@@ -221,4 +211,4 @@ public class WeeklyStatsWorker extends Worker {
 
         notificationManager.notify(NOTIF_ID, builder.build());
     }
-            }
+}
