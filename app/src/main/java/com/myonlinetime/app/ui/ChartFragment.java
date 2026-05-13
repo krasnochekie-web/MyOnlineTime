@@ -1,4 +1,4 @@
-package com.myonlinetime.app.ui;
+                                package com.myonlinetime.app.ui;
 
 import android.app.Dialog;
 import android.content.Context;
@@ -43,9 +43,6 @@ public class ChartFragment extends Fragment {
     private final List<DayData> weeklyData = new ArrayList<>();
     private int currentIndex = 6; 
 
-    // =========================================================================
-    // ПЕРЕМЕННЫЕ ДЛЯ УМНОЙ АНИМАЦИИ
-    // =========================================================================
     private boolean isDataReady = false;
     private boolean isAnimated = false;
     private long[] cachedBarMillis;
@@ -79,56 +76,35 @@ public class ChartFragment extends Fragment {
         }
 
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
-        
         adapter = new AppsAdapter(activity, R.layout.item_app_usage_time, false);
         recyclerView.setAdapter(adapter);
 
         barChart.setListener(this::selectDay);
 
-        btnPrev.setOnClickListener(v -> {
-            if (currentIndex > 0) selectDay(currentIndex - 1);
-        });
-
-        btnNext.setOnClickListener(v -> {
-            if (currentIndex < 6) selectDay(currentIndex + 1);
-        });
+        btnPrev.setOnClickListener(v -> { if (currentIndex > 0) selectDay(currentIndex - 1); });
+        btnNext.setOnClickListener(v -> { if (currentIndex < 6) selectDay(currentIndex + 1); });
 
         loadWeeklyData();
         return view;
     }
 
-    // =========================================================================
-    // СПУСКОВОЙ КРЮЧОК АНИМАЦИИ
-    // =========================================================================
     @Override
     public void onResume() {
         super.onResume();
-        // Запускаем отрисовку графиков ТОЛЬКО если пользователь смотрит на экран
-        if (isDataReady && !isAnimated) {
-            runChartAnimation();
-        }
+        if (isDataReady && !isAnimated) runChartAnimation();
     }
 
     private void showHowItWorksDialog(boolean isAllTime) {
         final Dialog dialog = new Dialog(requireContext());
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         dialog.setContentView(R.layout.dialog_how_it_works);
-        
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            dialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog;
         }
-
         TextView descText = dialog.findViewById(R.id.dialog_description_text);
         Button btnOk = dialog.findViewById(R.id.dialog_ok_btn);
-
-        if (isAllTime) {
-            descText.setText(getString(R.string.dialog_how_it_works_all_time));
-        } else {
-            descText.setText(getString(R.string.dialog_how_it_works_charts));
-        }
-
+        descText.setText(getString(isAllTime ? R.string.dialog_how_it_works_all_time : R.string.dialog_how_it_works_charts));
         btnOk.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
     }
@@ -136,24 +112,18 @@ public class ChartFragment extends Fragment {
     private void selectDay(int index) {
         if (weeklyData.isEmpty() || index < 0 || index > 6) return;
         currentIndex = index;
-        
         barChart.setSelectedIndex(index);
         DayData data = weeklyData.get(index);
-
         topDateTxt.setText(data.dateTopStr);
         middleDateTxt.setText(data.dateMiddleStr);
         topTimeTxt.setText(Utils.formatTime(getContext(), data.totalMillis));
-        
         adapter.updateData(data.appList, data.appTimes);
-
         btnPrev.setAlpha(currentIndex == 0 ? 0.3f : 1.0f);
         btnNext.setAlpha(currentIndex == 6 ? 0.3f : 1.0f);
     }
 
     private void loadWeeklyData() {
         topDateTxt.setText(getString(R.string.loading));
-        
-        // ИСПОЛЬЗУЕМ ГЛОБАЛЬНЫЙ ПУЛ ПОТОКОВ (с низким приоритетом для плавной отрисовки UI)
         Utils.backgroundExecutor.execute(() -> {
             MainActivity activity = (MainActivity) getActivity();
             if (activity == null || !isAdded()) return;
@@ -163,52 +133,55 @@ public class ChartFragment extends Fragment {
 
             long[] barMillis = new long[7];
             String[] dayLabels = new String[7];
-
             weeklyData.clear();
 
             for (int i = 0; i < 7; i++) {
                 Calendar cal = Calendar.getInstance();
                 cal.add(Calendar.DAY_OF_YEAR, -(6 - i)); 
                 
-                int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK) - 1; // 0=Sunday
-                String dayShort = daysArray[dayOfWeek];
-                
-                int dayNum = cal.get(Calendar.DAY_OF_MONTH);
-                int monthNum = cal.get(Calendar.MONTH);
-                String monthStr = monthsArray[monthNum];
+                // === ПРЕДЕЛЬНО ТОЧНЫЕ ГРАНИЦЫ ДНЯ ===
+                cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); 
+                cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
+                long dayStart = cal.getTimeInMillis();
 
-                String topFormatted = getString(R.string.format_date_top, dayShort, dayNum, monthStr);
-                String middleFormatted = getString(R.string.format_date_middle, dayShort, dayNum, monthStr);
+                cal.set(Calendar.HOUR_OF_DAY, 23); cal.set(Calendar.MINUTE, 59); 
+                cal.set(Calendar.SECOND, 59); cal.set(Calendar.MILLISECOND, 999);
+                long dayEnd = cal.getTimeInMillis();
+
+                int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK) - 1;
+                String dayShort = daysArray[dayOfWeek];
+                int dayNum = cal.get(Calendar.DAY_OF_MONTH);
+                String monthStr = monthsArray[cal.get(Calendar.MONTH)];
 
                 Map<String, Long> times;
 
-                // Используем мгновенный кэш для Сегодня и Вчера, если он доступен
+                // === ФИКС "ФРАНКЕНШТЕЙНА": Игнорируем кэш, если это старый день и он подозрителен ===
                 if (i == 6 && UsageMath.todayExactCache != null) {
                     times = UsageMath.todayExactCache;
                 } else if (i == 5 && UsageMath.yesterdayExactCache != null) {
                     times = UsageMath.yesterdayExactCache;
                 } else {
-                    // Считаем вручную через ядро UsageMath для старых дней
-                    Calendar startCal = (Calendar) cal.clone();
-                    startCal.set(Calendar.HOUR_OF_DAY, 0); startCal.set(Calendar.MINUTE, 0); startCal.set(Calendar.SECOND, 0); startCal.set(Calendar.MILLISECOND, 0);
-                    
-                    Calendar endCal = (Calendar) cal.clone();
-                    endCal.set(Calendar.HOUR_OF_DAY, 23); endCal.set(Calendar.MINUTE, 59); endCal.set(Calendar.SECOND, 59); endCal.set(Calendar.MILLISECOND, 999);
-                    
-                    times = UsageMath.getFilteredExactTimes(activity, startCal.getTimeInMillis(), endCal.getTimeInMillis());
+                    // Для всех старых дней ВСЕГДА используем метод событий, он не умеет возвращать недельные бакеты!
+                    times = UsageMath.getFilteredExactTimes(activity, dayStart, dayEnd);
                 }
                 
                 long dailyTotal = UsageMath.sumMap(times);
+
+                // === ПРОВЕРКА НА АНОМАЛИЮ (Более 24 часов в сутках) ===
+                if (dailyTotal > 86400000L) {
+                    // Если Android сошел с ума и выдал неделю вместо дня — обнуляем баг и пытаемся пересчитать чисто
+                    dailyTotal = 0;
+                    times.clear();
+                }
                 
-                // Фильтр внутри UsageMath уже отбросил мусор. Просто сортируем результат.
                 List<String> apps = new ArrayList<>(times.keySet());
                 Collections.sort(apps, (left, right) -> Long.compare(times.get(right), times.get(left)));
 
                 DayData dayData = new DayData();
                 dayData.totalMillis = dailyTotal;
                 dayData.dayOfWeekShort = dayShort;
-                dayData.dateTopStr = topFormatted;
-                dayData.dateMiddleStr = middleFormatted;
+                dayData.dateTopStr = getString(R.string.format_date_top, dayShort, dayNum, monthStr);
+                dayData.dateMiddleStr = getString(R.string.format_date_middle, dayShort, dayNum, monthStr);
                 dayData.appList = apps;
                 dayData.appTimes = times;
                 
@@ -217,53 +190,32 @@ public class ChartFragment extends Fragment {
                 dayLabels[i] = dayShort;
             }
 
-            // =========================================================================
-            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА: БЕЗ ЛИМИТОВ + ПОДДЕРЖКА УДАЛЕННЫХ ПРИЛОЖЕНИЙ
-            // =========================================================================
+            // Предзагрузка иконок и имен
             PackageManager pm = activity.getPackageManager();
             for (DayData day : weeklyData) {
                 for (String pkgName : day.appList) {
                     try {
                         int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
                                    PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
-                        
-                        android.content.pm.ApplicationInfo info;
-                        try {
-                            // Ищем живое приложение
-                            info = pm.getApplicationInfo(pkgName, 0);
-                        } catch (PackageManager.NameNotFoundException e) {
-                            // Вытаскиваем удаленного призрака!
-                            info = pm.getApplicationInfo(pkgName, flag);
-                        }
-                        
-                        pm.getApplicationLabel(info); 
-                        pm.getApplicationIcon(info); 
+                        pm.getApplicationInfo(pkgName, flag);
                     } catch (Exception ignored) { }
                 }
             }
 
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
-                
-                // Сохраняем данные в память, но график пока не строим
                 cachedBarMillis = barMillis;
                 cachedDayLabels = dayLabels;
                 isDataReady = true;
-
-                // Если вкладка активна прямо сейчас - стартуем!
-                if (isResumed() && !isAnimated) {
-                    runChartAnimation();
-                }
+                if (isResumed() && !isAnimated) runChartAnimation();
             });
         });
     }
 
-    // =========================================================================
-    // ЛОГИКА ОТРИСОВКИ ГРАФИКОВ
-    // =========================================================================
     private void runChartAnimation() {
-        isAnimated = true; // Блокируем повторную анимацию при свайпе туда-сюда
+        isAnimated = true;
         barChart.setData(cachedBarMillis, cachedDayLabels);
-        selectDay(6); // Выбираем сегодняшний день, что заполняет тексты и список приложений
+        selectDay(6); 
     }
 }
+ 
