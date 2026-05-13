@@ -30,6 +30,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class NotificationsHistoryFragment extends Fragment {
@@ -43,15 +44,12 @@ public class NotificationsHistoryFragment extends Fragment {
     private NotificationsAdapter adapter;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
-    // === ИСПРАВЛЕНИЕ: ЖЕЛЕЗОБЕТОННОЕ ОБНОВЛЕНИЕ РЕАЛ-ТАЙМ ===
     private final android.content.BroadcastReceiver pushReceiver = new android.content.BroadcastReceiver() {
         @Override
         public void onReceive(Context context, android.content.Intent intent) {
             if ("UPDATE_BADGE_BROADCAST".equals(intent.getAction())) {
-                // Даем 150мс сервису, чтобы он 100% успел сделать commit() на диск
                 uiHandler.postDelayed(() -> {
                     loadFromCacheOnly(); 
-                    
                     MainActivity activity = (MainActivity) getActivity();
                     if (activity != null) activity.updateNotificationBadge();
                 }, 150);
@@ -87,7 +85,6 @@ public class NotificationsHistoryFragment extends Fragment {
         return view;
     }
 
-    // НОВЫЙ МЕТОД: Читает только из кэша и принудительно перерисовывает адаптер
     private void loadFromCacheOnly() {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null || !isAdded()) return;
@@ -97,7 +94,7 @@ public class NotificationsHistoryFragment extends Fragment {
         String cachedJson = prefs.getString(cacheKey, "[]");
         
         if (!cachedJson.equals("[]") && cachedJson.length() > 5) {
-            parseAndDisplay(cachedJson, activity, true); // true = принудительно обновить UI
+            parseAndDisplay(cachedJson, activity, true); 
         }
     }
 
@@ -120,9 +117,10 @@ public class NotificationsHistoryFragment extends Fragment {
             loadingSpinner.setVisibility(View.VISIBLE);
         }
 
+        // ЖЕСТКАЯ БЛОКИРОВКА ДЛЯ ГОСТЯ: Если токена нет, дальше ни строчки кода не выполняется!
         if (activity.vpsToken == null) {
             if (!hasCache) showEmptyState();
-            return;
+            return; 
         }
 
         VpsApi.getNotificationsHistory(activity.vpsToken, new VpsApi.Callback() {
@@ -131,8 +129,41 @@ public class NotificationsHistoryFragment extends Fragment {
                 uiHandler.post(() -> {
                     if (!isAdded()) return;
                     loadingSpinner.setVisibility(View.GONE);
-                    prefs.edit().putString(cacheKey, result).apply();
-                    parseAndDisplay(result, activity, false);
+                    try {
+                        // === УМНОЕ СЛИЯНИЕ СЕРВЕРА И ЛОКАЛЬНЫХ РЕКОРДОВ ===
+                        JSONArray serverArray = new JSONArray(result);
+                        JSONArray localArray = new JSONArray(prefs.getString(cacheKey, "[]"));
+                        JSONArray mergedArray = new JSONArray();
+                        
+                        for (int i = 0; i < serverArray.length(); i++) mergedArray.put(serverArray.getJSONObject(i));
+                        
+                        for (int i = 0; i < localArray.length(); i++) {
+                            JSONObject localObj = localArray.getJSONObject(i);
+                            if ("time".equals(localObj.optString("type"))) {
+                                boolean found = false;
+                                for (int j = 0; j < serverArray.length(); j++) {
+                                    if (serverArray.getJSONObject(j).optLong("timestamp") == localObj.optLong("timestamp")) {
+                                        found = true; break;
+                                    }
+                                }
+                                if (!found) mergedArray.put(localObj); // Спасаем рекорд, который еще не долетел до сервера!
+                            }
+                        }
+                        
+                        List<JSONObject> list = new ArrayList<>();
+                        for (int i = 0; i < mergedArray.length(); i++) list.add(mergedArray.getJSONObject(i));
+                        Collections.sort(list, (a, b) -> Long.compare(b.optLong("timestamp"), a.optLong("timestamp")));
+                        
+                        JSONArray finalArray = new JSONArray();
+                        for (JSONObject obj : list) finalArray.put(obj);
+                        
+                        String finalJson = finalArray.toString();
+                        prefs.edit().putString(cacheKey, finalJson).commit();
+                        parseAndDisplay(finalJson, activity, false);
+                    } catch (Exception e) {
+                        prefs.edit().putString(cacheKey, result).commit();
+                        parseAndDisplay(result, activity, false);
+                    }
                 });
             }
 
@@ -150,7 +181,6 @@ public class NotificationsHistoryFragment extends Fragment {
         });
     }
 
-    // ИЗМЕНЕННЫЙ МЕТОД: Добавлен параметр forceRefresh
     private void parseAndDisplay(String jsonResult, MainActivity activity, boolean forceRefresh) {
         try {
             JSONArray array = new JSONArray(jsonResult);
@@ -186,7 +216,6 @@ public class NotificationsHistoryFragment extends Fragment {
                 recycler.setVisibility(View.VISIBLE);
                 emptyText.setVisibility(View.GONE);
                 
-                // Если forceRefresh == true, мы жестко пересоздаем адаптер, чтобы новые данные точно появились
                 if (adapter == null || forceRefresh) {
                     adapter = new NotificationsAdapter(items, activity);
                     recycler.setAdapter(adapter);
@@ -194,7 +223,7 @@ public class NotificationsHistoryFragment extends Fragment {
                     adapter.updateItems(items);
                 }
                 
-                if (hasUnread && activity.vpsToken != null) {
+                if (hasUnread) {
                     markAllAsRead(activity, array, getCacheKey());
                 }
             }
@@ -218,10 +247,13 @@ public class NotificationsHistoryFragment extends Fragment {
             prefs.edit().putString(cacheKey, array.toString()).apply();
         } catch (Exception ignored) {}
 
-        VpsApi.markNotificationsRead(activity.vpsToken, new VpsApi.Callback() {
-            @Override public void onSuccess(String result) {}
-            @Override public void onError(String error) {}
-        });
+        // ИСПРАВЛЕНИЕ ДЛЯ ГОСТЯ: Если токена нет, не пытаемся стучаться на сервер!
+        if (activity != null && activity.vpsToken != null) {
+            VpsApi.markNotificationsRead(activity.vpsToken, new VpsApi.Callback() {
+                @Override public void onSuccess(String result) {}
+                @Override public void onError(String error) {}
+            });
+        }
     }
 
     private void setupHeader() {
@@ -273,8 +305,6 @@ public class NotificationsHistoryFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        
-        // Регистрируем локальный приемник для мгновенных обновлений
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
             .registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
 
@@ -288,7 +318,6 @@ public class NotificationsHistoryFragment extends Fragment {
             if (getView() != null) getView().postDelayed(hideBgRunnable, 300);
             else activity.updateGlobalBackground(false);
             
-            // Если мы вернулись в приложение и история открыта - гасим бейдж
             activity.updateNotificationBadge();
         }
     }
@@ -301,5 +330,4 @@ public class NotificationsHistoryFragment extends Fragment {
                 .unregisterReceiver(pushReceiver);
         } catch (Exception ignored) {}
     }
-    }
-            
+}
