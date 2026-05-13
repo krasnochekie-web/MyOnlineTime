@@ -403,19 +403,16 @@ public class MainActivity extends AppCompatActivity {
         }
     }
     
-    // === ИСПРАВЛЕНИЕ: ЖЕСТКАЯ ЛОГИКА БЕЙДЖИКА ===
     public void updateNotificationBadge() {
         TextView badge = findViewById(R.id.header_bell_badge);
         if (badge == null) return;
 
-        // 1. Проверяем, открыт ли сейчас экран истории. Если да - бейджу смерть!
         Fragment current = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
         if (current != null && current.getClass().getSimpleName().contains("NotificationsHistory")) {
             badge.setVisibility(View.GONE);
             return;
         }
 
-        // 2. Проверяем видимость самого колокольчика. Нет колокольчика - нет бейджа!
         ImageView bellBtn = findViewById(R.id.header_bell_btn);
         View bellContainer = findViewById(R.id.header_bell_container);
         if ((bellBtn != null && bellBtn.getVisibility() != View.VISIBLE) || 
@@ -881,7 +878,7 @@ public class MainActivity extends AppCompatActivity {
 
         View headerBellContainer = findViewById(R.id.header_bell_container);
         if (headerBellContainer != null) {
-            if (!hasPerm || noAuth) {
+            if (!hasPerm) {
                 headerBellContainer.setVisibility(View.GONE);
             } else {
                 headerBellContainer.setVisibility(View.VISIBLE);
