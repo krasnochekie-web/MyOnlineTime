@@ -258,6 +258,10 @@ public class AppsAdapter extends RecyclerView.Adapter<AppsAdapter.AppViewHolder>
         holder.timeView.setText(Utils.formatTime(context, exactTime != null ? exactTime : 0L));
 
         holder.currentPkg = pkg;
+        
+        // === ИСПРАВЛЕНИЕ: ЖЕСТКАЯ ОТМЕНА СТАРЫХ ЗАГРУЗОК GLIDE ===
+        // Это предотвратит внезапное появление робота (ошибки старого запроса) поверх новой иконки
+        Glide.with(context).clear(holder.iconView);
         holder.iconView.setImageDrawable(null); 
 
         // 1. УМНАЯ ПРОВЕРКА "КОРЗИНЫ" В ЗАВИСИМОСТИ ОТ ВЛАДЕЛЬЦА
