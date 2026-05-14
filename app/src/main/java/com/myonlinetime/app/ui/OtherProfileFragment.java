@@ -53,8 +53,8 @@ public class OtherProfileFragment extends Fragment {
     private long renderGeneration = 0;
     private long fragmentCreationTime = 0;
     
-    // Оверлей загрузки
-    private FrameLayout loadingOverlay;
+    // Спиннер строго для списка приложений
+    private ProgressBar listSpinner;
     
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
@@ -127,28 +127,6 @@ public class OtherProfileFragment extends Fragment {
         wrapper.addView(bgImageView);
         wrapper.addView(originalView);
 
-        // === ОВЕРЛЕЙ ЗАГРУЗКИ (СПИННЕР) ===
-        loadingOverlay = new FrameLayout(activity);
-        loadingOverlay.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        loadingOverlay.setClickable(true);  
-        loadingOverlay.setFocusable(true);
-        loadingOverlay.setBackgroundColor(Color.TRANSPARENT); 
-        
-        ProgressBar spinner = new ProgressBar(activity);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(activity, R.color.grapefruit)));
-        }
-        FrameLayout.LayoutParams spinnerParams = new FrameLayout.LayoutParams(
-                (int)(50 * getResources().getDisplayMetrics().density), 
-                (int)(50 * getResources().getDisplayMetrics().density)
-        );
-        spinnerParams.gravity = Gravity.CENTER_HORIZONTAL | Gravity.TOP;
-        spinnerParams.topMargin = (int)(250 * getResources().getDisplayMetrics().density); 
-        loadingOverlay.addView(spinner, spinnerParams);
-        
-        wrapper.addView(loadingOverlay);
-        // ==========================================
-
         targetUid = getArguments() != null ? getArguments().getString("TARGET_UID", "") : "";
         backTitle = getArguments() != null ? getArguments().getString("BACK_TITLE", activity.getString(R.string.title_search)) : activity.getString(R.string.title_search);
 
@@ -178,6 +156,33 @@ public class OtherProfileFragment extends Fragment {
         
         final View appsCardParent = (View) appsContainerLocal.getParent();
 
+        // === ИСПРАВЛЕНИЕ: Интегрируем спиннер строго на уровень списка приложений ===
+        ViewGroup grandParent = (ViewGroup) appsCardParent.getParent();
+        int cardIndex = grandParent.indexOfChild(appsCardParent);
+        grandParent.removeView(appsCardParent);
+        
+        FrameLayout listWrapper = new FrameLayout(activity);
+        listWrapper.setLayoutParams(appsCardParent.getLayoutParams());
+        appsCardParent.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        listWrapper.addView(appsCardParent);
+        
+        listSpinner = new ProgressBar(activity);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            listSpinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(activity, R.color.grapefruit)));
+        }
+        FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(
+                (int)(50 * getResources().getDisplayMetrics().density), 
+                (int)(50 * getResources().getDisplayMetrics().density)
+        );
+        sp.gravity = Gravity.CENTER_HORIZONTAL | Gravity.TOP;
+        sp.topMargin = (int)(20 * getResources().getDisplayMetrics().density); 
+        listSpinner.setLayoutParams(sp);
+        listSpinner.setVisibility(View.VISIBLE); // Крутим сразу при открытии
+        
+        listWrapper.addView(listSpinner);
+        grandParent.addView(listWrapper, cardIndex);
+        // =========================================================================
+
         btnEdit.setVisibility(View.GONE);
 
         appsContainerLocal.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
@@ -198,6 +203,11 @@ public class OtherProfileFragment extends Fragment {
                     if (!hasApps) {
                         btnExpand.setVisibility(View.GONE);
                         btnCollapse.setVisibility(View.GONE);
+                    }
+                    
+                    // Прячем спиннер ТОЛЬКО когда данные реально появились
+                    if (hasApps && listSpinner != null) {
+                        listSpinner.setVisibility(View.GONE);
                     }
                 });
             }
@@ -302,12 +312,9 @@ public class OtherProfileFragment extends Fragment {
                          uiHandler.post(() -> { 
                              if (isAdded() && btnFollow != null) btnFollow.setEnabled(true); 
                              
-                             // === МГНОВЕННОЕ ОБНОВЛЕНИЕ ТВОЕГО ПРОФИЛЯ ===
                              GoogleSignInAccount myAcc = GoogleSignIn.getLastSignedInAccount(activity);
                              if (myAcc != null) {
-                                 // Убиваем старый кэш твоих цифр, чтобы профиль обновился
                                  prefetchCountsCache.remove(myAcc.getId());
-                                 // Сигнализируем профилю, что пора перерисоваться!
                                  activity.sendBroadcast(new Intent("ACTION_PROFILE_UPDATED").setPackage(activity.getPackageName()));
                              }
                          });
@@ -375,11 +382,11 @@ public class OtherProfileFragment extends Fragment {
                             }
                         } else {
                             nameView.setText(act.getString(R.string.new_user));
-                            if (loadingOverlay != null) loadingOverlay.setVisibility(View.GONE);
+                            if (listSpinner != null) listSpinner.setVisibility(View.GONE);
                         }
                     }
                     @Override public void onError(String e) {
-                        if (loadingOverlay != null) loadingOverlay.setVisibility(View.GONE);
+                        if (listSpinner != null) listSpinner.setVisibility(View.GONE);
                     }
                 });
 
@@ -397,7 +404,7 @@ public class OtherProfileFragment extends Fragment {
             }
         };
         
-        dataLoader.run(); 
+        uiHandler.postDelayed(dataLoader, 200); 
 
         return wrapper; 
     }
@@ -502,7 +509,7 @@ public class OtherProfileFragment extends Fragment {
             uiHandler.post(() -> {
                 if (myGen != renderGeneration || !isAdded()) return;
                 
-                if (loadingOverlay != null) loadingOverlay.setVisibility(View.GONE);
+                if (listSpinner != null) listSpinner.setVisibility(View.GONE);
                 
                 if (container != null) {
                     container.removeAllViews();
@@ -673,8 +680,8 @@ public class OtherProfileFragment extends Fragment {
                     weekTimeText.setOnClickListener(null); 
                 }
                 
-                if (loadingOverlay != null) {
-                    loadingOverlay.setVisibility(View.GONE);
+                if (listSpinner != null) {
+                    listSpinner.setVisibility(View.GONE);
                 }
             }, delay); 
         });
