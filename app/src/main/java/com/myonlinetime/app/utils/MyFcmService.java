@@ -9,7 +9,6 @@ import android.content.SharedPreferences;
 import android.os.Build;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
@@ -38,7 +37,6 @@ public class MyFcmService extends FirebaseMessagingService {
 
         SharedPreferences prefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
 
-        // === 1. ГЛОБАЛЬНЫЙ ТУМБЛЕР ===
         if (!prefs.getBoolean("notif_general_enabled", true)) {
             return; 
         }
@@ -46,37 +44,50 @@ public class MyFcmService extends FirebaseMessagingService {
         String type = data.get("type");
         
         if ("follower".equals(type)) {
-            // === 2. ТУМБЛЕР ПОДПИСОК ===
-            if (!prefs.getBoolean("notif_followers_enabled", true)) {
+            if (!prefs.getBoolean("notif_followers_enabled", true)) return;
+
+            String nickname = data.get("nickname");
+            String followerUid = data.get("uid");
+            String photo = data.get("photo");
+            
+            com.google.android.gms.auth.api.signin.GoogleSignInAccount account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(this);
+            String currentUid = account != null ? account.getId() : "guest";
+            
+            // === ЯДЕРНАЯ ЗАЩИТА ОТ СМЕШИВАНИЯ ТВИНКОВ ===
+            String ownerUid = data.get("owner_uid"); // Если сервер присылает, кому пуш
+            
+            if (ownerUid != null && !ownerUid.isEmpty()) {
+                if (!ownerUid.equals(currentUid)) {
+                    // Пуш пришел на этот телефон, но для твоего ВТОРОГО аккаунта!
+                    // Тихо сохраняем в его историю и убиваем процесс. Никаких бейджей и уведомлений на основе!
+                    saveToLocalHistory(type, followerUid, nickname, photo, ownerUid, true);
+                    return; 
+                }
+            } else if (currentUid.equals(followerUid)) {
+                // Если сервер не прислал owner_uid, спасает логика: 
+                // ТЫ не можешь быть подписчиком в СВОЕМ собственном уведомлении. Убиваем!
                 return;
             }
 
-            String nickname = data.get("nickname");
-            String targetUid = data.get("uid");
-            String photo = data.get("photo");
-            
             // 1. Показываем уведомление в шторке
-            sendFollowerPush(nickname, targetUid);
+            sendFollowerPush(nickname, followerUid);
             
-            // 2. Сохраняем в историю текущего аккаунта (СИНХРОННО!)
-            saveToLocalHistory(type, targetUid, nickname, photo);
+            // 2. Сохраняем в историю текущего аккаунта (СИНХРОННО)
+            saveToLocalHistory(type, followerUid, nickname, photo, currentUid, false);
             
-            // 3. МГНОВЕННО КРИЧИМ ПРИЛОЖЕНИЮ: "ОБНОВИ ИНТЕРФЕЙС!"
-            LocalBroadcastManager.getInstance(this).sendBroadcast(new Intent("UPDATE_BADGE_BROADCAST"));
-        } 
-        else if ("time".equals(type) || "record".equals(type)) {
-            // === 3. ТУМБЛЕР РЕКОРДОВ ===
-            if (!prefs.getBoolean("notif_records_enabled", true)) {
-                return;
-            }
+            // 3. БРОНЕБОЙНЫЙ ГЛОБАЛЬНЫЙ БРОДКАСТ ДЛЯ МГНОВЕННОГО ОБНОВЛЕНИЯ UI
+            Intent updateIntent = new Intent("UPDATE_BADGE_BROADCAST");
+            updateIntent.setPackage(getPackageName());
+            sendBroadcast(updateIntent);
+
+        } else if ("time".equals(type) || "record".equals(type)) {
+            if (!prefs.getBoolean("notif_records_enabled", true)) return;
         }
     }
 
-    private void saveToLocalHistory(String type, String uid, String nickname, String photo) {
+    private void saveToLocalHistory(String type, String uid, String nickname, String photo, String targetUid, boolean isSilentForTwink) {
         try {
-            com.google.android.gms.auth.api.signin.GoogleSignInAccount account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(this);
-            String currentUid = account != null ? account.getId() : "guest";
-            String cacheKey = "notif_history_array_" + currentUid;
+            String cacheKey = "notif_history_array_" + targetUid;
 
             SharedPreferences prefs = getSharedPreferences("AppPrefs", MODE_PRIVATE);
             String oldCache = prefs.getString(cacheKey, "[]");
@@ -98,8 +109,15 @@ public class MyFcmService extends FirebaseMessagingService {
                 newArray.put(oldArray.getJSONObject(i));
             }
 
-            // === ИСПРАВЛЕНИЕ: ЖЕЛЕЗОБЕТОННОЕ СИНХРОННОЕ СОХРАНЕНИЕ ===
             prefs.edit().putString(cacheKey, newArray.toString()).commit();
+            
+            if (isSilentForTwink) {
+                // Если мы сохранили пуш для твинка, мы ДОЛЖНЫ обновить бейдж, 
+                // если вдруг прямо сейчас переключились на твинка!
+                Intent updateIntent = new Intent("UPDATE_BADGE_BROADCAST");
+                updateIntent.setPackage(getPackageName());
+                sendBroadcast(updateIntent);
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -142,5 +160,4 @@ public class MyFcmService extends FirebaseMessagingService {
 
         nm.notify(reqCode, builder.build());
     }
-                }
-                
+}
