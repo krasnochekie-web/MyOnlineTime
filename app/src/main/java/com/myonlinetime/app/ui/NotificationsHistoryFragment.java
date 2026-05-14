@@ -68,6 +68,7 @@ public class NotificationsHistoryFragment extends Fragment {
             if ("UPDATE_BADGE_BROADCAST".equals(intent.getAction())) {
                 uiHandler.post(() -> {
                     if (isAdded()) {
+                        // Тихо обновляем данные без всяких прыжков экрана
                         loadFromCacheOnly(); 
                         MainActivity activity = (MainActivity) getActivity();
                         if (activity != null) activity.updateNotificationBadge();
@@ -160,28 +161,16 @@ public class NotificationsHistoryFragment extends Fragment {
                             recycler.setVisibility(View.VISIBLE);
                             emptyText.setVisibility(View.GONE);
                             if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-
-                            // Определяем, находится ли пользователь в самом начале списка
-                            boolean isAtTop = false;
-                            if (recycler.getLayoutManager() instanceof LinearLayoutManager) {
-                                isAtTop = ((LinearLayoutManager) recycler.getLayoutManager()).findFirstCompletelyVisibleItemPosition() == 0;
-                            }
                             
                             if (adapter == null) {
                                 adapter = new NotificationsAdapter(items, activity);
                                 recycler.setAdapter(adapter);
                             } else {
                                 adapter.updateItems(items);
-                                // === ИСПРАВЛЕНИЕ: Принудительный приказ на перерисовку ===
-                                adapter.notifyDataSetChanged(); 
                             }
 
-                            // === УМНЫЙ СКРОЛЛ ===
-                            // Скроллит наверх только если ты УЖЕ был наверху. 
-                            // Если читал старые, то не будет тебя отвлекать прыжками.
-                            if (isAtTop) {
-                                recycler.scrollToPosition(0);
-                            }
+                            // Принудительные скроллы полностью вырезаны. 
+                            // Адаптер сам сохранит позицию экрана.
 
                             if (finalHasUnread) {
                                 markAllAsRead(activity, array, cacheKey);
@@ -205,7 +194,10 @@ public class NotificationsHistoryFragment extends Fragment {
         
         if (hasCache) {
             if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-            parseAndDisplayAsync(cachedJson, activity);
+            // Если обновляем свайпом, не перерисовываем кэш мгновенно, чтобы не сбить анимацию тянучки
+            if (!isSwipeRefresh) {
+                parseAndDisplayAsync(cachedJson, activity);
+            }
         } else {
             recycler.setVisibility(View.GONE);
             emptyText.setVisibility(View.GONE);
@@ -343,7 +335,6 @@ public class NotificationsHistoryFragment extends Fragment {
                             recycler.setAdapter(adapter);
                         } else {
                             adapter.updateItems(items);
-                            adapter.notifyDataSetChanged(); // Гарантируем отрисовку
                         }
                         
                         if (finalHasUnread) {
@@ -442,6 +433,12 @@ public class NotificationsHistoryFragment extends Fragment {
         LocalBroadcastManager.getInstance(requireContext())
             .registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"), Context.RECEIVER_EXPORTED);
+        } else {
+            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
+        }
+
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
             if (hideBgRunnable == null) {
@@ -465,6 +462,10 @@ public class NotificationsHistoryFragment extends Fragment {
             
         try {
             LocalBroadcastManager.getInstance(requireContext()).unregisterReceiver(pushReceiver);
+        } catch (Exception ignored) {}
+        
+        try {
+            requireContext().unregisterReceiver(pushReceiver);
         } catch (Exception ignored) {}
     }
 }
