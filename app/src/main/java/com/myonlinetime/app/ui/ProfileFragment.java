@@ -68,8 +68,8 @@ public class ProfileFragment extends Fragment {
 
     private View profileContentView;
     
-    // Щит от шаловливых ручек и спиннер
-    private FrameLayout loadingOverlay;
+    // Спиннер строго для списка приложений
+    private ProgressBar listSpinner;
 
     private String currentLoadedAvatar = null;
     private String currentLoadedBg = null;
@@ -123,28 +123,6 @@ public class ProfileFragment extends Fragment {
         wrapper.addView(myBgImageView, 0); 
         wrapper.addView(originalView, 1);  
 
-        // === ОВЕРЛЕЙ ЗАГРУЗКИ И АНТИ-ЛАГ СПИННЕР ===
-        loadingOverlay = new FrameLayout(activity);
-        loadingOverlay.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        loadingOverlay.setClickable(true);  
-        loadingOverlay.setFocusable(true);
-        loadingOverlay.setBackgroundColor(Color.TRANSPARENT); 
-        
-        ProgressBar spinner = new ProgressBar(activity);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(activity, R.color.grapefruit)));
-        }
-        FrameLayout.LayoutParams spinnerParams = new FrameLayout.LayoutParams(
-                (int)(50 * getResources().getDisplayMetrics().density), 
-                (int)(50 * getResources().getDisplayMetrics().density)
-        );
-        spinnerParams.gravity = Gravity.CENTER_HORIZONTAL | Gravity.TOP;
-        spinnerParams.topMargin = (int)(250 * getResources().getDisplayMetrics().density); 
-        loadingOverlay.addView(spinner, spinnerParams);
-        
-        wrapper.addView(loadingOverlay); // Добавляем поверх всего
-        // ==========================================
-
         final GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         if (account == null) return wrapper;
         myUid = account.getId();
@@ -189,6 +167,34 @@ public class ProfileFragment extends Fragment {
         final LinearLayout appsContainerLocal = originalView.findViewById(R.id.profile_apps_container);
         
         final View appsCardParent = (View) appsContainerLocal.getParent();
+
+        // === ИСПРАВЛЕНИЕ: Интегрируем спиннер строго на уровень списка приложений ===
+        ViewGroup grandParent = (ViewGroup) appsCardParent.getParent();
+        int cardIndex = grandParent.indexOfChild(appsCardParent);
+        grandParent.removeView(appsCardParent);
+        
+        FrameLayout listWrapper = new FrameLayout(activity);
+        listWrapper.setLayoutParams(appsCardParent.getLayoutParams());
+        appsCardParent.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        listWrapper.addView(appsCardParent);
+        
+        listSpinner = new ProgressBar(activity);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            listSpinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(activity, R.color.grapefruit)));
+        }
+        FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(
+                (int)(50 * getResources().getDisplayMetrics().density), 
+                (int)(50 * getResources().getDisplayMetrics().density)
+        );
+        sp.gravity = Gravity.CENTER_HORIZONTAL | Gravity.TOP;
+        sp.topMargin = (int)(20 * getResources().getDisplayMetrics().density); 
+        listSpinner.setLayoutParams(sp);
+        listSpinner.setVisibility(View.GONE);
+        
+        listWrapper.addView(listSpinner);
+        grandParent.addView(listWrapper, cardIndex);
+        // =========================================================================
+
         appsContainerLocal.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
             @Override
             public void onChildViewAdded(View parent, View child) { updateEmptyState(); }
@@ -209,8 +215,10 @@ public class ProfileFragment extends Fragment {
                         btnCollapse.setVisibility(View.GONE);
                     }
                     
-                    // Снимаем блокировку, когда приложения загрузились
-                    if (loadingOverlay != null) loadingOverlay.setVisibility(View.GONE);
+                    // Прячем спиннер ТОЛЬКО тогда, когда приложения реально появились
+                    if (hasApps && listSpinner != null) {
+                        listSpinner.setVisibility(View.GONE);
+                    }
                 });
             }
         });
@@ -230,12 +238,12 @@ public class ProfileFragment extends Fragment {
             if (isAdded() && appsContainerLocal != null && weekTimeText != null) {
                 StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
                 
-                // Страховочное отключение спиннера (на случай, если список приложений пуст)
+                // Страховочное отключение спиннера (если список пуст)
                 uiHandler.postDelayed(() -> {
-                    if (loadingOverlay != null) loadingOverlay.setVisibility(View.GONE);
-                }, 500);
+                    if (listSpinner != null) listSpinner.setVisibility(View.GONE);
+                }, 700);
             } else {
-                if (loadingOverlay != null) loadingOverlay.setVisibility(View.GONE);
+                if (listSpinner != null) listSpinner.setVisibility(View.GONE);
             }
         };
 
@@ -484,9 +492,8 @@ public class ProfileFragment extends Fragment {
     }
 
     private void requestLoadMyStats() {
-        if (loadingOverlay != null) loadingOverlay.setVisibility(View.VISIBLE);
+        if (listSpinner != null) listSpinner.setVisibility(View.VISIBLE);
         uiHandler.removeCallbacks(loadMyStatsRunnable);
-        // === АНТИ-ЛАГ: Увеличенная задержка для плавной отрисовки оверлея ===
         uiHandler.postDelayed(loadMyStatsRunnable, 200);
     }
 
@@ -591,7 +598,6 @@ public class ProfileFragment extends Fragment {
 
     private void loadLocalCacheAsync(Runnable onLoaded) {
         Utils.backgroundExecutor.execute(() -> {
-            // === АНТИ-ЛАГ: Снижаем приоритет чтения из памяти ===
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
 
             Set<String> hidden = new HashSet<>(prefs.getStringSet("hidden_apps", new HashSet<>()));
@@ -666,8 +672,8 @@ public class ProfileFragment extends Fragment {
 
             btnDesc.setOnClickListener(v12 -> {
                 popupWindow.dismiss();
-                // === АНТИ-ЛАГ: Отложенный вызов тяжелого диалога ===
-                uiHandler.postDelayed(() -> showDescriptionDialog(activity, pkgName, descView), 150);
+                // Никаких делев, открываем сразу и плавно
+                showDescriptionDialog(activity, pkgName, descView);
             });
 
             popupWindow.showAsDropDown(optionsBtn, -40, 0);
@@ -680,6 +686,9 @@ public class ProfileFragment extends Fragment {
         dialog.setContentView(R.layout.dialog_app_description);
         dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        
+        // === АНИМАЦИЯ ПОЯВЛЕНИЯ ===
+        dialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog;
 
         ImageView btnClose = dialog.findViewById(R.id.dialog_close_btn);
         Button btnSave = dialog.findViewById(R.id.dialog_save_btn);
