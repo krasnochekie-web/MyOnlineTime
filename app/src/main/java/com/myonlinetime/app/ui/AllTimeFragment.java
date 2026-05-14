@@ -13,6 +13,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Process;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -56,6 +57,7 @@ public class AllTimeFragment extends Fragment {
     
     private FrameLayout loadingOverlay;
     private Dialog howItWorksDialog; 
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
     private static final String PREF_NAME = "AllTimeStatsCache";
     private static final String KEY_START_DATE = "start_date_millis";
@@ -92,7 +94,8 @@ public class AllTimeFragment extends Fragment {
 
         View howItWorksBtn = view.findViewById(R.id.how_it_works_btn);
         if (howItWorksBtn != null) {
-            howItWorksBtn.setOnClickListener(v -> showHowItWorksDialog(true));
+            // Плавное открытие диалога
+            howItWorksBtn.setOnClickListener(v -> uiHandler.postDelayed(() -> showHowItWorksDialog(true), 150));
         }
 
         recyclerView = view.findViewById(R.id.all_time_apps_list);
@@ -117,7 +120,6 @@ public class AllTimeFragment extends Fragment {
         yesterdayValTxt.setText("..."); 
         adapter.updateData(new ArrayList<>(), new HashMap<>()); 
 
-        // === ОВЕРЛЕЙ ЗАГРУЗКИ: Подняли крутилку повыше ===
         loadingOverlay = new FrameLayout(activity);
         loadingOverlay.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         loadingOverlay.setClickable(true);  
@@ -132,14 +134,14 @@ public class AllTimeFragment extends Fragment {
                 (int)(50 * getResources().getDisplayMetrics().density), 
                 (int)(50 * getResources().getDisplayMetrics().density)
         );
-        // Выравниваем по центру горизонтали и прижимаем к верху с отступом, чтобы меню не закрывало
         spinnerParams.gravity = Gravity.CENTER_HORIZONTAL | Gravity.TOP;
         spinnerParams.topMargin = (int)(250 * getResources().getDisplayMetrics().density); 
         loadingOverlay.addView(spinner, spinnerParams);
         
         ((ViewGroup) view).addView(loadingOverlay);
 
-        loadAndCalculateStats();
+        // Отложенный старт математики
+        uiHandler.postDelayed(this::loadAndCalculateStats, 200);
 
         return view;
     }
@@ -180,6 +182,8 @@ public class AllTimeFragment extends Fragment {
     
     private void loadAndCalculateStats() {
         Utils.backgroundExecutor.execute(() -> {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+
             MainActivity activity = (MainActivity) getActivity();
             if (activity == null || !isAdded()) return;
 
@@ -288,7 +292,7 @@ public class AllTimeFragment extends Fragment {
                 } catch (Exception ignored) { }
             }
 
-            new Handler(Looper.getMainLooper()).post(() -> {
+            uiHandler.post(() -> {
                 if (!isAdded()) return;
                 
                 adapter.updateData(sortedApps, finalAppsMap);
