@@ -10,7 +10,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -43,9 +42,8 @@ public class NotificationsHistoryFragment extends Fragment {
 
     private Runnable hideBgRunnable;
     private RecyclerView recycler;
-    private SwipeRefreshLayout swipeRefresh; // Заветная "тянучка"
+    private SwipeRefreshLayout swipeRefresh; 
     private TextView emptyText;
-    private ProgressBar loadingSpinner;
     private NotificationsAdapter adapter;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
@@ -91,7 +89,9 @@ public class NotificationsHistoryFragment extends Fragment {
 
         recycler = view.findViewById(R.id.recycler_notifications);
         emptyText = view.findViewById(R.id.empty_notif_text);
-        loadingSpinner = view.findViewById(R.id.loading_spinner);
+        
+        View oldSpinner = view.findViewById(R.id.loading_spinner);
+        if (oldSpinner != null) oldSpinner.setVisibility(View.GONE);
         
         recycler.setLayoutManager(new LinearLayoutManager(getContext()));
         recycler.setHasFixedSize(true);
@@ -99,10 +99,9 @@ public class NotificationsHistoryFragment extends Fragment {
         recycler.getRecycledViewPool().setMaxRecycledViews(NotificationModels.NotificationItem.TYPE_TIME, 20);
         recycler.getRecycledViewPool().setMaxRecycledViews(NotificationModels.NotificationItem.TYPE_FOLLOWER, 20);
 
-        // === ИНТЕГРАЦИЯ SWIPE TO REFRESH ===
         swipeRefresh = new SwipeRefreshLayout(requireContext());
         swipeRefresh.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        swipeRefresh.setColorSchemeColors(ContextCompat.getColor(requireContext(), R.color.grapefruit)); // Грейпфрутовый спиннер
+        swipeRefresh.setColorSchemeColors(ContextCompat.getColor(requireContext(), R.color.grapefruit)); 
         
         ViewGroup parent = (ViewGroup) recycler.getParent();
         int index = parent.indexOfChild(recycler);
@@ -111,17 +110,15 @@ public class NotificationsHistoryFragment extends Fragment {
         parent.addView(swipeRefresh, index);
 
         swipeRefresh.setOnRefreshListener(() -> {
-            loadHistory();
+            loadHistory(true);
         });
-        // ===================================
 
-        loadHistory();
+        // Первичная загрузка без тянучки
+        loadHistory(false);
 
         return view;
     }
 
-    // === ИСПРАВЛЕНИЕ: МГНОВЕННЫЙ ПАРСИНГ ПРИ ПУШЕ ===
-    // Делаем это синхронно, чтобы ты сразу увидел результат, НО без принудительного скролла
     private void loadFromCacheOnly() {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null || !isAdded()) return;
@@ -157,9 +154,13 @@ public class NotificationsHistoryFragment extends Fragment {
                     recycler.setVisibility(View.VISIBLE);
                     emptyText.setVisibility(View.GONE);
                     
-                    // Жестко пересоздаем адаптер для гарантии обновления
-                    adapter = new NotificationsAdapter(items, activity);
-                    recycler.setAdapter(adapter);
+                    if (adapter == null) {
+                        adapter = new NotificationsAdapter(items, activity);
+                        recycler.setAdapter(adapter);
+                    } else {
+                        // Точечное обновление через DiffUtil (не перерисовывает старые элементы)
+                        adapter.updateItems(items);
+                    }
 
                     if (hasUnread) {
                         markAllAsRead(activity, array, cacheKey);
@@ -169,9 +170,15 @@ public class NotificationsHistoryFragment extends Fragment {
         }
     }
 
-    private void loadHistory() {
+    private void loadHistory(boolean isSwipeRefresh) {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
+
+        if (isSwipeRefresh && swipeRefresh != null) {
+            swipeRefresh.setRefreshing(true);
+        } else if (swipeRefresh != null) {
+            swipeRefresh.post(() -> swipeRefresh.setRefreshing(true));
+        }
 
         String cacheKey = getCacheKey();
         SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -180,17 +187,15 @@ public class NotificationsHistoryFragment extends Fragment {
         boolean hasCache = !cachedJson.equals("[]") && cachedJson.length() > 5;
         
         if (hasCache) {
-            loadingSpinner.setVisibility(View.GONE);
             parseAndDisplayAsync(cachedJson, activity);
         } else {
             recycler.setVisibility(View.GONE);
             emptyText.setVisibility(View.GONE);
-            if (!swipeRefresh.isRefreshing()) loadingSpinner.setVisibility(View.VISIBLE);
         }
 
         if (activity.vpsToken == null) {
             if (!hasCache) showEmptyState();
-            if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
+            uiHandler.postDelayed(() -> { if (swipeRefresh != null) swipeRefresh.setRefreshing(false); }, 700);
             return; 
         }
 
@@ -231,40 +236,37 @@ public class NotificationsHistoryFragment extends Fragment {
                         prefs.edit().putString(cacheKey, finalJson).commit();
                         prefs.registerOnSharedPreferenceChangeListener(prefsListener);
                         
-                        uiHandler.post(() -> {
+                        uiHandler.postDelayed(() -> {
                             if (isAdded()) {
-                                loadingSpinner.setVisibility(View.GONE);
                                 if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
                                 parseAndDisplayAsync(finalJson, activity);
                             }
-                        });
+                        }, 700); 
                     } catch (Exception e) {
                         prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
                         prefs.edit().putString(cacheKey, result).commit();
                         prefs.registerOnSharedPreferenceChangeListener(prefsListener);
                         
-                        uiHandler.post(() -> {
+                        uiHandler.postDelayed(() -> {
                             if (isAdded()) {
-                                loadingSpinner.setVisibility(View.GONE);
                                 if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
                                 parseAndDisplayAsync(result, activity);
                             }
-                        });
+                        }, 700);
                     }
                 });
             }
 
             @Override
             public void onError(String error) {
-                uiHandler.post(() -> {
+                uiHandler.postDelayed(() -> {
                     if (!isAdded()) return;
-                    loadingSpinner.setVisibility(View.GONE);
                     if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
                     if (!hasCache) {
                         showEmptyState();
                         Toast.makeText(getContext(), getString(R.string.err_server) + " " + error, Toast.LENGTH_SHORT).show();
                     }
-                });
+                }, 700);
             }
         });
     }
@@ -329,7 +331,6 @@ public class NotificationsHistoryFragment extends Fragment {
     }
 
     private void showEmptyState() {
-        loadingSpinner.setVisibility(View.GONE);
         recycler.setVisibility(View.GONE);
         emptyText.setVisibility(View.VISIBLE);
     }
@@ -390,7 +391,8 @@ public class NotificationsHistoryFragment extends Fragment {
 
         if (!hidden) {
             setupHeader(); 
-            loadHistory(); 
+            uiHandler.post(() -> { if (isAdded() && swipeRefresh != null) swipeRefresh.setRefreshing(true); });
+            loadHistory(false); 
             if (hideBgRunnable == null) {
                 hideBgRunnable = () -> {
                     if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
@@ -411,7 +413,7 @@ public class NotificationsHistoryFragment extends Fragment {
             .registerOnSharedPreferenceChangeListener(prefsListener);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"), Context.RECEIVER_NOT_EXPORTED);
+            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"), Context.RECEIVER_EXPORTED);
         } else {
             requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
         }
