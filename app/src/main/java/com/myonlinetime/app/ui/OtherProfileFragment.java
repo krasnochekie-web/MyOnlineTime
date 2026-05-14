@@ -6,9 +6,12 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -16,8 +19,11 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.core.content.ContextCompat;
 
 import com.bumptech.glide.Glide;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
@@ -46,6 +52,9 @@ public class OtherProfileFragment extends Fragment {
     
     private long renderGeneration = 0;
     private long fragmentCreationTime = 0;
+    
+    // Оверлей загрузки
+    private FrameLayout loadingOverlay;
     
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
@@ -117,6 +126,28 @@ public class OtherProfileFragment extends Fragment {
 
         wrapper.addView(bgImageView);
         wrapper.addView(originalView);
+
+        // === ОВЕРЛЕЙ ЗАГРУЗКИ (СПИННЕР) ===
+        loadingOverlay = new FrameLayout(activity);
+        loadingOverlay.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        loadingOverlay.setClickable(true);  
+        loadingOverlay.setFocusable(true);
+        loadingOverlay.setBackgroundColor(Color.TRANSPARENT); 
+        
+        ProgressBar spinner = new ProgressBar(activity);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(activity, R.color.grapefruit)));
+        }
+        FrameLayout.LayoutParams spinnerParams = new FrameLayout.LayoutParams(
+                (int)(50 * getResources().getDisplayMetrics().density), 
+                (int)(50 * getResources().getDisplayMetrics().density)
+        );
+        spinnerParams.gravity = Gravity.CENTER_HORIZONTAL | Gravity.TOP;
+        spinnerParams.topMargin = (int)(250 * getResources().getDisplayMetrics().density); 
+        loadingOverlay.addView(spinner, spinnerParams);
+        
+        wrapper.addView(loadingOverlay);
+        // ==========================================
 
         targetUid = getArguments() != null ? getArguments().getString("TARGET_UID", "") : "";
         backTitle = getArguments() != null ? getArguments().getString("BACK_TITLE", activity.getString(R.string.title_search)) : activity.getString(R.string.title_search);
@@ -344,9 +375,12 @@ public class OtherProfileFragment extends Fragment {
                             }
                         } else {
                             nameView.setText(act.getString(R.string.new_user));
+                            if (loadingOverlay != null) loadingOverlay.setVisibility(View.GONE);
                         }
                     }
-                    @Override public void onError(String e) {}
+                    @Override public void onError(String e) {
+                        if (loadingOverlay != null) loadingOverlay.setVisibility(View.GONE);
+                    }
                 });
 
                 refreshCounts(act);
@@ -467,6 +501,9 @@ public class OtherProfileFragment extends Fragment {
         if (topApps == null || topApps.isEmpty()) {
             uiHandler.post(() -> {
                 if (myGen != renderGeneration || !isAdded()) return;
+                
+                if (loadingOverlay != null) loadingOverlay.setVisibility(View.GONE);
+                
                 if (container != null) {
                     container.removeAllViews();
                     View parent = (View) container.getParent();
@@ -634,6 +671,10 @@ public class OtherProfileFragment extends Fragment {
                 if (weekTimeText != null) {
                     weekTimeText.setText(hours > 0 ? activity.getString(R.string.format_hours_mins, hours, mins) : activity.getString(R.string.format_mins, mins));
                     weekTimeText.setOnClickListener(null); 
+                }
+                
+                if (loadingOverlay != null) {
+                    loadingOverlay.setVisibility(View.GONE);
                 }
             }, delay); 
         });
