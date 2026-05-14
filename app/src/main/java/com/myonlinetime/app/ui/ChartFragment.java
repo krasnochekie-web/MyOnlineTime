@@ -1,4 +1,4 @@
-   package com.myonlinetime.app.ui;
+package com.myonlinetime.app.ui;
 
 import android.app.Dialog;
 import android.content.Context;
@@ -46,6 +46,9 @@ public class ChartFragment extends Fragment {
     
     // Щит от шаловливых ручек
     private FrameLayout loadingOverlay;
+    
+    // === ИСПРАВЛЕНИЕ: БЛОКИРОВКА МУЛЬТИ-ДИАЛОГОВ ===
+    private Dialog howItWorksDialog;
 
     private final List<DayData> weeklyData = new ArrayList<>();
     private int currentIndex = 6; 
@@ -91,12 +94,11 @@ public class ChartFragment extends Fragment {
         btnPrev.setOnClickListener(v -> { if (currentIndex > 0) selectDay(currentIndex - 1); });
         btnNext.setOnClickListener(v -> { if (currentIndex < 6) selectDay(currentIndex + 1); });
 
-        // === СОЗДАЕМ ПРОГРАММНЫЙ ОВЕРЛЕЙ ЗАГРУЗКИ (Крутилка + Защита) ===
         loadingOverlay = new FrameLayout(activity);
         loadingOverlay.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        loadingOverlay.setClickable(true);  // Поглощает все клики!
+        loadingOverlay.setClickable(true);  
         loadingOverlay.setFocusable(true);
-        loadingOverlay.setBackgroundColor(Color.TRANSPARENT); // Полностью прозрачный фон
+        loadingOverlay.setBackgroundColor(Color.TRANSPARENT); 
         
         ProgressBar spinner = new ProgressBar(activity);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -110,7 +112,6 @@ public class ChartFragment extends Fragment {
         loadingOverlay.addView(spinner, spinnerParams);
         
         ((ViewGroup) view).addView(loadingOverlay);
-        // =================================================================
 
         loadWeeklyData();
         return view;
@@ -123,18 +124,26 @@ public class ChartFragment extends Fragment {
     }
 
     private void showHowItWorksDialog(boolean isAllTime) {
-        final Dialog dialog = new Dialog(requireContext());
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        dialog.setContentView(R.layout.dialog_how_it_works);
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        // Жесткая защита от двойного клика
+        if (howItWorksDialog != null && howItWorksDialog.isShowing()) return;
+
+        howItWorksDialog = new Dialog(requireContext());
+        howItWorksDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        howItWorksDialog.setContentView(R.layout.dialog_how_it_works);
+        
+        if (howItWorksDialog.getWindow() != null) {
+            howItWorksDialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            howItWorksDialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            // === ИСПРАВЛЕНИЕ: ДОБАВЛЕНА АНИМАЦИЯ ===
+            howItWorksDialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog;
         }
-        TextView descText = dialog.findViewById(R.id.dialog_description_text);
-        Button btnOk = dialog.findViewById(R.id.dialog_ok_btn);
+
+        TextView descText = howItWorksDialog.findViewById(R.id.dialog_description_text);
+        Button btnOk = howItWorksDialog.findViewById(R.id.dialog_ok_btn);
+        
         descText.setText(getString(isAllTime ? R.string.dialog_how_it_works_all_time : R.string.dialog_how_it_works_charts));
-        btnOk.setOnClickListener(v -> dialog.dismiss());
-        dialog.show();
+        btnOk.setOnClickListener(v -> howItWorksDialog.dismiss());
+        howItWorksDialog.show();
     }
 
     private void selectDay(int index) {
@@ -230,7 +239,6 @@ public class ChartFragment extends Fragment {
                 cachedDayLabels = dayLabels;
                 isDataReady = true;
 
-                // Снимаем блокировку и прячем спиннер!
                 if (loadingOverlay != null) {
                     loadingOverlay.setVisibility(View.GONE);
                 }
