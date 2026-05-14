@@ -25,6 +25,7 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 import com.myonlinetime.app.models.NotificationModels;
+import com.myonlinetime.app.utils.Utils;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -44,7 +45,7 @@ public class NotificationsHistoryFragment extends Fragment {
     private NotificationsAdapter adapter;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
-    // === УРОВЕНЬ ЗАЩИТЫ 1: Слушаем само хранилище (100% срабатывание) ===
+    // УРОВЕНЬ ЗАЩИТЫ 1: Слушаем само хранилище (100% срабатывание)
     private final SharedPreferences.OnSharedPreferenceChangeListener prefsListener = (sharedPrefs, key) -> {
         if (key != null && key.equals(getCacheKey())) {
             uiHandler.post(() -> {
@@ -57,7 +58,7 @@ public class NotificationsHistoryFragment extends Fragment {
         }
     };
 
-    // === УРОВЕНЬ ЗАЩИТЫ 2: Бродкаст-ресивер (резервный канал) ===
+    // УРОВЕНЬ ЗАЩИТЫ 2: Бродкаст-ресивер (Глобальный канал)
     private final android.content.BroadcastReceiver pushReceiver = new android.content.BroadcastReceiver() {
         @Override
         public void onReceive(Context context, android.content.Intent intent) {
@@ -92,6 +93,7 @@ public class NotificationsHistoryFragment extends Fragment {
         
         recycler.setLayoutManager(new LinearLayoutManager(getContext()));
         recycler.setHasFixedSize(true);
+        
         recycler.setItemViewCacheSize(20);
         recycler.getRecycledViewPool().setMaxRecycledViews(NotificationModels.NotificationItem.TYPE_TIME, 20);
         recycler.getRecycledViewPool().setMaxRecycledViews(NotificationModels.NotificationItem.TYPE_FOLLOWER, 20);
@@ -110,7 +112,7 @@ public class NotificationsHistoryFragment extends Fragment {
         String cachedJson = prefs.getString(cacheKey, "[]");
         
         if (!cachedJson.equals("[]") && cachedJson.length() > 5) {
-            parseAndDisplay(cachedJson, activity, true); 
+            parseAndDisplayAsync(cachedJson, activity, true); 
         }
     }
 
@@ -126,7 +128,7 @@ public class NotificationsHistoryFragment extends Fragment {
         
         if (hasCache) {
             loadingSpinner.setVisibility(View.GONE);
-            parseAndDisplay(cachedJson, activity, false);
+            parseAndDisplayAsync(cachedJson, activity, false);
         } else {
             recycler.setVisibility(View.GONE);
             emptyText.setVisibility(View.GONE);
@@ -135,15 +137,14 @@ public class NotificationsHistoryFragment extends Fragment {
 
         if (activity.vpsToken == null) {
             if (!hasCache) showEmptyState();
-            return;
+            return; 
         }
 
         VpsApi.getNotificationsHistory(activity.vpsToken, new VpsApi.Callback() {
             @Override
             public void onSuccess(String result) {
-                uiHandler.post(() -> {
-                    if (!isAdded()) return;
-                    loadingSpinner.setVisibility(View.GONE);
+                // ВЕСЬ ТЯЖЕЛЫЙ ПАРСИНГ УБРАН С ГЛАВНОГО ПОТОКА
+                Utils.backgroundExecutor.execute(() -> {
                     try {
                         JSONArray serverArray = new JSONArray(result);
                         JSONArray localArray = new JSONArray(prefs.getString(cacheKey, "[]"));
@@ -178,12 +179,23 @@ public class NotificationsHistoryFragment extends Fragment {
                         prefs.edit().putString(cacheKey, finalJson).commit();
                         prefs.registerOnSharedPreferenceChangeListener(prefsListener);
                         
-                        parseAndDisplay(finalJson, activity, false);
+                        uiHandler.post(() -> {
+                            if (isAdded()) {
+                                loadingSpinner.setVisibility(View.GONE);
+                                parseAndDisplayAsync(finalJson, activity, false);
+                            }
+                        });
                     } catch (Exception e) {
                         prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
                         prefs.edit().putString(cacheKey, result).commit();
                         prefs.registerOnSharedPreferenceChangeListener(prefsListener);
-                        parseAndDisplay(result, activity, false);
+                        
+                        uiHandler.post(() -> {
+                            if (isAdded()) {
+                                loadingSpinner.setVisibility(View.GONE);
+                                parseAndDisplayAsync(result, activity, false);
+                            }
+                        });
                     }
                 });
             }
@@ -202,55 +214,64 @@ public class NotificationsHistoryFragment extends Fragment {
         });
     }
 
-    private void parseAndDisplay(String jsonResult, MainActivity activity, boolean forceRefresh) {
-        try {
-            JSONArray array = new JSONArray(jsonResult);
-            List<NotificationModels.NotificationItem> items = new ArrayList<>();
-            boolean hasUnread = false;
+    // === УСКОРИТЕЛЬ ИНТЕРФЕЙСА: ФОНОВЫЙ ПАРСИНГ JSON ===
+    private void parseAndDisplayAsync(String jsonResult, MainActivity activity, boolean forceRefresh) {
+        Utils.backgroundExecutor.execute(() -> {
+            try {
+                JSONArray array = new JSONArray(jsonResult);
+                List<NotificationModels.NotificationItem> items = new ArrayList<>();
+                boolean hasUnread = false;
 
-            for (int i = 0; i < array.length(); i++) {
-                JSONObject obj = array.getJSONObject(i);
-                String type = obj.optString("type", "time");
-                
-                if (!obj.optBoolean("isRead", false)) hasUnread = true;
+                for (int i = 0; i < array.length(); i++) {
+                    JSONObject obj = array.getJSONObject(i);
+                    String type = obj.optString("type", "time");
+                    
+                    if (!obj.optBoolean("isRead", false)) hasUnread = true;
 
-                if ("time".equals(type)) {
-                    items.add(new NotificationModels.TimeNotification(
-                            obj.optString("mainText"),
-                            obj.optString("actionText"),
-                            obj.optLong("timestamp")
+                    if ("time".equals(type)) {
+                        items.add(new NotificationModels.TimeNotification(
+                                obj.optString("mainText"),
+                                obj.optString("actionText"),
+                                obj.optLong("timestamp")
+                        ));
+                    } else if ("follower".equals(type)) {
+                        items.add(new NotificationModels.FollowerNotification(
+                                obj.optLong("timestamp"),
+                                obj.optString("uid"),
+                                obj.optString("nickname"),
+                                obj.optString("photo"),
+                                obj.optBoolean("isFollowing", false)
                     ));
-                } else if ("follower".equals(type)) {
-                    items.add(new NotificationModels.FollowerNotification(
-                            obj.optLong("timestamp"),
-                            obj.optString("uid"),
-                            obj.optString("nickname"),
-                            obj.optString("photo"),
-                            obj.optBoolean("isFollowing", false)
-                    ));
+                    }
                 }
-            }
+                
+                final boolean finalHasUnread = hasUnread;
 
-            if (items.isEmpty()) {
-                showEmptyState();
-            } else {
-                recycler.setVisibility(View.VISIBLE);
-                emptyText.setVisibility(View.GONE);
-                
-                if (adapter == null || forceRefresh) {
-                    adapter = new NotificationsAdapter(items, activity);
-                    recycler.setAdapter(adapter);
-                } else {
-                    adapter.updateItems(items);
-                }
-                
-                if (hasUnread) {
-                    markAllAsRead(activity, array, getCacheKey());
-                }
+                uiHandler.post(() -> {
+                    if (!isAdded()) return;
+
+                    if (items.isEmpty()) {
+                        showEmptyState();
+                    } else {
+                        recycler.setVisibility(View.VISIBLE);
+                        emptyText.setVisibility(View.GONE);
+                        
+                        if (adapter == null || forceRefresh) {
+                            adapter = new NotificationsAdapter(items, activity);
+                            recycler.setAdapter(adapter);
+                        } else {
+                            adapter.updateItems(items);
+                        }
+                        
+                        if (finalHasUnread) {
+                            markAllAsRead(activity, array, getCacheKey());
+                        }
+                    }
+                });
+            } catch (Exception e) {
+                uiHandler.post(() -> { if (isAdded()) showEmptyState(); });
             }
-        } catch (Exception e) {
-            showEmptyState(); 
-        }
+        });
     }
 
     private void showEmptyState() {
@@ -260,18 +281,19 @@ public class NotificationsHistoryFragment extends Fragment {
     }
 
     private void markAllAsRead(MainActivity activity, JSONArray array, String cacheKey) {
-        try {
-            for (int i = 0; i < array.length(); i++) {
-                array.getJSONObject(i).put("isRead", true);
-            }
-            SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-            
-            // ВАЖНО: Отключаем слушатель, пока помечаем как прочитанное, чтобы экран не "моргнул" лишний раз
-            prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
-            prefs.edit().putString(cacheKey, array.toString()).apply();
-            prefs.registerOnSharedPreferenceChangeListener(prefsListener);
-            
-        } catch (Exception ignored) {}
+        Utils.backgroundExecutor.execute(() -> {
+            try {
+                for (int i = 0; i < array.length(); i++) {
+                    array.getJSONObject(i).put("isRead", true);
+                }
+                if (isAdded()) {
+                    SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                    prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
+                    prefs.edit().putString(cacheKey, array.toString()).apply();
+                    prefs.registerOnSharedPreferenceChangeListener(prefsListener);
+                }
+            } catch (Exception ignored) {}
+        });
 
         if (activity != null && activity.vpsToken != null) {
             VpsApi.markNotificationsRead(activity.vpsToken, new VpsApi.Callback() {
@@ -331,14 +353,10 @@ public class NotificationsHistoryFragment extends Fragment {
     public void onResume() {
         super.onResume();
         
-        // Врубаем тотальную прослушку изменений (Диск + Локальный бродкаст + Глобальный бродкаст)
         requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(prefsListener);
 
-        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
-            .registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
-
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"), Context.RECEIVER_NOT_EXPORTED);
         } else {
             requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
@@ -362,15 +380,9 @@ public class NotificationsHistoryFragment extends Fragment {
     public void onPause() {
         super.onPause();
         
-        // Выключаем прослушку
         requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(prefsListener);
             
-        try {
-            androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
-                .unregisterReceiver(pushReceiver);
-        } catch (Exception ignored) {}
-        
         try {
             requireContext().unregisterReceiver(pushReceiver);
         } catch (Exception ignored) {}
