@@ -13,6 +13,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -102,12 +103,9 @@ public class AllTimeFragment extends Fragment {
         HeaderWrapperAdapter wrapperAdapter = new HeaderWrapperAdapter(headerWrapper, adapter);
         recyclerView.setAdapter(wrapperAdapter);
 
-        // === ИСПРАВЛЕНИЕ: Идеальный "Скелетный экран" по твоим правилам ===
-        // Ставим нули для общего времени
         mainValTxt.setText(getString(R.string.format_days_hours, 0, 0));
         subValTxt.setText(getString(R.string.format_total_hours_mins, 0, 0));
         
-        // Дату берем из кэша (так как она не меняется)
         long initialStartDate = prefs.getLong(KEY_START_DATE, 0);
         if (initialStartDate > 0) {
             SimpleDateFormat sdf = new SimpleDateFormat("d MMMM yyyy", Locale.getDefault());
@@ -116,13 +114,10 @@ public class AllTimeFragment extends Fragment {
             descTxt.setText(getString(R.string.text_all_time_desc, "..."));
         }
 
-        // Для "вчера" оставляем троеточие, как ты и просил
         yesterdayValTxt.setText("..."); 
-        
-        // Передаем пустые списки, чтобы появилась только плашка "Вчера", а приложений не было
         adapter.updateData(new ArrayList<>(), new HashMap<>()); 
 
-        // === ОВЕРЛЕЙ ЗАГРУЗКИ ===
+        // === ОВЕРЛЕЙ ЗАГРУЗКИ: Подняли крутилку повыше ===
         loadingOverlay = new FrameLayout(activity);
         loadingOverlay.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         loadingOverlay.setClickable(true);  
@@ -137,7 +132,9 @@ public class AllTimeFragment extends Fragment {
                 (int)(50 * getResources().getDisplayMetrics().density), 
                 (int)(50 * getResources().getDisplayMetrics().density)
         );
-        spinnerParams.gravity = android.view.Gravity.CENTER;
+        // Выравниваем по центру горизонтали и прижимаем к верху с отступом, чтобы меню не закрывало
+        spinnerParams.gravity = Gravity.CENTER_HORIZONTAL | Gravity.TOP;
+        spinnerParams.topMargin = (int)(250 * getResources().getDisplayMetrics().density); 
         loadingOverlay.addView(spinner, spinnerParams);
         
         ((ViewGroup) view).addView(loadingOverlay);
