@@ -44,14 +44,30 @@ public class NotificationsHistoryFragment extends Fragment {
     private NotificationsAdapter adapter;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
+    // === УРОВЕНЬ ЗАЩИТЫ 1: Слушаем само хранилище (100% срабатывание) ===
+    private final SharedPreferences.OnSharedPreferenceChangeListener prefsListener = (sharedPrefs, key) -> {
+        if (key != null && key.equals(getCacheKey())) {
+            uiHandler.post(() -> {
+                if (isAdded()) {
+                    loadFromCacheOnly();
+                    MainActivity activity = (MainActivity) getActivity();
+                    if (activity != null) activity.updateNotificationBadge();
+                }
+            });
+        }
+    };
+
+    // === УРОВЕНЬ ЗАЩИТЫ 2: Бродкаст-ресивер (резервный канал) ===
     private final android.content.BroadcastReceiver pushReceiver = new android.content.BroadcastReceiver() {
         @Override
         public void onReceive(Context context, android.content.Intent intent) {
             if ("UPDATE_BADGE_BROADCAST".equals(intent.getAction())) {
                 uiHandler.postDelayed(() -> {
-                    loadFromCacheOnly(); 
-                    MainActivity activity = (MainActivity) getActivity();
-                    if (activity != null) activity.updateNotificationBadge();
+                    if (isAdded()) {
+                        loadFromCacheOnly(); 
+                        MainActivity activity = (MainActivity) getActivity();
+                        if (activity != null) activity.updateNotificationBadge();
+                    }
                 }, 150);
             }
         }
@@ -117,10 +133,9 @@ public class NotificationsHistoryFragment extends Fragment {
             loadingSpinner.setVisibility(View.VISIBLE);
         }
 
-        // ЖЕСТКАЯ БЛОКИРОВКА ДЛЯ ГОСТЯ: Если токена нет, дальше ни строчки кода не выполняется!
         if (activity.vpsToken == null) {
             if (!hasCache) showEmptyState();
-            return; 
+            return;
         }
 
         VpsApi.getNotificationsHistory(activity.vpsToken, new VpsApi.Callback() {
@@ -130,7 +145,6 @@ public class NotificationsHistoryFragment extends Fragment {
                     if (!isAdded()) return;
                     loadingSpinner.setVisibility(View.GONE);
                     try {
-                        // === УМНОЕ СЛИЯНИЕ СЕРВЕРА И ЛОКАЛЬНЫХ РЕКОРДОВ ===
                         JSONArray serverArray = new JSONArray(result);
                         JSONArray localArray = new JSONArray(prefs.getString(cacheKey, "[]"));
                         JSONArray mergedArray = new JSONArray();
@@ -146,7 +160,7 @@ public class NotificationsHistoryFragment extends Fragment {
                                         found = true; break;
                                     }
                                 }
-                                if (!found) mergedArray.put(localObj); // Спасаем рекорд, который еще не долетел до сервера!
+                                if (!found) mergedArray.put(localObj); 
                             }
                         }
                         
@@ -158,10 +172,17 @@ public class NotificationsHistoryFragment extends Fragment {
                         for (JSONObject obj : list) finalArray.put(obj);
                         
                         String finalJson = finalArray.toString();
+                        
+                        // Временно отключаем слушатель, чтобы не было двойной перерисовки при первичном слиянии
+                        prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
                         prefs.edit().putString(cacheKey, finalJson).commit();
+                        prefs.registerOnSharedPreferenceChangeListener(prefsListener);
+                        
                         parseAndDisplay(finalJson, activity, false);
                     } catch (Exception e) {
+                        prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
                         prefs.edit().putString(cacheKey, result).commit();
+                        prefs.registerOnSharedPreferenceChangeListener(prefsListener);
                         parseAndDisplay(result, activity, false);
                     }
                 });
@@ -244,10 +265,14 @@ public class NotificationsHistoryFragment extends Fragment {
                 array.getJSONObject(i).put("isRead", true);
             }
             SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            
+            // ВАЖНО: Отключаем слушатель, пока помечаем как прочитанное, чтобы экран не "моргнул" лишний раз
+            prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
             prefs.edit().putString(cacheKey, array.toString()).apply();
+            prefs.registerOnSharedPreferenceChangeListener(prefsListener);
+            
         } catch (Exception ignored) {}
 
-        // ИСПРАВЛЕНИЕ ДЛЯ ГОСТЯ: Если токена нет, не пытаемся стучаться на сервер!
         if (activity != null && activity.vpsToken != null) {
             VpsApi.markNotificationsRead(activity.vpsToken, new VpsApi.Callback() {
                 @Override public void onSuccess(String result) {}
@@ -305,8 +330,19 @@ public class NotificationsHistoryFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
+        
+        // Врубаем тотальную прослушку изменений (Диск + Локальный бродкаст + Глобальный бродкаст)
+        requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .registerOnSharedPreferenceChangeListener(prefsListener);
+
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
             .registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"), Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
+        }
 
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
@@ -325,9 +361,18 @@ public class NotificationsHistoryFragment extends Fragment {
     @Override
     public void onPause() {
         super.onPause();
+        
+        // Выключаем прослушку
+        requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .unregisterOnSharedPreferenceChangeListener(prefsListener);
+            
         try {
             androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
                 .unregisterReceiver(pushReceiver);
+        } catch (Exception ignored) {}
+        
+        try {
+            requireContext().unregisterReceiver(pushReceiver);
         } catch (Exception ignored) {}
     }
 }
