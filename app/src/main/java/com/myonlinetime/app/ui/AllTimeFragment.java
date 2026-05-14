@@ -54,7 +54,7 @@ public class AllTimeFragment extends Fragment {
     private SharedPreferences prefs;
     
     private FrameLayout loadingOverlay;
-    private Dialog howItWorksDialog; // Защита от мульти-кликов
+    private Dialog howItWorksDialog; 
 
     private static final String PREF_NAME = "AllTimeStatsCache";
     private static final String KEY_START_DATE = "start_date_millis";
@@ -102,6 +102,27 @@ public class AllTimeFragment extends Fragment {
         HeaderWrapperAdapter wrapperAdapter = new HeaderWrapperAdapter(headerWrapper, adapter);
         recyclerView.setAdapter(wrapperAdapter);
 
+        // === ИСПРАВЛЕНИЕ: Идеальный "Скелетный экран" по твоим правилам ===
+        // Ставим нули для общего времени
+        mainValTxt.setText(getString(R.string.format_days_hours, 0, 0));
+        subValTxt.setText(getString(R.string.format_total_hours_mins, 0, 0));
+        
+        // Дату берем из кэша (так как она не меняется)
+        long initialStartDate = prefs.getLong(KEY_START_DATE, 0);
+        if (initialStartDate > 0) {
+            SimpleDateFormat sdf = new SimpleDateFormat("d MMMM yyyy", Locale.getDefault());
+            descTxt.setText(getString(R.string.text_all_time_desc, sdf.format(initialStartDate)));
+        } else {
+            descTxt.setText(getString(R.string.text_all_time_desc, "..."));
+        }
+
+        // Для "вчера" оставляем троеточие, как ты и просил
+        yesterdayValTxt.setText("..."); 
+        
+        // Передаем пустые списки, чтобы появилась только плашка "Вчера", а приложений не было
+        adapter.updateData(new ArrayList<>(), new HashMap<>()); 
+
+        // === ОВЕРЛЕЙ ЗАГРУЗКИ ===
         loadingOverlay = new FrameLayout(activity);
         loadingOverlay.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         loadingOverlay.setClickable(true);  
@@ -161,12 +182,6 @@ public class AllTimeFragment extends Fragment {
     }
     
     private void loadAndCalculateStats() {
-        // === ИСПРАВЛЕНИЕ: Заполняем тексты ДО начала загрузки, чтобы плашка не схлопывалась ===
-        mainValTxt.setText(getString(R.string.format_days_hours, 0, 0));
-        subValTxt.setText(getString(R.string.format_total_hours_mins, 0, 0));
-        yesterdayValTxt.setText(getString(R.string.format_plus_hours_mins, 0, 0));
-        descTxt.setText(getString(R.string.loading)); // Описание не будет пустым!
-
         Utils.backgroundExecutor.execute(() -> {
             MainActivity activity = (MainActivity) getActivity();
             if (activity == null || !isAdded()) return;
