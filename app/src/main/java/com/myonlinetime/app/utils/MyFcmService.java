@@ -9,6 +9,7 @@ import android.content.SharedPreferences;
 import android.os.Build;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
@@ -75,10 +76,9 @@ public class MyFcmService extends FirebaseMessagingService {
             // 2. Сохраняем в историю текущего аккаунта (СИНХРОННО)
             saveToLocalHistory(type, followerUid, nickname, photo, currentUid, false);
             
-            // 3. БРОНЕБОЙНЫЙ ГЛОБАЛЬНЫЙ БРОДКАСТ ДЛЯ МГНОВЕННОГО ОБНОВЛЕНИЯ UI
+            // 3. БРОНЕБОЙНЫЙ ВНУТРЕННИЙ БРОДКАСТ ДЛЯ МГНОВЕННОГО ОБНОВЛЕНИЯ UI
             Intent updateIntent = new Intent("UPDATE_BADGE_BROADCAST");
-            updateIntent.setPackage(getPackageName());
-            sendBroadcast(updateIntent);
+            LocalBroadcastManager.getInstance(this).sendBroadcast(updateIntent);
 
         } else if ("time".equals(type) || "record".equals(type)) {
             if (!prefs.getBoolean("notif_records_enabled", true)) return;
@@ -115,8 +115,7 @@ public class MyFcmService extends FirebaseMessagingService {
                 // Если мы сохранили пуш для твинка, мы ДОЛЖНЫ обновить бейдж, 
                 // если вдруг прямо сейчас переключились на твинка!
                 Intent updateIntent = new Intent("UPDATE_BADGE_BROADCAST");
-                updateIntent.setPackage(getPackageName());
-                sendBroadcast(updateIntent);
+                LocalBroadcastManager.getInstance(this).sendBroadcast(updateIntent);
             }
         } catch (Exception e) {
             e.printStackTrace();
