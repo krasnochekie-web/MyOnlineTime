@@ -121,7 +121,7 @@ public class NotificationsHistoryFragment extends Fragment {
     }
 
     // === ИСПРАВЛЕНИЕ: МГНОВЕННЫЙ ПАРСИНГ ПРИ ПУШЕ ===
-    // Делаем это синхронно и скроллим вверх, чтобы ты сразу увидел результат
+    // Делаем это синхронно, чтобы ты сразу увидел результат, НО без принудительного скролла
     private void loadFromCacheOnly() {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null || !isAdded()) return;
@@ -160,9 +160,6 @@ public class NotificationsHistoryFragment extends Fragment {
                     // Жестко пересоздаем адаптер для гарантии обновления
                     adapter = new NotificationsAdapter(items, activity);
                     recycler.setAdapter(adapter);
-                    
-                    // ПРИНУДИТЕЛЬНО возвращаем тебя на самый верх списка!
-                    recycler.scrollToPosition(0);
 
                     if (hasUnread) {
                         markAllAsRead(activity, array, cacheKey);
@@ -184,7 +181,7 @@ public class NotificationsHistoryFragment extends Fragment {
         
         if (hasCache) {
             loadingSpinner.setVisibility(View.GONE);
-            parseAndDisplayAsync(cachedJson, activity, false);
+            parseAndDisplayAsync(cachedJson, activity);
         } else {
             recycler.setVisibility(View.GONE);
             emptyText.setVisibility(View.GONE);
@@ -238,7 +235,7 @@ public class NotificationsHistoryFragment extends Fragment {
                             if (isAdded()) {
                                 loadingSpinner.setVisibility(View.GONE);
                                 if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
-                                parseAndDisplayAsync(finalJson, activity, false);
+                                parseAndDisplayAsync(finalJson, activity);
                             }
                         });
                     } catch (Exception e) {
@@ -250,7 +247,7 @@ public class NotificationsHistoryFragment extends Fragment {
                             if (isAdded()) {
                                 loadingSpinner.setVisibility(View.GONE);
                                 if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
-                                parseAndDisplayAsync(result, activity, false);
+                                parseAndDisplayAsync(result, activity);
                             }
                         });
                     }
@@ -272,7 +269,7 @@ public class NotificationsHistoryFragment extends Fragment {
         });
     }
 
-    private void parseAndDisplayAsync(String jsonResult, MainActivity activity, boolean forceRefresh) {
+    private void parseAndDisplayAsync(String jsonResult, MainActivity activity) {
         Utils.backgroundExecutor.execute(() -> {
             try {
                 JSONArray array = new JSONArray(jsonResult);
@@ -313,7 +310,7 @@ public class NotificationsHistoryFragment extends Fragment {
                         recycler.setVisibility(View.VISIBLE);
                         emptyText.setVisibility(View.GONE);
                         
-                        if (adapter == null || forceRefresh) {
+                        if (adapter == null) {
                             adapter = new NotificationsAdapter(items, activity);
                             recycler.setAdapter(adapter);
                         } else {
@@ -413,9 +410,6 @@ public class NotificationsHistoryFragment extends Fragment {
         requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(prefsListener);
 
-        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
-            .registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"), Context.RECEIVER_NOT_EXPORTED);
         } else {
@@ -443,11 +437,6 @@ public class NotificationsHistoryFragment extends Fragment {
         requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(prefsListener);
             
-        try {
-            androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
-                .unregisterReceiver(pushReceiver);
-        } catch (Exception ignored) {}
-        
         try {
             requireContext().unregisterReceiver(pushReceiver);
         } catch (Exception ignored) {}
