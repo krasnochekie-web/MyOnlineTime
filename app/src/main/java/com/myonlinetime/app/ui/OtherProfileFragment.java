@@ -11,6 +11,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Process;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -156,7 +157,7 @@ public class OtherProfileFragment extends Fragment {
         
         final View appsCardParent = (View) appsContainerLocal.getParent();
 
-        // === ИСПРАВЛЕНИЕ: Интегрируем спиннер строго на уровень списка приложений ===
+        // === Интегрируем спиннер строго на уровень списка приложений ===
         ViewGroup grandParent = (ViewGroup) appsCardParent.getParent();
         int cardIndex = grandParent.indexOfChild(appsCardParent);
         grandParent.removeView(appsCardParent);
@@ -181,7 +182,6 @@ public class OtherProfileFragment extends Fragment {
         
         listWrapper.addView(listSpinner);
         grandParent.addView(listWrapper, cardIndex);
-        // =========================================================================
 
         btnEdit.setVisibility(View.GONE);
 
@@ -205,7 +205,6 @@ public class OtherProfileFragment extends Fragment {
                         btnCollapse.setVisibility(View.GONE);
                     }
                     
-                    // Прячем спиннер ТОЛЬКО когда данные реально появились
                     if (hasApps && listSpinner != null) {
                         listSpinner.setVisibility(View.GONE);
                     }
@@ -534,6 +533,8 @@ public class OtherProfileFragment extends Fragment {
         final List<AppUiData> preloadedData = new ArrayList<>();
 
         Utils.backgroundExecutor.execute(() -> {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+
             try {
                 PackageManager pm = activity.getPackageManager();
                 SharedPreferences dbNames = activity.getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
@@ -574,7 +575,7 @@ public class OtherProfileFragment extends Fragment {
                     } else if (resolvedNames != null && resolvedNames.containsKey(pkgName)) {
                         data.appName = resolvedNames.get(pkgName);
                     } else {
-                        data.appName = getSmartAppName(pkgName); 
+                        data.appName = formatDeletedAppName(pkgName); 
                     }
 
                     if (appInfo != null) {
@@ -687,43 +688,12 @@ public class OtherProfileFragment extends Fragment {
         });
     }
 
-    private String getSmartAppName(String pkg) {
-        if (pkg == null) return "Unknown";
-        switch (pkg.toLowerCase()) {
-            case "org.telegram.messenger": return "Telegram";
-            case "com.whatsapp": return "WhatsApp";
-            case "com.instagram.android": return "Instagram";
-            case "com.zhiliaoapp.musically":
-            case "com.ss.android.ugc.aweme": return "TikTok";
-            case "com.google.android.youtube": return "YouTube";
-            case "com.yandex.browser": return "Яндекс Браузер";
-            case "com.android.chrome": return "Google Chrome";
-            case "com.vkontakte.android": return "ВКонтакте";
-            case "com.viber.voip": return "Viber";
-            case "com.snapchat.android": return "Snapchat";
-            case "com.spotify.android": return "Spotify";
-            case "com.twitter.android": return "X (Twitter)";
-            case "tv.twitch.android.app": return "Twitch";
-            case "com.discord": return "Discord";
-            case "com.skype.rover": return "Skype";
-            case "com.facebook.katana":
-            case "com.facebook.lite": return "Facebook";
-            case "com.netflix.mediaclient": return "Netflix";
-            case "ru.yandex.music": return "Яндекс Музыка";
-            case "com.miHoYo.GenshinImpact": return "Genshin Impact";
-            case "com.tencent.ig": return "PUBG Mobile";
-            default:
-                try {
-                    String[] parts = pkg.split("\\.");
-                    String name = parts[parts.length - 1]; 
-                    if (name.equalsIgnoreCase("app") || name.equalsIgnoreCase("android") || name.equalsIgnoreCase("messenger") || name.equalsIgnoreCase("lite")) {
-                        name = parts[parts.length - 2]; 
-                    }
-                    return name.substring(0, 1).toUpperCase() + name.substring(1); 
-                } catch (Exception e) {
-                    return pkg;
-                }
-        }
+    private String formatDeletedAppName(String pkg) {
+        try {
+            String[] parts = pkg.split("\\.");
+            String name = parts[parts.length - 1]; 
+            return name.substring(0, 1).toUpperCase() + name.substring(1); 
+        } catch (Exception e) { return pkg; }
     }
 
     private void updateFollowButton(android.widget.Button btnFollow, boolean isFollowing) {
