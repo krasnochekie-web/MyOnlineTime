@@ -10,6 +10,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -17,6 +18,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
@@ -44,6 +46,7 @@ public class NotificationsHistoryFragment extends Fragment {
     private RecyclerView recycler;
     private SwipeRefreshLayout swipeRefresh; 
     private TextView emptyText;
+    private ProgressBar loadingSpinner;
     private NotificationsAdapter adapter;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
@@ -89,9 +92,7 @@ public class NotificationsHistoryFragment extends Fragment {
 
         recycler = view.findViewById(R.id.recycler_notifications);
         emptyText = view.findViewById(R.id.empty_notif_text);
-        
-        View oldSpinner = view.findViewById(R.id.loading_spinner);
-        if (oldSpinner != null) oldSpinner.setVisibility(View.GONE);
+        loadingSpinner = view.findViewById(R.id.loading_spinner);
         
         recycler.setLayoutManager(new LinearLayoutManager(getContext()));
         recycler.setHasFixedSize(true);
@@ -113,7 +114,6 @@ public class NotificationsHistoryFragment extends Fragment {
             loadHistory(true);
         });
 
-        // Первичная загрузка без тянучки
         loadHistory(false);
 
         return view;
@@ -128,57 +128,74 @@ public class NotificationsHistoryFragment extends Fragment {
         String cachedJson = prefs.getString(cacheKey, "[]");
         
         if (!cachedJson.equals("[]") && cachedJson.length() > 5) {
-            try {
-                JSONArray array = new JSONArray(cachedJson);
-                List<NotificationModels.NotificationItem> items = new ArrayList<>();
-                boolean hasUnread = false;
+            Utils.backgroundExecutor.execute(() -> {
+                try {
+                    JSONArray array = new JSONArray(cachedJson);
+                    List<NotificationModels.NotificationItem> items = new ArrayList<>();
+                    boolean hasUnread = false;
 
-                for (int i = 0; i < array.length(); i++) {
-                    JSONObject obj = array.getJSONObject(i);
-                    String type = obj.optString("type", "time");
-                    if (!obj.optBoolean("isRead", false)) hasUnread = true;
+                    for (int i = 0; i < array.length(); i++) {
+                        JSONObject obj = array.getJSONObject(i);
+                        String type = obj.optString("type", "time");
+                        if (!obj.optBoolean("isRead", false)) hasUnread = true;
 
-                    if ("time".equals(type)) {
-                        items.add(new NotificationModels.TimeNotification(
-                                obj.optString("mainText"), obj.optString("actionText"), obj.optLong("timestamp")
-                        ));
-                    } else if ("follower".equals(type)) {
-                        items.add(new NotificationModels.FollowerNotification(
-                                obj.optLong("timestamp"), obj.optString("uid"), obj.optString("nickname"),
-                                obj.optString("photo"), obj.optBoolean("isFollowing", false)
-                        ));
-                    }
-                }
-
-                if (!items.isEmpty()) {
-                    recycler.setVisibility(View.VISIBLE);
-                    emptyText.setVisibility(View.GONE);
-                    
-                    if (adapter == null) {
-                        adapter = new NotificationsAdapter(items, activity);
-                        recycler.setAdapter(adapter);
-                    } else {
-                        // Точечное обновление через DiffUtil (не перерисовывает старые элементы)
-                        adapter.updateItems(items);
+                        if ("time".equals(type)) {
+                            items.add(new NotificationModels.TimeNotification(
+                                    obj.optString("mainText"), obj.optString("actionText"), obj.optLong("timestamp")
+                            ));
+                        } else if ("follower".equals(type)) {
+                            items.add(new NotificationModels.FollowerNotification(
+                                    obj.optLong("timestamp"), obj.optString("uid"), obj.optString("nickname"),
+                                    obj.optString("photo"), obj.optBoolean("isFollowing", false)
+                            ));
+                        }
                     }
 
-                    if (hasUnread) {
-                        markAllAsRead(activity, array, cacheKey);
-                    }
-                }
-            } catch (Exception e) { e.printStackTrace(); }
+                    final boolean finalHasUnread = hasUnread;
+
+                    uiHandler.post(() -> {
+                        if (!isAdded()) return;
+
+                        if (!items.isEmpty()) {
+                            recycler.setVisibility(View.VISIBLE);
+                            emptyText.setVisibility(View.GONE);
+                            if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+
+                            // Определяем, находится ли пользователь в самом начале списка
+                            boolean isAtTop = false;
+                            if (recycler.getLayoutManager() instanceof LinearLayoutManager) {
+                                isAtTop = ((LinearLayoutManager) recycler.getLayoutManager()).findFirstCompletelyVisibleItemPosition() == 0;
+                            }
+                            
+                            if (adapter == null) {
+                                adapter = new NotificationsAdapter(items, activity);
+                                recycler.setAdapter(adapter);
+                            } else {
+                                adapter.updateItems(items);
+                                // === ИСПРАВЛЕНИЕ: Принудительный приказ на перерисовку ===
+                                adapter.notifyDataSetChanged(); 
+                            }
+
+                            // === УМНЫЙ СКРОЛЛ ===
+                            // Скроллит наверх только если ты УЖЕ был наверху. 
+                            // Если читал старые, то не будет тебя отвлекать прыжками.
+                            if (isAtTop) {
+                                recycler.scrollToPosition(0);
+                            }
+
+                            if (finalHasUnread) {
+                                markAllAsRead(activity, array, cacheKey);
+                            }
+                        }
+                    });
+                } catch (Exception e) { e.printStackTrace(); }
+            });
         }
     }
 
     private void loadHistory(boolean isSwipeRefresh) {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
-
-        if (isSwipeRefresh && swipeRefresh != null) {
-            swipeRefresh.setRefreshing(true);
-        } else if (swipeRefresh != null) {
-            swipeRefresh.post(() -> swipeRefresh.setRefreshing(true));
-        }
 
         String cacheKey = getCacheKey();
         SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -187,15 +204,21 @@ public class NotificationsHistoryFragment extends Fragment {
         boolean hasCache = !cachedJson.equals("[]") && cachedJson.length() > 5;
         
         if (hasCache) {
+            if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
             parseAndDisplayAsync(cachedJson, activity);
         } else {
             recycler.setVisibility(View.GONE);
             emptyText.setVisibility(View.GONE);
+            if (!isSwipeRefresh && loadingSpinner != null) {
+                loadingSpinner.setVisibility(View.VISIBLE);
+            }
         }
 
         if (activity.vpsToken == null) {
             if (!hasCache) showEmptyState();
-            uiHandler.postDelayed(() -> { if (swipeRefresh != null) swipeRefresh.setRefreshing(false); }, 700);
+            uiHandler.postDelayed(() -> { 
+                if (swipeRefresh != null) swipeRefresh.setRefreshing(false); 
+            }, 700);
             return; 
         }
 
@@ -238,6 +261,7 @@ public class NotificationsHistoryFragment extends Fragment {
                         
                         uiHandler.postDelayed(() -> {
                             if (isAdded()) {
+                                if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
                                 if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
                                 parseAndDisplayAsync(finalJson, activity);
                             }
@@ -249,6 +273,7 @@ public class NotificationsHistoryFragment extends Fragment {
                         
                         uiHandler.postDelayed(() -> {
                             if (isAdded()) {
+                                if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
                                 if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
                                 parseAndDisplayAsync(result, activity);
                             }
@@ -261,6 +286,7 @@ public class NotificationsHistoryFragment extends Fragment {
             public void onError(String error) {
                 uiHandler.postDelayed(() -> {
                     if (!isAdded()) return;
+                    if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
                     if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
                     if (!hasCache) {
                         showEmptyState();
@@ -317,6 +343,7 @@ public class NotificationsHistoryFragment extends Fragment {
                             recycler.setAdapter(adapter);
                         } else {
                             adapter.updateItems(items);
+                            adapter.notifyDataSetChanged(); // Гарантируем отрисовку
                         }
                         
                         if (finalHasUnread) {
@@ -331,6 +358,7 @@ public class NotificationsHistoryFragment extends Fragment {
     }
 
     private void showEmptyState() {
+        if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
         recycler.setVisibility(View.GONE);
         emptyText.setVisibility(View.VISIBLE);
     }
@@ -391,7 +419,6 @@ public class NotificationsHistoryFragment extends Fragment {
 
         if (!hidden) {
             setupHeader(); 
-            uiHandler.post(() -> { if (isAdded() && swipeRefresh != null) swipeRefresh.setRefreshing(true); });
             loadHistory(false); 
             if (hideBgRunnable == null) {
                 hideBgRunnable = () -> {
@@ -412,11 +439,8 @@ public class NotificationsHistoryFragment extends Fragment {
         requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(prefsListener);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"), Context.RECEIVER_EXPORTED);
-        } else {
-            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
-        }
+        LocalBroadcastManager.getInstance(requireContext())
+            .registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
 
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
@@ -440,7 +464,7 @@ public class NotificationsHistoryFragment extends Fragment {
             .unregisterOnSharedPreferenceChangeListener(prefsListener);
             
         try {
-            requireContext().unregisterReceiver(pushReceiver);
+            LocalBroadcastManager.getInstance(requireContext()).unregisterReceiver(pushReceiver);
         } catch (Exception ignored) {}
     }
 }
