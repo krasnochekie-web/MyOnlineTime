@@ -1,10 +1,11 @@
-                                package com.myonlinetime.app.ui;
+   package com.myonlinetime.app.ui;
 
 import android.app.Dialog;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -13,9 +14,12 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -39,6 +43,9 @@ public class ChartFragment extends Fragment {
     private ImageView btnPrev, btnNext;
     private RecyclerView recyclerView;
     private AppsAdapter adapter;
+    
+    // Щит от шаловливых ручек
+    private FrameLayout loadingOverlay;
 
     private final List<DayData> weeklyData = new ArrayList<>();
     private int currentIndex = 6; 
@@ -83,6 +90,27 @@ public class ChartFragment extends Fragment {
 
         btnPrev.setOnClickListener(v -> { if (currentIndex > 0) selectDay(currentIndex - 1); });
         btnNext.setOnClickListener(v -> { if (currentIndex < 6) selectDay(currentIndex + 1); });
+
+        // === СОЗДАЕМ ПРОГРАММНЫЙ ОВЕРЛЕЙ ЗАГРУЗКИ (Крутилка + Защита) ===
+        loadingOverlay = new FrameLayout(activity);
+        loadingOverlay.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        loadingOverlay.setClickable(true);  // Поглощает все клики!
+        loadingOverlay.setFocusable(true);
+        loadingOverlay.setBackgroundColor(Color.TRANSPARENT); // Полностью прозрачный фон
+        
+        ProgressBar spinner = new ProgressBar(activity);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(activity, R.color.grapefruit)));
+        }
+        FrameLayout.LayoutParams spinnerParams = new FrameLayout.LayoutParams(
+                (int)(50 * getResources().getDisplayMetrics().density), 
+                (int)(50 * getResources().getDisplayMetrics().density)
+        );
+        spinnerParams.gravity = android.view.Gravity.CENTER;
+        loadingOverlay.addView(spinner, spinnerParams);
+        
+        ((ViewGroup) view).addView(loadingOverlay);
+        // =================================================================
 
         loadWeeklyData();
         return view;
@@ -139,7 +167,6 @@ public class ChartFragment extends Fragment {
                 Calendar cal = Calendar.getInstance();
                 cal.add(Calendar.DAY_OF_YEAR, -(6 - i)); 
                 
-                // === ПРЕДЕЛЬНО ТОЧНЫЕ ГРАНИЦЫ ДНЯ ===
                 cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); 
                 cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
                 long dayStart = cal.getTimeInMillis();
@@ -155,21 +182,17 @@ public class ChartFragment extends Fragment {
 
                 Map<String, Long> times;
 
-                // === ФИКС "ФРАНКЕНШТЕЙНА": Игнорируем кэш, если это старый день и он подозрителен ===
                 if (i == 6 && UsageMath.todayExactCache != null) {
                     times = UsageMath.todayExactCache;
                 } else if (i == 5 && UsageMath.yesterdayExactCache != null) {
                     times = UsageMath.yesterdayExactCache;
                 } else {
-                    // Для всех старых дней ВСЕГДА используем метод событий, он не умеет возвращать недельные бакеты!
                     times = UsageMath.getFilteredExactTimes(activity, dayStart, dayEnd);
                 }
                 
                 long dailyTotal = UsageMath.sumMap(times);
 
-                // === ПРОВЕРКА НА АНОМАЛИЮ (Более 24 часов в сутках) ===
                 if (dailyTotal > 86400000L) {
-                    // Если Android сошел с ума и выдал неделю вместо дня — обнуляем баг и пытаемся пересчитать чисто
                     dailyTotal = 0;
                     times.clear();
                 }
@@ -190,7 +213,6 @@ public class ChartFragment extends Fragment {
                 dayLabels[i] = dayShort;
             }
 
-            // Предзагрузка иконок и имен
             PackageManager pm = activity.getPackageManager();
             for (DayData day : weeklyData) {
                 for (String pkgName : day.appList) {
@@ -207,6 +229,12 @@ public class ChartFragment extends Fragment {
                 cachedBarMillis = barMillis;
                 cachedDayLabels = dayLabels;
                 isDataReady = true;
+
+                // Снимаем блокировку и прячем спиннер!
+                if (loadingOverlay != null) {
+                    loadingOverlay.setVisibility(View.GONE);
+                }
+
                 if (isResumed() && !isAnimated) runChartAnimation();
             });
         });
@@ -218,4 +246,3 @@ public class ChartFragment extends Fragment {
         selectDay(6); 
     }
 }
- 
