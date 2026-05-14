@@ -10,9 +10,12 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Process;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -23,8 +26,11 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.core.content.ContextCompat;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
@@ -61,6 +67,9 @@ public class ProfileFragment extends Fragment {
     private TextView txtFollowingCount;
 
     private View profileContentView;
+    
+    // Щит от шаловливых ручек и спиннер
+    private FrameLayout loadingOverlay;
 
     private String currentLoadedAvatar = null;
     private String currentLoadedBg = null;
@@ -114,11 +123,32 @@ public class ProfileFragment extends Fragment {
         wrapper.addView(myBgImageView, 0); 
         wrapper.addView(originalView, 1);  
 
+        // === ОВЕРЛЕЙ ЗАГРУЗКИ И АНТИ-ЛАГ СПИННЕР ===
+        loadingOverlay = new FrameLayout(activity);
+        loadingOverlay.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        loadingOverlay.setClickable(true);  
+        loadingOverlay.setFocusable(true);
+        loadingOverlay.setBackgroundColor(Color.TRANSPARENT); 
+        
+        ProgressBar spinner = new ProgressBar(activity);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(activity, R.color.grapefruit)));
+        }
+        FrameLayout.LayoutParams spinnerParams = new FrameLayout.LayoutParams(
+                (int)(50 * getResources().getDisplayMetrics().density), 
+                (int)(50 * getResources().getDisplayMetrics().density)
+        );
+        spinnerParams.gravity = Gravity.CENTER_HORIZONTAL | Gravity.TOP;
+        spinnerParams.topMargin = (int)(250 * getResources().getDisplayMetrics().density); 
+        loadingOverlay.addView(spinner, spinnerParams);
+        
+        wrapper.addView(loadingOverlay); // Добавляем поверх всего
+        // ==========================================
+
         final GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         if (account == null) return wrapper;
         myUid = account.getId();
 
-        // === ИСПРАВЛЕНИЕ: Умная загрузка (GIF через Glide, Фото мгновенно) ===
         String bgPath = activity.prefs.getString("custom_bg_path_" + myUid, null);
         String remoteBg = activity.prefs.getString("my_bg_base64", null);
         if (bgPath != null && new File(bgPath).exists()) {
@@ -178,6 +208,9 @@ public class ProfileFragment extends Fragment {
                         btnExpand.setVisibility(View.GONE);
                         btnCollapse.setVisibility(View.GONE);
                     }
+                    
+                    // Снимаем блокировку, когда приложения загрузились
+                    if (loadingOverlay != null) loadingOverlay.setVisibility(View.GONE);
                 });
             }
         });
@@ -196,6 +229,13 @@ public class ProfileFragment extends Fragment {
         loadMyStatsRunnable = () -> {
             if (isAdded() && appsContainerLocal != null && weekTimeText != null) {
                 StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
+                
+                // Страховочное отключение спиннера (на случай, если список приложений пуст)
+                uiHandler.postDelayed(() -> {
+                    if (loadingOverlay != null) loadingOverlay.setVisibility(View.GONE);
+                }, 500);
+            } else {
+                if (loadingOverlay != null) loadingOverlay.setVisibility(View.GONE);
             }
         };
 
@@ -355,7 +395,6 @@ public class ProfileFragment extends Fragment {
         if (!newBgKey.equals(currentLoadedBg)) {
             currentLoadedBg = newBgKey;
             
-            // === ИСПРАВЛЕНИЕ: Умная загрузка (GIF через Glide, Фото мгновенно) ===
             if (bgPath != null && new File(bgPath).exists()) {
                 if (bgPath.toLowerCase().endsWith(".gif")) {
                     Glide.with(this).load(new File(bgPath))
@@ -445,8 +484,10 @@ public class ProfileFragment extends Fragment {
     }
 
     private void requestLoadMyStats() {
+        if (loadingOverlay != null) loadingOverlay.setVisibility(View.VISIBLE);
         uiHandler.removeCallbacks(loadMyStatsRunnable);
-        uiHandler.postDelayed(loadMyStatsRunnable, 150);
+        // === АНТИ-ЛАГ: Увеличенная задержка для плавной отрисовки оверлея ===
+        uiHandler.postDelayed(loadMyStatsRunnable, 200);
     }
 
     private void handleMediaLoading(MainActivity activity, String base64Data, boolean useLocalFile, String uid) {
@@ -550,6 +591,9 @@ public class ProfileFragment extends Fragment {
 
     private void loadLocalCacheAsync(Runnable onLoaded) {
         Utils.backgroundExecutor.execute(() -> {
+            // === АНТИ-ЛАГ: Снижаем приоритет чтения из памяти ===
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+
             Set<String> hidden = new HashSet<>(prefs.getStringSet("hidden_apps", new HashSet<>()));
             String descJson = prefs.getString("app_descriptions", "{}");
             Map<String, String> map = null;
@@ -622,7 +666,8 @@ public class ProfileFragment extends Fragment {
 
             btnDesc.setOnClickListener(v12 -> {
                 popupWindow.dismiss();
-                showDescriptionDialog(activity, pkgName, descView);
+                // === АНТИ-ЛАГ: Отложенный вызов тяжелого диалога ===
+                uiHandler.postDelayed(() -> showDescriptionDialog(activity, pkgName, descView), 150);
             });
 
             popupWindow.showAsDropDown(optionsBtn, -40, 0);
