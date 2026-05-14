@@ -53,8 +53,8 @@ public class AllTimeFragment extends Fragment {
     private AppsAdapter adapter;
     private SharedPreferences prefs;
     
-    // Щит от шаловливых ручек
     private FrameLayout loadingOverlay;
+    private Dialog howItWorksDialog; // Защита от мульти-кликов
 
     private static final String PREF_NAME = "AllTimeStatsCache";
     private static final String KEY_START_DATE = "start_date_millis";
@@ -102,12 +102,11 @@ public class AllTimeFragment extends Fragment {
         HeaderWrapperAdapter wrapperAdapter = new HeaderWrapperAdapter(headerWrapper, adapter);
         recyclerView.setAdapter(wrapperAdapter);
 
-        // === СОЗДАЕМ ПРОГРАММНЫЙ ОВЕРЛЕЙ ЗАГРУЗКИ (Крутилка + Защита) ===
         loadingOverlay = new FrameLayout(activity);
         loadingOverlay.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        loadingOverlay.setClickable(true);  // Поглощает все клики!
+        loadingOverlay.setClickable(true);  
         loadingOverlay.setFocusable(true);
-        loadingOverlay.setBackgroundColor(Color.TRANSPARENT); // Полностью прозрачный фон
+        loadingOverlay.setBackgroundColor(Color.TRANSPARENT); 
         
         ProgressBar spinner = new ProgressBar(activity);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -121,7 +120,6 @@ public class AllTimeFragment extends Fragment {
         loadingOverlay.addView(spinner, spinnerParams);
         
         ((ViewGroup) view).addView(loadingOverlay);
-        // =================================================================
 
         loadAndCalculateStats();
 
@@ -137,43 +135,37 @@ public class AllTimeFragment extends Fragment {
     }
 
     private void showHowItWorksDialog(boolean isAllTime) {
-        final Dialog dialog = new Dialog(requireContext());
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        dialog.setContentView(R.layout.dialog_how_it_works);
+        if (howItWorksDialog != null && howItWorksDialog.isShowing()) return;
         
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            dialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog;
+        howItWorksDialog = new Dialog(requireContext());
+        howItWorksDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        howItWorksDialog.setContentView(R.layout.dialog_how_it_works);
+        
+        if (howItWorksDialog.getWindow() != null) {
+            howItWorksDialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            howItWorksDialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            howItWorksDialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog;
         }
 
-        TextView descText = dialog.findViewById(R.id.dialog_description_text);
-        Button btnOk = dialog.findViewById(R.id.dialog_ok_btn);
+        TextView descText = howItWorksDialog.findViewById(R.id.dialog_description_text);
+        Button btnOk = howItWorksDialog.findViewById(R.id.dialog_ok_btn);
 
-        if (isAllTime) {
-            descText.setText(getString(R.string.dialog_how_it_works_all_time));
-        } else {
-            descText.setText(getString(R.string.dialog_how_it_works_charts));
-        }
-
-        btnOk.setOnClickListener(v -> dialog.dismiss());
-        dialog.show();
+        descText.setText(getString(isAllTime ? R.string.dialog_how_it_works_all_time : R.string.dialog_how_it_works_charts));
+        btnOk.setOnClickListener(v -> howItWorksDialog.dismiss());
+        howItWorksDialog.show();
     }
 
-    // =========================================================================
-    // БРОНЕБОЙНАЯ ОЧИСТКА ИМЕН ПАКЕТОВ ОТ ДУБЛИКАТОВ (Без искажения регистра)
-    // =========================================================================
     private String cleanPackageName(String pkg) {
         if (pkg == null) return "";
-        // Убираем только пробелы и скрытые символы. 
-        // Регистр и подчеркивания (_) ОБЯЗАТЕЛЬНО оставляем!
         return pkg.replaceAll("\\s+", "");
     }
     
     private void loadAndCalculateStats() {
+        // === ИСПРАВЛЕНИЕ: Заполняем тексты ДО начала загрузки, чтобы плашка не схлопывалась ===
         mainValTxt.setText(getString(R.string.format_days_hours, 0, 0));
         subValTxt.setText(getString(R.string.format_total_hours_mins, 0, 0));
         yesterdayValTxt.setText(getString(R.string.format_plus_hours_mins, 0, 0));
+        descTxt.setText(getString(R.string.loading)); // Описание не будет пустым!
 
         Utils.backgroundExecutor.execute(() -> {
             MainActivity activity = (MainActivity) getActivity();
@@ -184,7 +176,6 @@ public class AllTimeFragment extends Fragment {
             long historicalTotalMillis = prefs.getLong(KEY_TOTAL_TIME, 0);
             Map<String, Long> historicalAppsMapRaw = loadAppsFromCache();
             
-            // СЛИВАЕМ КЭШ С ИСПОЛЬЗОВАНИЕМ ОЧИСТКИ
             Map<String, Long> historicalAppsMap = new HashMap<>();
             for (Map.Entry<String, Long> entry : historicalAppsMapRaw.entrySet()) {
                 String cleanPkg = cleanPackageName(entry.getKey());
@@ -253,7 +244,6 @@ public class AllTimeFragment extends Fragment {
             
             long yesterdayTotal = UsageMath.sumMap(yesterdayTimes);
 
-            // ФИНАЛЬНОЕ СЛИЯНИЕ "СЕГОДНЯ" И "ИСТОРИИ" (Защита от дубликатов включена)
             Map<String, Long> finalAppsMap = new HashMap<>(historicalAppsMap);
             for (Map.Entry<String, Long> entry : todayTimes.entrySet()) {
                 String cleanPkg = cleanPackageName(entry.getKey());
@@ -296,7 +286,6 @@ public class AllTimeFragment extends Fragment {
                 cachedStartDate = finalStartDate;
                 isDataReady = true;
 
-                // Снимаем блокировку и прячем спиннер!
                 if (loadingOverlay != null) {
                     loadingOverlay.setVisibility(View.GONE);
                 }
