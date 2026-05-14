@@ -9,6 +9,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Process;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -44,11 +45,9 @@ public class ChartFragment extends Fragment {
     private RecyclerView recyclerView;
     private AppsAdapter adapter;
     
-    // Щит от шаловливых ручек
     private FrameLayout loadingOverlay;
-    
-    // === ИСПРАВЛЕНИЕ: БЛОКИРОВКА МУЛЬТИ-ДИАЛОГОВ ===
     private Dialog howItWorksDialog;
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
     private final List<DayData> weeklyData = new ArrayList<>();
     private int currentIndex = 6; 
@@ -82,7 +81,7 @@ public class ChartFragment extends Fragment {
 
         View howItWorksBtn = view.findViewById(R.id.how_it_works_btn);
         if (howItWorksBtn != null) {
-            howItWorksBtn.setOnClickListener(v -> showHowItWorksDialog(false));
+            howItWorksBtn.setOnClickListener(v -> uiHandler.postDelayed(() -> showHowItWorksDialog(false), 150));
         }
 
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
@@ -113,7 +112,7 @@ public class ChartFragment extends Fragment {
         
         ((ViewGroup) view).addView(loadingOverlay);
 
-        loadWeeklyData();
+        uiHandler.postDelayed(this::loadWeeklyData, 200);
         return view;
     }
 
@@ -124,7 +123,6 @@ public class ChartFragment extends Fragment {
     }
 
     private void showHowItWorksDialog(boolean isAllTime) {
-        // Жесткая защита от двойного клика
         if (howItWorksDialog != null && howItWorksDialog.isShowing()) return;
 
         howItWorksDialog = new Dialog(requireContext());
@@ -134,7 +132,6 @@ public class ChartFragment extends Fragment {
         if (howItWorksDialog.getWindow() != null) {
             howItWorksDialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             howItWorksDialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            // === ИСПРАВЛЕНИЕ: ДОБАВЛЕНА АНИМАЦИЯ ===
             howItWorksDialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog;
         }
 
@@ -162,6 +159,8 @@ public class ChartFragment extends Fragment {
     private void loadWeeklyData() {
         topDateTxt.setText(getString(R.string.loading));
         Utils.backgroundExecutor.execute(() -> {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+
             MainActivity activity = (MainActivity) getActivity();
             if (activity == null || !isAdded()) return;
 
@@ -233,7 +232,7 @@ public class ChartFragment extends Fragment {
                 }
             }
 
-            new Handler(Looper.getMainLooper()).post(() -> {
+            uiHandler.post(() -> {
                 if (!isAdded()) return;
                 cachedBarMillis = barMillis;
                 cachedDayLabels = dayLabels;
