@@ -9,6 +9,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -18,8 +19,11 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -48,6 +52,9 @@ public class AllTimeFragment extends Fragment {
     private RecyclerView recyclerView;
     private AppsAdapter adapter;
     private SharedPreferences prefs;
+    
+    // Щит от шаловливых ручек
+    private FrameLayout loadingOverlay;
 
     private static final String PREF_NAME = "AllTimeStatsCache";
     private static final String KEY_START_DATE = "start_date_millis";
@@ -95,6 +102,27 @@ public class AllTimeFragment extends Fragment {
         HeaderWrapperAdapter wrapperAdapter = new HeaderWrapperAdapter(headerWrapper, adapter);
         recyclerView.setAdapter(wrapperAdapter);
 
+        // === СОЗДАЕМ ПРОГРАММНЫЙ ОВЕРЛЕЙ ЗАГРУЗКИ (Крутилка + Защита) ===
+        loadingOverlay = new FrameLayout(activity);
+        loadingOverlay.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        loadingOverlay.setClickable(true);  // Поглощает все клики!
+        loadingOverlay.setFocusable(true);
+        loadingOverlay.setBackgroundColor(Color.TRANSPARENT); // Полностью прозрачный фон
+        
+        ProgressBar spinner = new ProgressBar(activity);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(activity, R.color.grapefruit)));
+        }
+        FrameLayout.LayoutParams spinnerParams = new FrameLayout.LayoutParams(
+                (int)(50 * getResources().getDisplayMetrics().density), 
+                (int)(50 * getResources().getDisplayMetrics().density)
+        );
+        spinnerParams.gravity = android.view.Gravity.CENTER;
+        loadingOverlay.addView(spinner, spinnerParams);
+        
+        ((ViewGroup) view).addView(loadingOverlay);
+        // =================================================================
+
         loadAndCalculateStats();
 
         return view;
@@ -131,7 +159,8 @@ public class AllTimeFragment extends Fragment {
         btnOk.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
     }
-// =========================================================================
+
+    // =========================================================================
     // БРОНЕБОЙНАЯ ОЧИСТКА ИМЕН ПАКЕТОВ ОТ ДУБЛИКАТОВ (Без искажения регистра)
     // =========================================================================
     private String cleanPackageName(String pkg) {
@@ -266,6 +295,11 @@ public class AllTimeFragment extends Fragment {
                 cachedYesterdayTotal = finalYesterdayTotal;
                 cachedStartDate = finalStartDate;
                 isDataReady = true;
+
+                // Снимаем блокировку и прячем спиннер!
+                if (loadingOverlay != null) {
+                    loadingOverlay.setVisibility(View.GONE);
+                }
 
                 if (isResumed() && !isAnimated) {
                     runNumbersAnimation();
