@@ -161,8 +161,6 @@ public class StatsTimeFragment extends Fragment {
         spinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
         spinner.setAdapter(spinnerAdapter);
 
-        loadBottomCardsData(activity, textWeek, textMonth, textYear);
-
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
@@ -175,7 +173,9 @@ public class StatsTimeFragment extends Fragment {
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         }); 
 
-        fetchAndApplyData(0, activity);
+        // === ИНЪЕКЦИЯ ОТ ПРОСАДОК FPS: Отложенный старт вычислений ===
+        new Handler(Looper.getMainLooper()).postDelayed(() -> fetchAndApplyData(0, activity), 200);
+        new Handler(Looper.getMainLooper()).postDelayed(() -> loadBottomCardsData(activity, textWeek, textMonth, textYear), 350);
 
         return rootWrapper;
     }
@@ -213,6 +213,9 @@ public class StatsTimeFragment extends Fragment {
         loadingSpinner.setVisibility(View.VISIBLE); 
         
         Utils.backgroundExecutor.execute(() -> {
+            // === ИНЪЕКЦИЯ ОТ ПРОСАДОК FPS: Снижаем приоритет тяжелого потока ===
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
+
             if (UsageMath.todayStartMillis == 0) {
                 Calendar cal = Calendar.getInstance();
                 cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
@@ -303,6 +306,9 @@ public class StatsTimeFragment extends Fragment {
         }
 
         Utils.backgroundExecutor.execute(() -> {
+            // === ИНЪЕКЦИЯ ОТ ПРОСАДОК FPS: Снижаем приоритет тяжелого потока ===
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
+
             long now = System.currentTimeMillis();
             
             Calendar calW = Calendar.getInstance(); calW.add(Calendar.DAY_OF_YEAR, -7);
