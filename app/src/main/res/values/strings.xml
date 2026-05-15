@@ -8,6 +8,11 @@
     <string name="feed">Feed</string>
     <string name="find">Find</string>
 	<string name="notif_offline_mode">(Offline)</string>
+	<string name="dialog_delete_account_title">Delete account?</string>
+<string name="dialog_delete_account_desc">After clicking the \"Delete\" button, your account will be permanently deleted from our servers, without the possibility of recovery.\nPlease make an informed decision.\nTo cancel the operation, click \"Cancel\".</string>
+<string name="btn_delete_uppercase">DELETE</string>
+<string name="btn_cancel_uppercase">CANCEL</string>
+<string name="toast_account_deleted">Your account and all data have been successfully deleted.</string>
 	<string name="notif_followers">Follower notifications</string>
 	<string name="notif_channel_followers_name">You have a new subscriber!</string>
 <string name="notif_someone">Someone</string>
