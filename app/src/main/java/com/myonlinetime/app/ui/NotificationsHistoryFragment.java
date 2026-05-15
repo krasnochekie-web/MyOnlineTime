@@ -1,6 +1,9 @@
 package com.myonlinetime.app.ui;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
@@ -50,6 +53,7 @@ public class NotificationsHistoryFragment extends Fragment {
     private NotificationsAdapter adapter;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
+    // === ЖЕСТКИЙ СЛУХАЧ КЭША ===
     private final SharedPreferences.OnSharedPreferenceChangeListener prefsListener = (sharedPrefs, key) -> {
         if (key != null && key.equals(getCacheKey())) {
             uiHandler.post(() -> {
@@ -62,13 +66,13 @@ public class NotificationsHistoryFragment extends Fragment {
         }
     };
 
-    private final android.content.BroadcastReceiver pushReceiver = new android.content.BroadcastReceiver() {
+    // === ГЛОБАЛЬНЫЙ ПРИЕМНИК ПУШЕЙ ===
+    private final BroadcastReceiver pushReceiver = new BroadcastReceiver() {
         @Override
-        public void onReceive(Context context, android.content.Intent intent) {
+        public void onReceive(Context context, Intent intent) {
             if ("UPDATE_BADGE_BROADCAST".equals(intent.getAction())) {
                 uiHandler.post(() -> {
                     if (isAdded()) {
-                        // Тихо обновляем данные без всяких прыжков экрана
                         loadFromCacheOnly(); 
                         MainActivity activity = (MainActivity) getActivity();
                         if (activity != null) activity.updateNotificationBadge();
@@ -166,11 +170,9 @@ public class NotificationsHistoryFragment extends Fragment {
                                 adapter = new NotificationsAdapter(items, activity);
                                 recycler.setAdapter(adapter);
                             } else {
+                                // Тихо обновляем список. Если был скролл вниз - там и останется.
                                 adapter.updateItems(items);
                             }
-
-                            // Принудительные скроллы полностью вырезаны. 
-                            // Адаптер сам сохранит позицию экрана.
 
                             if (finalHasUnread) {
                                 markAllAsRead(activity, array, cacheKey);
@@ -194,9 +196,8 @@ public class NotificationsHistoryFragment extends Fragment {
         
         if (hasCache) {
             if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-            // Если обновляем свайпом, не перерисовываем кэш мгновенно, чтобы не сбить анимацию тянучки
             if (!isSwipeRefresh) {
-                parseAndDisplayAsync(cachedJson, activity);
+                parseAndDisplayAsync(cachedJson, activity, 0); // Без задержки для старта
             }
         } else {
             recycler.setVisibility(View.GONE);
@@ -210,9 +211,12 @@ public class NotificationsHistoryFragment extends Fragment {
             if (!hasCache) showEmptyState();
             uiHandler.postDelayed(() -> { 
                 if (swipeRefresh != null) swipeRefresh.setRefreshing(false); 
-            }, 700);
+            }, 1200); // Приличие!
             return; 
         }
+
+        // === ИСПРАВЛЕНИЕ ТЯНУЧКИ: Засекаем время старта ===
+        final long startFetchTime = System.currentTimeMillis();
 
         VpsApi.getNotificationsHistory(activity.vpsToken, new VpsApi.Callback() {
             @Override
@@ -247,35 +251,35 @@ public class NotificationsHistoryFragment extends Fragment {
                         
                         String finalJson = finalArray.toString();
                         
+                        // Сохраняем в кэш без триггера слушателя
                         prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
                         prefs.edit().putString(cacheKey, finalJson).commit();
                         prefs.registerOnSharedPreferenceChangeListener(prefsListener);
                         
-                        uiHandler.postDelayed(() -> {
-                            if (isAdded()) {
-                                if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-                                if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
-                                parseAndDisplayAsync(finalJson, activity);
-                            }
-                        }, 700); 
+                        // Вычисляем, сколько нужно подождать, чтобы анимация была не меньше 1200мс
+                        long elapsed = System.currentTimeMillis() - startFetchTime;
+                        long remainingDelay = Math.max(0, 1200 - elapsed);
+                        
+                        parseAndDisplayAsync(finalJson, activity, remainingDelay);
+
                     } catch (Exception e) {
                         prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
                         prefs.edit().putString(cacheKey, result).commit();
                         prefs.registerOnSharedPreferenceChangeListener(prefsListener);
                         
-                        uiHandler.postDelayed(() -> {
-                            if (isAdded()) {
-                                if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-                                if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
-                                parseAndDisplayAsync(result, activity);
-                            }
-                        }, 700);
+                        long elapsed = System.currentTimeMillis() - startFetchTime;
+                        long remainingDelay = Math.max(0, 1200 - elapsed);
+                        
+                        parseAndDisplayAsync(result, activity, remainingDelay);
                     }
                 });
             }
 
             @Override
             public void onError(String error) {
+                long elapsed = System.currentTimeMillis() - startFetchTime;
+                long remainingDelay = Math.max(0, 1200 - elapsed);
+                
                 uiHandler.postDelayed(() -> {
                     if (!isAdded()) return;
                     if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
@@ -284,12 +288,12 @@ public class NotificationsHistoryFragment extends Fragment {
                         showEmptyState();
                         Toast.makeText(getContext(), getString(R.string.err_server) + " " + error, Toast.LENGTH_SHORT).show();
                     }
-                }, 700);
+                }, remainingDelay);
             }
         });
     }
 
-    private void parseAndDisplayAsync(String jsonResult, MainActivity activity) {
+    private void parseAndDisplayAsync(String jsonResult, MainActivity activity, long delayBeforeStop) {
         Utils.backgroundExecutor.execute(() -> {
             try {
                 JSONArray array = new JSONArray(jsonResult);
@@ -321,8 +325,11 @@ public class NotificationsHistoryFragment extends Fragment {
                 
                 final boolean finalHasUnread = hasUnread;
 
-                uiHandler.post(() -> {
+                uiHandler.postDelayed(() -> {
                     if (!isAdded()) return;
+
+                    if (swipeRefresh != null) swipeRefresh.setRefreshing(false); // Заканчиваем крутить
+                    if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
 
                     if (items.isEmpty()) {
                         showEmptyState();
@@ -341,9 +348,15 @@ public class NotificationsHistoryFragment extends Fragment {
                             markAllAsRead(activity, array, getCacheKey());
                         }
                     }
-                });
+                }, delayBeforeStop);
+
             } catch (Exception e) {
-                uiHandler.post(() -> { if (isAdded()) showEmptyState(); });
+                uiHandler.postDelayed(() -> { 
+                    if (isAdded()) {
+                        if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
+                        showEmptyState();
+                    }
+                }, delayBeforeStop);
             }
         });
     }
@@ -430,14 +443,17 @@ public class NotificationsHistoryFragment extends Fragment {
         requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(prefsListener);
 
-        LocalBroadcastManager.getInstance(requireContext())
-            .registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"), Context.RECEIVER_EXPORTED);
-        } else {
-            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
-        }
+        // === ГЛОБАЛЬНАЯ РЕГИСТРАЦИЯ ДЛЯ УВЕДОМЛЕНИЙ ===
+        try {
+            LocalBroadcastManager.getInstance(requireContext())
+                .registerReceiver(pushReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"));
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                requireContext().registerReceiver(pushReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"), Context.RECEIVER_EXPORTED);
+            } else {
+                requireContext().registerReceiver(pushReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"));
+            }
+        } catch (Exception e) {}
 
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
@@ -462,9 +478,6 @@ public class NotificationsHistoryFragment extends Fragment {
             
         try {
             LocalBroadcastManager.getInstance(requireContext()).unregisterReceiver(pushReceiver);
-        } catch (Exception ignored) {}
-        
-        try {
             requireContext().unregisterReceiver(pushReceiver);
         } catch (Exception ignored) {}
     }
