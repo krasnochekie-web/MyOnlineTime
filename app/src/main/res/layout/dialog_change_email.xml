@@ -36,11 +36,9 @@
                 android:layout_alignParentRight="true"
                 android:layout_centerVertical="true"
                 android:background="@drawable/bg_close_circle"
-                android:clipToOutline="true"
+                android:padding="6dp"
                 android:clickable="true"
                 android:focusable="true"
-                android:foreground="?attr/selectableItemBackground"
-                android:padding="6dp"
                 android:src="@android:drawable/ic_menu_close_clear_cancel"
                 app:tint="@color/textDynamic" />
         </RelativeLayout>
