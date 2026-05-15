@@ -4,7 +4,6 @@ import androidx.fragment.app.Fragment;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -15,6 +14,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -192,6 +193,19 @@ public class ProfileFragment extends Fragment {
         listWrapper.addView(listSpinner);
         grandParent.addView(listWrapper, cardIndex);
 
+        // === ИСПРАВЛЕНИЕ: ЖЕЛЕЗОБЕТОННОЕ СНЯТИЕ СПИННЕРА ПРИ ЛЮБОМ РАСКЛАДЕ ===
+        // StatsHelper в конце своей работы обновляет weekTimeText. Это лучший маркер того, что загрузка окончена!
+        if (weekTimeText != null) {
+            weekTimeText.addTextChangedListener(new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+                @Override
+                public void afterTextChanged(Editable s) {
+                    if (listSpinner != null) listSpinner.setVisibility(View.GONE);
+                }
+            });
+        }
+
         appsContainerLocal.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
             @Override
             public void onChildViewAdded(View parent, View child) { updateEmptyState(); }
@@ -211,10 +225,6 @@ public class ProfileFragment extends Fragment {
                         btnExpand.setVisibility(View.GONE);
                         btnCollapse.setVisibility(View.GONE);
                     }
-                    
-                    if (hasApps && listSpinner != null) {
-                        listSpinner.setVisibility(View.GONE);
-                    }
                 });
             }
         });
@@ -233,6 +243,10 @@ public class ProfileFragment extends Fragment {
         loadMyStatsRunnable = () -> {
             if (isAdded() && appsContainerLocal != null && weekTimeText != null) {
                 StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
+                // Страховочный таймер на случай системного сбоя StatsHelper'а (3 секунды)
+                uiHandler.postDelayed(() -> {
+                    if (listSpinner != null) listSpinner.setVisibility(View.GONE);
+                }, 3000);
             } else {
                 if (listSpinner != null) listSpinner.setVisibility(View.GONE);
             }
@@ -348,7 +362,7 @@ public class ProfileFragment extends Fragment {
                         }
 
                         updateUiFromPrefs(activity);
-                        if (cacheChanged) requestLoadMyStats(true); // Запрос с сервера — крутим спиннер
+                        if (cacheChanged) requestLoadMyStats(true); 
                     }
                 }
                 @Override public void onError(String e) {}
@@ -356,7 +370,7 @@ public class ProfileFragment extends Fragment {
         };
 
         loadLocalCacheAsync(() -> {
-            if (isAdded()) requestLoadMyStats(true); // Первый запуск — крутим спиннер
+            if (isAdded()) requestLoadMyStats(true); 
         });
 
         updateUiFromPrefs(activity);
@@ -481,7 +495,6 @@ public class ProfileFragment extends Fragment {
         });
     }
 
-    // === ИСПРАВЛЕНИЕ: Выбор, когда показывать спиннер ===
     private void requestLoadMyStats(boolean showSpinner) {
         if (showSpinner && listSpinner != null) listSpinner.setVisibility(View.VISIBLE);
         uiHandler.removeCallbacks(loadMyStatsRunnable);
@@ -718,7 +731,7 @@ public class ProfileFragment extends Fragment {
                     descView.setVisibility(View.GONE);
                 }
             }
-            // === ИСПРАВЛЕНИЕ: Обновляем тихим способом (без вызова спиннера) ===
+            // Обновляем тихим способом
             requestLoadMyStats(false);
             dialog.dismiss();
             
