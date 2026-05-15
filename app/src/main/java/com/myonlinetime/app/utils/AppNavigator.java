@@ -9,7 +9,7 @@ import androidx.fragment.app.FragmentTransaction;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.ui.FeedFragment;
 import com.myonlinetime.app.ui.ProfileFragment;
-import com.myonlinetime.app.ui.OtherProfileFragment; // === ДОБАВЛЕН ИМПОРТ ===
+import com.myonlinetime.app.ui.OtherProfileFragment; 
 import com.myonlinetime.app.ui.SearchFragment;
 import com.myonlinetime.app.ui.SettingsFragment; 
 import com.myonlinetime.app.ui.StatsHostFragment; 
@@ -86,12 +86,17 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
         
-        // === ИСПРАВЛЕНИЕ: ПРОВЕРЯЕМ OTHER PROFILE FRAGMENT ===
+        // === ИСПРАВЛЕНИЕ: Умная анимация профиля ===
+        // Если открываем чужой профиль из вкладки Времени (3), то профиль (по логике 4) должен выезжать справа.
+        // Если из Поиска (1), профиль (4) тоже выезжает справа.
         if (fragment instanceof OtherProfileFragment) {
-            // Чужой профиль выезжает справа
-            ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left, R.anim.slide_in_left, R.anim.slide_out_right);
+            if (currentTabIndex == 3 || currentTabIndex == 1 || currentTabIndex == 0) {
+                ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left, R.anim.slide_in_left, R.anim.slide_out_right);
+            } else {
+                ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right, R.anim.slide_in_right, R.anim.slide_out_left);
+            }
         } else {
-            // Все остальные экраны выезжают снизу
+            // Все остальные экраны (настройки, фолловеры и тд) выезжают классически снизу
             ft.setCustomAnimations(R.anim.slide_in_up, android.R.anim.fade_out, android.R.anim.fade_in, R.anim.slide_out_down);
         }
         
@@ -114,12 +119,14 @@ public class AppNavigator {
         
         Fragment topFragment = stack.get(stack.size() - 1);
         
-        // === ИСПРАВЛЕНИЕ: ПРОВЕРЯЕМ OTHER PROFILE FRAGMENT ===
+        // === ИСПРАВЛЕНИЕ: Умное закрытие профиля ===
         if (topFragment instanceof OtherProfileFragment) {
-            // Если закрываем чужой профиль, он уезжает вправо
-            ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
+            if (currentTabIndex == 3 || currentTabIndex == 1 || currentTabIndex == 0) {
+                ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
+            } else {
+                ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left);
+            }
         } else {
-            // Остальные плавно уезжают вниз
             ft.setCustomAnimations(android.R.anim.fade_in, R.anim.slide_out_down);
         }
         
