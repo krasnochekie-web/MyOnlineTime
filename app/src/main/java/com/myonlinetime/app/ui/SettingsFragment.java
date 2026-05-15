@@ -46,9 +46,7 @@ public class SettingsFragment extends Fragment {
 
     private String pendingTransferIdToken = null;
     private TextView activeEmailInput = null;
-    
-    // Флаг, блокирующий перерисовку в "Гостя", пока открыт диалог смены почты
-    private boolean isGoogleSessionDetached = false;
+    private Dialog currentTransferDialog = null;
 
     private final android.content.BroadcastReceiver profileUpdateReceiver = new android.content.BroadcastReceiver() {
         @Override
@@ -157,19 +155,19 @@ public class SettingsFragment extends Fragment {
 
     // === ДИАЛОГ СМЕНЫ ПОЧТЫ ===
     private void showChangeEmailDialog(MainActivity activity) {
-        final Dialog dialog = new Dialog(activity);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        dialog.setContentView(R.layout.dialog_change_email);
+        currentTransferDialog = new Dialog(activity);
+        currentTransferDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        currentTransferDialog.setContentView(R.layout.dialog_change_email);
         
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            dialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog;
+        if (currentTransferDialog.getWindow() != null) {
+            currentTransferDialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            currentTransferDialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            currentTransferDialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog;
         }
 
-        ImageView btnClose = dialog.findViewById(R.id.dialog_close_btn);
-        Button btnSave = dialog.findViewById(R.id.dialog_btn_save);
-        activeEmailInput = dialog.findViewById(R.id.dialog_email_input);
+        ImageView btnClose = currentTransferDialog.findViewById(R.id.dialog_close_btn);
+        Button btnSave = currentTransferDialog.findViewById(R.id.dialog_btn_save);
+        activeEmailInput = currentTransferDialog.findViewById(R.id.dialog_email_input);
         pendingTransferIdToken = null; 
 
         GoogleSignInAccount currentAcct = GoogleSignIn.getLastSignedInAccount(activity);
@@ -177,24 +175,11 @@ public class SettingsFragment extends Fragment {
             activeEmailInput.setText(currentAcct.getEmail());
         }
 
-        // === ИСПРАВЛЕНИЕ: Защита от выкидывания из аккаунта при закрытии диалога ===
-        dialog.setOnDismissListener(d -> {
-            if (isGoogleSessionDetached && activity.mGoogleSignInClient != null) {
-                // Если мы отключили сессию, но юзер отменил перенос — возвращаем его старую сессию тихим входом!
-                activity.mGoogleSignInClient.signOut().addOnCompleteListener(t -> {
-                    activity.mGoogleSignInClient.silentSignIn().addOnCompleteListener(t2 -> {
-                        isGoogleSessionDetached = false;
-                        if (isAdded() && getView() != null) loadUserData(getView());
-                    });
-                });
-            }
-        });
-
-        btnClose.setOnClickListener(v -> dialog.dismiss());
+        btnClose.setOnClickListener(v -> currentTransferDialog.dismiss());
 
         activeEmailInput.setOnClickListener(v -> {
             if (activity.mGoogleSignInClient != null) {
-                isGoogleSessionDetached = true; // Замораживаем UI, чтобы не моргал Гость
+                // Вынужденно сбрасываем сессию, чтобы Google показал окно выбора аккаунтов
                 activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
                     Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
                     startActivityForResult(signInIntent, RC_SIGN_IN_TRANSFER);
@@ -204,20 +189,17 @@ public class SettingsFragment extends Fragment {
 
         btnSave.setOnClickListener(v -> {
             if (pendingTransferIdToken == null) {
-                dialog.dismiss(); 
+                currentTransferDialog.dismiss(); 
                 return;
             }
             
-            btnSave.setEnabled(false);
-            // ИСПРАВЛЕНИЕ: Убрали смену текста на "Загрузка", текст остается статичным
-
+            btnSave.setEnabled(false); // Блокируем от двойного клика, но текст НЕ меняем
+            
             VpsApi.transferAccount(activity.vpsToken, pendingTransferIdToken, new VpsApi.LoginCallback() {
                 @Override
                 public void onSuccess(String newAccessToken) {
                     activity.runOnUiThread(() -> {
-                        isGoogleSessionDetached = false; // Операция успешна, откат не нужен
-                        dialog.dismiss();
-                        
+                        currentTransferDialog.dismiss();
                         activity.vpsToken = newAccessToken;
                         activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit()
                             .putString("vps_access_token", newAccessToken).apply();
@@ -244,9 +226,10 @@ public class SettingsFragment extends Fragment {
             });
         });
 
-        dialog.show();
+        currentTransferDialog.show();
     }
 
+    // === ПЕРЕХВАТ ВЫБОРА НОВОГО GOOGLE АККАУНТА ===
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -262,8 +245,20 @@ public class SettingsFragment extends Fragment {
                     }
                 }
             } catch (ApiException e) {
-                // Если юзер нажал "Назад" в окне выбора Google аккаунтов, ничего не делаем.
-                // onDismissListener диалога сам всё восстановит.
+                // ЮЗЕР ОТМЕНИЛ ВЫБОР!
+                // Так как сессия была уничтожена для вызова окна, мы мгновенно просим выбрать старый аккаунт,
+                // чтобы не оставить пользователя "выкинутым".
+                MainActivity activity = (MainActivity) getActivity();
+                if (activity != null && activity.mGoogleSignInClient != null) {
+                    if (currentTransferDialog != null && currentTransferDialog.isShowing()) {
+                        currentTransferDialog.dismiss();
+                    }
+                    Toast.makeText(activity, R.string.toast_transfer_canceled_restore, Toast.LENGTH_LONG).show();
+                    
+                    Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
+                    // Вызываем стандартный вход MainActivity, который сам всё восстановит
+                    activity.startActivityForResult(signInIntent, 9001); 
+                }
             }
         }
     }
@@ -330,9 +325,6 @@ public class SettingsFragment extends Fragment {
     private void loadUserData(View view) {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null || view == null) return;
-        
-        // ИСПРАВЛЕНИЕ: Если мы в процессе смены почты, замораживаем перерисовку UI, чтобы не мерцало
-        if (isGoogleSessionDetached) return;
 
         View userHeaderBlock = view.findViewById(R.id.settings_user_header_block);
         View accountBlock = view.findViewById(R.id.settings_account_block);
