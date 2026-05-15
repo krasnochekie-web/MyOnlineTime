@@ -58,7 +58,7 @@ public class NotificationsHistoryFragment extends Fragment {
     private final SharedPreferences.OnSharedPreferenceChangeListener prefsListener = (sharedPrefs, key) -> {
         if (key != null && key.equals(getCacheKey())) {
             uiHandler.post(() -> {
-                if (isAdded()) {
+                if (isAdded() && !isHidden()) {
                     loadFromCacheOnly();
                     MainActivity activity = (MainActivity) getActivity();
                     if (activity != null) activity.updateNotificationBadge();
@@ -67,15 +67,14 @@ public class NotificationsHistoryFragment extends Fragment {
         }
     };
 
-    // === ИСПРАВЛЕНИЕ: МГНОВЕННОЕ ОБНОВЛЕНИЕ КНОПОК ПОДПИСОК ===
+    // === ЖИВЫЕ УВЕДОМЛЕНИЯ ===
     private final BroadcastReceiver pushReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             if ("UPDATE_BADGE_BROADCAST".equals(intent.getAction())) {
                 uiHandler.post(() -> {
-                    if (isAdded()) {
-                        // Делаем ТИХИЙ запрос на сервер, чтобы получить точные статусы (isFollowing),
-                        // и обновляем список прямо на лету, пока ты сидишь на экране!
+                    if (isAdded() && !isHidden()) {
+                        // Тихо запрашиваем сервер для свежих статусов подписки (isFollowing)
                         loadHistory(false, 0); 
                         MainActivity activity = (MainActivity) getActivity();
                         if (activity != null) activity.updateNotificationBadge();
@@ -91,7 +90,6 @@ public class NotificationsHistoryFragment extends Fragment {
         return "notif_history_array_" + uid;
     }
 
-    // === ЖЕЛЕЗОБЕТОННАЯ РЕГИСТРАЦИЯ ===
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -121,17 +119,21 @@ public class NotificationsHistoryFragment extends Fragment {
         recycler.getRecycledViewPool().setMaxRecycledViews(NotificationModels.NotificationItem.TYPE_TIME, 20);
         recycler.getRecycledViewPool().setMaxRecycledViews(NotificationModels.NotificationItem.TYPE_FOLLOWER, 20);
 
+        // === ИСПРАВЛЕНИЕ ТЯНУЧКИ: Железобетонная установка Constraints ===
         swipeRefresh = new SwipeRefreshLayout(requireContext());
-        swipeRefresh.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        ViewGroup.LayoutParams recyclerOriginalParams = recycler.getLayoutParams();
+        swipeRefresh.setLayoutParams(recyclerOriginalParams); // Копируем привязки XML
         swipeRefresh.setColorSchemeColors(ContextCompat.getColor(requireContext(), R.color.grapefruit)); 
         
         ViewGroup parent = (ViewGroup) recycler.getParent();
         int index = parent.indexOfChild(recycler);
         parent.removeView(recycler);
+        
+        recycler.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         swipeRefresh.addView(recycler);
         parent.addView(swipeRefresh, index);
+        // =================================================================
 
-        // === ИСПРАВЛЕНИЕ: ЗАСЕКАЕМ ВРЕМЯ НАЧАЛА СВАЙПА ===
         swipeRefresh.setOnRefreshListener(() -> {
             loadHistory(true, System.currentTimeMillis());
         });
@@ -142,6 +144,9 @@ public class NotificationsHistoryFragment extends Fragment {
     }
 
     private void loadFromCacheOnly() {
+        // Защита: Если юзер тянет экран, не смеем трогать адаптер кэшем, иначе жест оборвется!
+        if (swipeRefresh != null && swipeRefresh.isRefreshing()) return;
+
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null || !isAdded()) return;
         
@@ -179,7 +184,6 @@ public class NotificationsHistoryFragment extends Fragment {
                         if (!isAdded()) return;
 
                         if (!items.isEmpty()) {
-                            recycler.setVisibility(View.VISIBLE);
                             emptyText.setVisibility(View.GONE);
                             if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
                             
@@ -187,7 +191,6 @@ public class NotificationsHistoryFragment extends Fragment {
                                 adapter = new NotificationsAdapter(items, activity);
                                 recycler.setAdapter(adapter);
                             } else {
-                                // Мягкое обновление, которое не сбивает скролл
                                 adapter.updateItems(items);
                             }
 
@@ -215,10 +218,9 @@ public class NotificationsHistoryFragment extends Fragment {
             if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
             // Если обновляем свайпом - игнорируем кэш, чтобы спиннер крутился плавно
             if (!isSwipeRefresh) {
-                parseAndDisplayAsync(cachedJson, activity, 0); 
+                parseAndDisplayAsync(cachedJson, activity, 0, false); 
             }
         } else {
-            recycler.setVisibility(View.GONE);
             emptyText.setVisibility(View.GONE);
             if (!isSwipeRefresh && loadingSpinner != null) {
                 loadingSpinner.setVisibility(View.VISIBLE);
@@ -229,7 +231,7 @@ public class NotificationsHistoryFragment extends Fragment {
             if (!hasCache) showEmptyState();
             uiHandler.postDelayed(() -> { 
                 if (swipeRefresh != null) swipeRefresh.setRefreshing(false); 
-            }, 2000); // 2 секунды уважения
+            }, 2000); // Приличие! 2 секунды.
             return; 
         }
 
@@ -266,19 +268,18 @@ public class NotificationsHistoryFragment extends Fragment {
                         
                         String finalJson = finalArray.toString();
                         
-                        // Пишем в кэш тихо
                         prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
                         prefs.edit().putString(cacheKey, finalJson).commit();
                         prefs.registerOnSharedPreferenceChangeListener(prefsListener);
                         
-                        // === ИСПРАВЛЕНИЕ: МИНИМАЛЬНЫЕ 2 СЕКУНДЫ РАБОТЫ ТЯНУЧКИ ===
+                        // === РАСЧЕТ ВРЕМЕНИ ДЛЯ ПРИЛИЧНОЙ АНИМАЦИИ ===
                         long delayBeforeStop = 0;
                         if (isSwipeRefresh) {
                             long elapsed = System.currentTimeMillis() - swipeStartTime;
                             delayBeforeStop = Math.max(0, 2000 - elapsed);
                         }
                         
-                        parseAndDisplayAsync(finalJson, activity, delayBeforeStop);
+                        parseAndDisplayAsync(finalJson, activity, delayBeforeStop, isSwipeRefresh);
 
                     } catch (Exception e) {
                         prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
@@ -291,7 +292,7 @@ public class NotificationsHistoryFragment extends Fragment {
                             delayBeforeStop = Math.max(0, 2000 - elapsed);
                         }
                         
-                        parseAndDisplayAsync(result, activity, delayBeforeStop);
+                        parseAndDisplayAsync(result, activity, delayBeforeStop, isSwipeRefresh);
                     }
                 });
             }
@@ -317,7 +318,7 @@ public class NotificationsHistoryFragment extends Fragment {
         });
     }
 
-    private void parseAndDisplayAsync(String jsonResult, MainActivity activity, long delayStopSpinner) {
+    private void parseAndDisplayAsync(String jsonResult, MainActivity activity, long delayStopSpinner, boolean isFromSwipe) {
         Utils.backgroundExecutor.execute(() -> {
             try {
                 JSONArray array = new JSONArray(jsonResult);
@@ -352,13 +353,22 @@ public class NotificationsHistoryFragment extends Fragment {
                 uiHandler.postDelayed(() -> {
                     if (!isAdded()) return;
 
-                    if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
-                    if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+                    // Защита: Если это фоновое обновление, а юзер сейчас тянет свайп, 
+                    // мы ОТМЕНЯЕМ перерисовку UI, чтобы не сбить ему анимацию! 
+                    if (!isFromSwipe && swipeRefresh != null && swipeRefresh.isRefreshing()) {
+                        return;
+                    }
+
+                    if (isFromSwipe && swipeRefresh != null) {
+                        swipeRefresh.setRefreshing(false);
+                    }
+                    if (!isFromSwipe && loadingSpinner != null) {
+                        loadingSpinner.setVisibility(View.GONE);
+                    }
 
                     if (items.isEmpty()) {
                         showEmptyState();
                     } else {
-                        recycler.setVisibility(View.VISIBLE);
                         emptyText.setVisibility(View.GONE);
                         
                         if (adapter == null) {
@@ -387,7 +397,8 @@ public class NotificationsHistoryFragment extends Fragment {
 
     private void showEmptyState() {
         if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-        recycler.setVisibility(View.GONE);
+        // ВАЖНО: Мы больше никогда не делаем recycler.setVisibility(View.GONE); !!!
+        if (adapter != null) adapter.updateItems(new ArrayList<>());
         emptyText.setVisibility(View.VISIBLE);
     }
 
@@ -432,7 +443,6 @@ public class NotificationsHistoryFragment extends Fragment {
         }
     }
 
-    // === ВЕРНУВШИЕСЯ МЕТОДЫ РЕГИСТРАЦИИ ===
     private void registerReceivers() {
         if (isReceiverRegistered || getContext() == null) return;
         
@@ -497,7 +507,6 @@ public class NotificationsHistoryFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
             if (hideBgRunnable == null) {
@@ -510,12 +519,5 @@ public class NotificationsHistoryFragment extends Fragment {
             
             activity.updateNotificationBadge();
         }
-    }
-
-    @Override
-    public void onPause() {
-        super.onPause();
-        // ВАЖНО: Мы не отписываемся от кэша в onPause, чтобы если придет пуш пока мы свернуты, 
-        // кэш обновился, и при разворачивании список был актуальным!
     }
 }
