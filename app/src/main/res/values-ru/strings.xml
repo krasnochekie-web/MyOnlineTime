@@ -7,6 +7,11 @@
     <string name="feed">Лента</string>
     <string name="find">Поиск</string>
     <string name="time">Время</string>
+	<string name="dialog_change_email_title">Изменить почту</string>
+<string name="dialog_change_email_desc">Для того, чтобы изменить почту, привязанную к вашему аккаунту, нажмите на строку ввода данных, а затем выберете аккаунт Google, который ранее не был зарегистрирован в My Online Time.</string>
+<string name="err_account_already_registered">Данный аккаунт уже зарегистрирован и не может быть использован для переноса данных.</string>
+<string name="toast_email_changed">Почта успешно изменена!</string>
+<string name="btn_save_uppercase">СОХРАНИТЬ</string>
 	<string name="notif_max_count">99+</string>	
 	<string name="dialog_delete_account_title">Удалить аккаунт?</string>
 <string name="dialog_delete_account_desc">После нажатия кнопки \"Удалить\" ваш аккаунт будет безвозвратно удалён с наших серверов, без возможности восстановления.\nПринимайте решение взвешенно.\nДля отмены операции нажмите \"Отмена\".</string>
