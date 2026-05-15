@@ -966,7 +966,7 @@ private void handleNotificationIntent(Intent intent) {
                         if (setupOverlay == null) {
                             try {
                                 setupOverlay = com.myonlinetime.app.ui.NicknameSetupController.inflateAndSetup(
-                                        getLayoutInflater(), root, this, () -> {
+                                        getLayoutInflater(), root, this, nickname -> {
                                             // Когда пользователь успешно сохранил ник, обновляем экраны!
                                             enforceLoginOverlays();
                                         }
