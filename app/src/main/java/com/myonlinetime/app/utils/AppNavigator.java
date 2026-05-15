@@ -65,6 +65,19 @@ public class AppNavigator {
         return currentTabIndex;
     }
 
+    // === ИСПРАВЛЕНИЕ: Визуальное расположение кнопок на нижней панели ===
+    // Порядок: Feed(0), Search(1), Profile(4), Time(3), Settings(5)
+    private int getVisualIndex(int tabIndex) {
+        switch(tabIndex) {
+            case 0: return 0; // Лента
+            case 1: return 1; // Поиск
+            case 4: return 2; // Наш профиль (ВИЗУАЛЬНО он левее Времени)
+            case 3: return 3; // Время (Usage)
+            case 5: return 4; // Настройки
+            default: return tabIndex;
+        }
+    }
+
     public void openSubScreen(Fragment fragment) {
         if (SystemClock.elapsedRealtime() - lastSubScreenOpenTime < 500) {
             return; 
@@ -86,17 +99,11 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
         
-        // === ИСПРАВЛЕНИЕ: Умная анимация профиля ===
-        // Если открываем чужой профиль из вкладки Времени (3), то профиль (по логике 4) должен выезжать справа.
-        // Если из Поиска (1), профиль (4) тоже выезжает справа.
+        // === ИСПРАВЛЕНИЕ: Чужой профиль ВСЕГДА выезжает справа ===
         if (fragment instanceof OtherProfileFragment) {
-            if (currentTabIndex == 3 || currentTabIndex == 1 || currentTabIndex == 0) {
-                ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left, R.anim.slide_in_left, R.anim.slide_out_right);
-            } else {
-                ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right, R.anim.slide_in_right, R.anim.slide_out_left);
-            }
+            ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left, R.anim.slide_in_right, R.anim.slide_out_right);
         } else {
-            // Все остальные экраны (настройки, фолловеры и тд) выезжают классически снизу
+            // Все остальные экраны выезжают снизу
             ft.setCustomAnimations(R.anim.slide_in_up, android.R.anim.fade_out, android.R.anim.fade_in, R.anim.slide_out_down);
         }
         
@@ -119,13 +126,9 @@ public class AppNavigator {
         
         Fragment topFragment = stack.get(stack.size() - 1);
         
-        // === ИСПРАВЛЕНИЕ: Умное закрытие профиля ===
+        // === ИСПРАВЛЕНИЕ: Чужой профиль ВСЕГДА уезжает вправо ===
         if (topFragment instanceof OtherProfileFragment) {
-            if (currentTabIndex == 3 || currentTabIndex == 1 || currentTabIndex == 0) {
-                ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
-            } else {
-                ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left);
-            }
+            ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
         } else {
             ft.setCustomAnimations(android.R.anim.fade_in, R.anim.slide_out_down);
         }
@@ -149,9 +152,15 @@ public class AppNavigator {
         FragmentTransaction ft = fm.beginTransaction();
 
         if (currentTabIndex != -1) {
-            if (tabIndex > currentTabIndex || tabIndex == 3 || tabIndex == 5) {
+            // === ИСПРАВЛЕНИЕ: Математика переходов опирается на ВИЗУАЛЬНЫЙ индекс ===
+            int visualTarget = getVisualIndex(tabIndex);
+            int visualCurrent = getVisualIndex(currentTabIndex);
+            
+            if (visualTarget > visualCurrent) {
+                // Движемся вправо (экран выезжает справа)
                 ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left);
             } else {
+                // Движемся влево (экран выезжает слева)
                 ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
             }
         }
