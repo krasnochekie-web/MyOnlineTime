@@ -1,14 +1,19 @@
 package com.myonlinetime.app.ui;
 
+import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -23,6 +28,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
+import com.myonlinetime.app.VpsApi;
 
 import java.io.File;
 
@@ -62,18 +68,25 @@ public class SettingsFragment extends Fragment {
         loadUserData(view);
 
         view.findViewById(R.id.btn_change_email).setOnClickListener(v -> { /* Пока пусто */ });
-        view.findViewById(R.id.btn_delete_account).setOnClickListener(v -> { /* Пока пусто */ });
+        
+        // === ЛОГИКА УДАЛЕНИЯ АККАУНТА ===
+        View btnDeleteAccount = view.findViewById(R.id.btn_delete_account);
+        if (btnDeleteAccount != null) {
+            btnDeleteAccount.setOnClickListener(v -> {
+                if (activity != null) {
+                    showDeleteAccountDialog(activity);
+                }
+            });
+        }
         
         View btnSwitch = view.findViewById(R.id.btn_switch_account);
         if (btnSwitch != null) {
             btnSwitch.setOnClickListener(v -> {
                 if (activity != null && activity.mGoogleSignInClient != null) {
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
-                        // === ИСПРАВЛЕНИЕ: Жестко чистим кэши (убиваем "призрака") перед вызовом окна выбора ===
                         activity.updateGlobalBackground(false);
                         activity.performSignOut(); 
                         
-                        // Запускаем окно выбора аккаунта
                         Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
                         activity.startActivityForResult(signInIntent, 9001); 
                     });
@@ -129,6 +142,71 @@ public class SettingsFragment extends Fragment {
         return view;
     }
 
+    // === ДИАЛОГ УДАЛЕНИЯ АККАУНТА ===
+    private void showDeleteAccountDialog(MainActivity activity) {
+        final Dialog dialog = new Dialog(activity);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setContentView(R.layout.dialog_delete_account);
+        
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            dialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog; // Красивое появление
+        }
+
+        ImageView btnClose = dialog.findViewById(R.id.dialog_close_btn);
+        Button btnDelete = dialog.findViewById(R.id.dialog_btn_delete);
+        Button btnCancel = dialog.findViewById(R.id.dialog_btn_cancel);
+
+        // Логика отмены
+        btnClose.setOnClickListener(v -> dialog.dismiss());
+        btnCancel.setOnClickListener(v -> dialog.dismiss());
+
+        // Логика удаления
+        btnDelete.setOnClickListener(v -> {
+            // Защита от двойного клика
+            btnDelete.setEnabled(false);
+            
+            if (activity.vpsToken != null) {
+                // Выжигаем данные с сервера
+                VpsApi.deleteAccount(activity.vpsToken, new VpsApi.Callback() {
+                    @Override
+                    public void onSuccess(String result) {
+                        activity.runOnUiThread(() -> {
+                            dialog.dismiss();
+                            // Выжигаем данные локально и превращаем в "Гостя"
+                            activity.updateGlobalBackground(false);
+                            if (activity.mGoogleSignInClient != null) {
+                                activity.mGoogleSignInClient.signOut();
+                            }
+                            activity.performSignOut();
+                            Toast.makeText(activity, R.string.toast_account_deleted, Toast.LENGTH_LONG).show();
+                        });
+                    }
+
+                    @Override
+                    public void onError(String error) {
+                        activity.runOnUiThread(() -> {
+                            btnDelete.setEnabled(true);
+                            dialog.dismiss();
+                            Toast.makeText(activity, getString(R.string.err_server) + " " + error, Toast.LENGTH_LONG).show();
+                        });
+                    }
+                });
+            } else {
+                // Если токена нет, просто выходим локально
+                dialog.dismiss();
+                activity.updateGlobalBackground(false);
+                if (activity.mGoogleSignInClient != null) {
+                    activity.mGoogleSignInClient.signOut();
+                }
+                activity.performSignOut();
+            }
+        });
+
+        dialog.show();
+    }
+
     private void loadUserData(View view) {
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
@@ -139,9 +217,6 @@ public class SettingsFragment extends Fragment {
 
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         
-        // === ИСПРАВЛЕНИЕ: Дополнительная проверка на наличие токена ===
-        // Иногда GoogleSignInAccount остается в системном кэше, даже если мы вызвали SignOut локально.
-        // Поэтому мы проверяем: если нашего внутреннего VPS токена нет, значит мы точно вышли!
         if (account != null && activity.vpsToken != null) {
             if (userHeaderBlock != null) userHeaderBlock.setVisibility(View.VISIBLE);
             if (accountBlock != null) accountBlock.setVisibility(View.VISIBLE);
@@ -237,7 +312,6 @@ public class SettingsFragment extends Fragment {
         }
         LocalBroadcastManager.getInstance(requireContext()).registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_PROFILE_UPDATED"));
         
-        // === ИСПРАВЛЕНИЕ: Обновляем экран при возврате, если состояние логина изменилось ===
         if (getView() != null) {
             loadUserData(getView());
         }
