@@ -54,7 +54,6 @@ public class OtherProfileFragment extends Fragment {
     private long renderGeneration = 0;
     private long fragmentCreationTime = 0;
     
-    // Спиннер строго для списка
     private ProgressBar listSpinner;
     
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
@@ -157,7 +156,6 @@ public class OtherProfileFragment extends Fragment {
         
         final View appsCardParent = (View) appsContainerLocal.getParent();
 
-        // === ИНТЕГРАЦИЯ СПИННЕРА ТОЛЬКО ДЛЯ СПИСКА ===
         ViewGroup grandParent = (ViewGroup) appsCardParent.getParent();
         int cardIndex = grandParent.indexOfChild(appsCardParent);
         grandParent.removeView(appsCardParent);
@@ -228,6 +226,14 @@ public class OtherProfileFragment extends Fragment {
         String argAbout = getArguments() != null ? getArguments().getString("PREFETCH_ABOUT", "") : "";
         String argPhoto = getArguments() != null ? getArguments().getString("PREFETCH_PHOTO", "") : "";
 
+        // === ИСПРАВЛЕНИЕ: Читаем кэш ДО настройки UI, чтобы достать "about" ===
+        User cachedUser = prefetchUserCache.get(targetUid);
+        if (cachedUser != null) {
+            if (cachedUser.nickname != null && !cachedUser.nickname.isEmpty()) argName = cachedUser.nickname;
+            if (cachedUser.about != null) argAbout = cachedUser.about;
+            if (cachedUser.photo != null && !cachedUser.photo.isEmpty()) argPhoto = cachedUser.photo;
+        }
+
         if (!argName.isEmpty()) nameView.setText(argName);
         else nameView.setText(activity.getString(R.string.loading));
 
@@ -241,11 +247,8 @@ public class OtherProfileFragment extends Fragment {
         
         if (!argPhoto.isEmpty()) handleMediaLoading(activity, argPhoto);
 
-        // === ИСПРАВЛЕНИЕ: Мгновенное применение логики схлопывания ===
-        // Чтобы пользователь не видел "прыжка на лету", мы рассчитываем высоту и схлопываем текст сразу!
         applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
-        User cachedUser = prefetchUserCache.get(targetUid);
         if (cachedUser != null) {
             renderOtherUserStats(cachedUser.topApps, cachedUser.totalTime, cachedUser.hiddenApps, cachedUser.appDescriptions, cachedUser.resolvedNames, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
             if (cachedUser.background != null && cachedUser.background.length() > 5) {
@@ -415,14 +418,12 @@ public class OtherProfileFragment extends Fragment {
     private void applyCollapseSafely(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
         boolean isAboutEmpty = aboutView == null || aboutView.getText().toString().trim().isEmpty();
         
-        // Жестко прячем пустой текст ДО передачи в логику схлопывания
         if (isAboutEmpty && aboutView != null) {
             aboutView.setVisibility(View.GONE);
         }
 
         StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
         
-        // Убиваем любые анимации и принудительно прячем пустой текст ПОСЛЕ логики
         if (isAboutEmpty && aboutView != null) {
             aboutView.setVisibility(View.GONE);
             aboutView.clearAnimation(); 
