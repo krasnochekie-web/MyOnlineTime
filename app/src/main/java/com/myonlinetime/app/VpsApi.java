@@ -556,4 +556,36 @@ public class VpsApi {
              });
          }
     }
+public static void transferAccount(String ourServerToken, String newGoogleIdToken, final LoginCallback callback) {
+        String jsonBody = "{\"newIdToken\":\"" + newGoogleIdToken + "\"}";
+        RequestBody body = RequestBody.create(JSON, jsonBody);
+        Request request = createAuthedRequest("transfer_account", ourServerToken).post(body).build();
+        
+        client.newCall(request).enqueue(new okhttp3.Callback() {
+            @Override public void onFailure(Call call, java.io.IOException e) {
+                if (call.isCanceled()) return;
+                postError(callback, e.getMessage());
+            }
+            @Override public void onResponse(Call call, Response response) throws java.io.IOException {
+                if (response.isSuccessful()) {
+                    try {
+                        org.json.JSONObject result = new org.json.JSONObject(response.body().string());
+                        final String accessToken = result.getString("accessToken");
+                        final String refreshToken = result.getString("refreshToken");
+                        
+                        // Сразу обновляем токены в памяти устройства
+                        mainHandler.post(() -> {
+                            if (callback != null) callback.onSuccess(accessToken);
+                        });
+                    } catch (Exception e) {
+                        postError(callback, "Parse error");
+                    }
+                } else {
+                    String errBody = "";
+                    try { errBody = response.body().string(); } catch (Exception ignored) {}
+                    postError(callback, errBody.isEmpty() ? String.valueOf(response.code()) : errBody);
+                }
+            }
+        });
+    }
 }
