@@ -52,7 +52,6 @@ public class SettingsFragment extends Fragment {
         if (activity != null) {
             prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
             
-            // === ИСПРАВЛЕНИЕ: Гарантированно гасим чужие фоны при переходе в настройки ===
             activity.clearPreviewBackground();
             activity.updateGlobalBackground(false);
         }
@@ -70,6 +69,11 @@ public class SettingsFragment extends Fragment {
             btnSwitch.setOnClickListener(v -> {
                 if (activity != null && activity.mGoogleSignInClient != null) {
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
+                        // === ИСПРАВЛЕНИЕ: Жестко чистим кэши (убиваем "призрака") перед вызовом окна выбора ===
+                        activity.updateGlobalBackground(false);
+                        activity.performSignOut(); 
+                        
+                        // Запускаем окно выбора аккаунта
                         Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
                         activity.startActivityForResult(signInIntent, 9001); 
                     });
@@ -82,7 +86,6 @@ public class SettingsFragment extends Fragment {
             btnSignOut.setOnClickListener(v -> {
                 if (activity != null && activity.mGoogleSignInClient != null) {
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
-                        // === ИСПРАВЛЕНИЕ: Гасим фон при полном выходе из аккаунта ===
                         activity.updateGlobalBackground(false);
                         activity.performSignOut();
                     });
@@ -136,7 +139,10 @@ public class SettingsFragment extends Fragment {
 
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         
-        if (account != null) {
+        // === ИСПРАВЛЕНИЕ: Дополнительная проверка на наличие токена ===
+        // Иногда GoogleSignInAccount остается в системном кэше, даже если мы вызвали SignOut локально.
+        // Поэтому мы проверяем: если нашего внутреннего VPS токена нет, значит мы точно вышли!
+        if (account != null && activity.vpsToken != null) {
             if (userHeaderBlock != null) userHeaderBlock.setVisibility(View.VISIBLE);
             if (accountBlock != null) accountBlock.setVisibility(View.VISIBLE);
             if (guestBlock != null) guestBlock.setVisibility(View.GONE);
@@ -230,6 +236,11 @@ public class SettingsFragment extends Fragment {
             activity.updateGlobalBackground(false); 
         }
         LocalBroadcastManager.getInstance(requireContext()).registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_PROFILE_UPDATED"));
+        
+        // === ИСПРАВЛЕНИЕ: Обновляем экран при возврате, если состояние логина изменилось ===
+        if (getView() != null) {
+            loadUserData(getView());
+        }
     }
 
     @Override
