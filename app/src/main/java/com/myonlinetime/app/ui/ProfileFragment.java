@@ -68,7 +68,6 @@ public class ProfileFragment extends Fragment {
 
     private View profileContentView;
     
-    // Спиннер строго для списка приложений
     private ProgressBar listSpinner;
 
     private String currentLoadedAvatar = null;
@@ -168,7 +167,6 @@ public class ProfileFragment extends Fragment {
         
         final View appsCardParent = (View) appsContainerLocal.getParent();
 
-        // === ИНТЕГРАЦИЯ СПИННЕРА ТОЛЬКО ДЛЯ СПИСКА ===
         ViewGroup grandParent = (ViewGroup) appsCardParent.getParent();
         int cardIndex = grandParent.indexOfChild(appsCardParent);
         grandParent.removeView(appsCardParent);
@@ -214,7 +212,6 @@ public class ProfileFragment extends Fragment {
                         btnCollapse.setVisibility(View.GONE);
                     }
                     
-                    // === Снимаем спиннер ТОЛЬКО когда в контейнер добавились приложения ===
                     if (hasApps && listSpinner != null) {
                         listSpinner.setVisibility(View.GONE);
                     }
@@ -351,7 +348,7 @@ public class ProfileFragment extends Fragment {
                         }
 
                         updateUiFromPrefs(activity);
-                        if (cacheChanged) requestLoadMyStats();
+                        if (cacheChanged) requestLoadMyStats(true); // Запрос с сервера — крутим спиннер
                     }
                 }
                 @Override public void onError(String e) {}
@@ -359,11 +356,10 @@ public class ProfileFragment extends Fragment {
         };
 
         loadLocalCacheAsync(() -> {
-            if (isAdded()) requestLoadMyStats();
+            if (isAdded()) requestLoadMyStats(true); // Первый запуск — крутим спиннер
         });
 
         updateUiFromPrefs(activity);
-        
         refreshCounts(activity);
 
         return wrapper; 
@@ -485,8 +481,9 @@ public class ProfileFragment extends Fragment {
         });
     }
 
-    private void requestLoadMyStats() {
-        if (listSpinner != null) listSpinner.setVisibility(View.VISIBLE);
+    // === ИСПРАВЛЕНИЕ: Выбор, когда показывать спиннер ===
+    private void requestLoadMyStats(boolean showSpinner) {
+        if (showSpinner && listSpinner != null) listSpinner.setVisibility(View.VISIBLE);
         uiHandler.removeCallbacks(loadMyStatsRunnable);
         uiHandler.postDelayed(loadMyStatsRunnable, 200);
     }
@@ -541,14 +538,6 @@ public class ProfileFragment extends Fragment {
                 });
             } catch (Exception e) {}
         });
-    }
-
-    private String formatDeletedAppName(String pkg) {
-        try {
-            String[] parts = pkg.split("\\.");
-            String name = parts[parts.length - 1]; 
-            return name.substring(0, 1).toUpperCase() + name.substring(1); 
-        } catch (Exception e) { return pkg; }
     }
 
     @Override
@@ -679,8 +668,6 @@ public class ProfileFragment extends Fragment {
         dialog.setContentView(R.layout.dialog_app_description);
         dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        
-        // === АНИМАЦИЯ ДИАЛОГА (КАК НА ЭКРАНЕ "ЗА ВСЁ ВРЕМЯ") ===
         dialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog;
 
         ImageView btnClose = dialog.findViewById(R.id.dialog_close_btn);
@@ -701,7 +688,13 @@ public class ProfileFragment extends Fragment {
                 try { info = pm.getApplicationInfo(pkgName, 0); } 
                 catch (PackageManager.NameNotFoundException e) { info = pm.getApplicationInfo(pkgName, flag); }
                 appName = pm.getApplicationLabel(info).toString();
-            } catch (Exception e) { appName = formatDeletedAppName(pkgName); }
+            } catch (Exception e) { 
+                try {
+                    String[] parts = pkgName.split("\\.");
+                    String name = parts[parts.length - 1]; 
+                    appName = name.substring(0, 1).toUpperCase() + name.substring(1); 
+                } catch (Exception ex) { appName = pkgName; }
+            }
         }
 
         titleView.setText(activity.getString(R.string.action_description) + " " + appName);
@@ -725,7 +718,8 @@ public class ProfileFragment extends Fragment {
                     descView.setVisibility(View.GONE);
                 }
             }
-            requestLoadMyStats();
+            // === ИСПРАВЛЕНИЕ: Обновляем тихим способом (без вызова спиннера) ===
+            requestLoadMyStats(false);
             dialog.dismiss();
             
             if (activity.vpsToken != null) {
