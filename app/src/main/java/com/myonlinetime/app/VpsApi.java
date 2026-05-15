@@ -258,6 +258,15 @@ public class VpsApi {
         enqueueCall(request, callback);
     }
 
+    // === НОВЫЙ МЕТОД УДАЛЕНИЯ АККАУНТА ===
+    public static void deleteAccount(String ourServerToken, final Callback callback) {
+        RequestBody body = RequestBody.create(JSON, "{}");
+        Request request = createAuthedRequest("delete_account", ourServerToken)
+                .post(body)
+                .build();
+        enqueueCall(request, callback);
+    }
+
     public static void deleteBackground(String ourServerToken, final Callback callback) {
         RequestBody body = RequestBody.create(JSON, "{}");
         Request request = createAuthedRequest("delete_background", ourServerToken)
