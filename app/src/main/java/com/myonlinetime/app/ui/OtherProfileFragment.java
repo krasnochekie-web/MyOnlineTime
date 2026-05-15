@@ -226,7 +226,6 @@ public class OtherProfileFragment extends Fragment {
         String argAbout = getArguments() != null ? getArguments().getString("PREFETCH_ABOUT", "") : "";
         String argPhoto = getArguments() != null ? getArguments().getString("PREFETCH_PHOTO", "") : "";
 
-        // === ИСПРАВЛЕНИЕ: Читаем кэш ДО настройки UI, чтобы достать "about" ===
         User cachedUser = prefetchUserCache.get(targetUid);
         if (cachedUser != null) {
             if (cachedUser.nickname != null && !cachedUser.nickname.isEmpty()) argName = cachedUser.nickname;
@@ -258,15 +257,31 @@ public class OtherProfileFragment extends Fragment {
             }
         }
 
+        // === ИСПРАВЛЕНИЕ: МГНОВЕННЫЙ ЗАПРОС ЦИФР И ПОДПИСОК (БЕЗ ЗАДЕРЖЕК) ===
         String cachedCounts = prefetchCountsCache.get(targetUid);
-        if (cachedCounts != null) applyCountsJson(cachedCounts);
+        if (cachedCounts != null) {
+            applyCountsJson(cachedCounts);
+        } else {
+            refreshCounts(activity); // Грузим сразу!
+        }
 
         Boolean cachedFollow = prefetchFollowCache.get(targetUid);
         if (cachedFollow != null) {
             btnFollow.setTag(cachedFollow);
             updateFollowButton(btnFollow, cachedFollow);
             btnFollow.setVisibility(View.VISIBLE);
+        } else if (activity.vpsToken != null) {
+            VpsApi.checkIsFollowing(activity.vpsToken, targetUid, new VpsApi.BooleanCallback() {
+                @Override public void onResult(final boolean isFollowing) {
+                    if (!isAdded()) return;
+                    prefetchFollowCache.put(targetUid, isFollowing);
+                    btnFollow.setTag(isFollowing);
+                    updateFollowButton(btnFollow, isFollowing);
+                    btnFollow.setVisibility(View.VISIBLE);
+                }
+            });
         }
+        // =====================================================================
 
         btnExpand.setOnClickListener(v -> {
             btnExpand.setVisibility(View.GONE);
@@ -395,21 +410,10 @@ public class OtherProfileFragment extends Fragment {
                         if (listSpinner != null) listSpinner.setVisibility(View.GONE);
                     }
                 });
-
-                refreshCounts(act);
-
-                VpsApi.checkIsFollowing(act.vpsToken, targetUid, new VpsApi.BooleanCallback() {
-                     @Override public void onResult(final boolean isFollowing) {
-                         if (!isAdded()) return;
-                         prefetchFollowCache.put(targetUid, isFollowing);
-                         btnFollow.setTag(isFollowing);
-                         updateFollowButton(btnFollow, isFollowing);
-                         btnFollow.setVisibility(View.VISIBLE);
-                     }
-                });
             }
         };
         
+        // Откладываем только тяжелый парсинг профиля (чтобы не тормозить анимацию слайда)
         uiHandler.postDelayed(dataLoader, 200); 
 
         return wrapper; 
@@ -441,11 +445,7 @@ public class OtherProfileFragment extends Fragment {
 
     private void refreshCounts(MainActivity activity) {
         if (activity.vpsToken == null) return;
-        executeCountsApi(activity, activity.vpsToken);
-    }
-
-    private void executeCountsApi(MainActivity activity, String token) {
-        VpsApi.getCounts(token, targetUid, new VpsApi.Callback() {
+        VpsApi.getCounts(activity.vpsToken, targetUid, new VpsApi.Callback() {
             @Override public void onSuccess(String result) {
                 uiHandler.post(() -> {
                     if (!isAdded()) return; 
