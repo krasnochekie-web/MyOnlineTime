@@ -37,7 +37,8 @@
                 android:layout_centerVertical="true"
                 android:background="@drawable/bg_close_circle"
                 android:foreground="?attr/selectableItemBackground"
-                android:padding="5dp" 
+                android:clipToOutline="true"
+                android:padding="6dp" 
                 android:clickable="true"
                 android:focusable="true"
                 android:src="@android:drawable/ic_menu_close_clear_cancel"
@@ -62,8 +63,6 @@
             android:orientation="horizontal"
             android:layout_marginHorizontal="16dp"
             android:layout_marginBottom="24dp" 
-            android:clipChildren="false"
-            android:clipToPadding="false"
             android:weightSum="2">
 
             <Button
@@ -76,6 +75,7 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:foreground="@drawable/ripple_button_grapefruit"
+                android:stateListAnimator="@null"
                 android:text="@string/btn_delete_uppercase"
                 android:textColor="@android:color/white"
                 android:textSize="13sp"
@@ -91,6 +91,7 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:foreground="@drawable/ripple_button_gray"
+                android:stateListAnimator="@null"
                 android:text="@string/btn_cancel_uppercase"
                 android:textColor="@color/textDynamic"
                 android:textSize="13sp"
