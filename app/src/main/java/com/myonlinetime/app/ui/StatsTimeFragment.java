@@ -58,6 +58,10 @@ public class StatsTimeFragment extends Fragment {
     private ProgressBar loadingSpinner; 
     
     private boolean isFirstLoad = true; 
+    
+    // === ТРЕКЕР ВЫБОРА ===
+    // Запоминает, какую именно статистику пользователь хочет видеть прямо сейчас
+    private int currentRequestedPosition = 0; 
 
     public StatsTimeFragment() {}
 
@@ -168,12 +172,14 @@ public class StatsTimeFragment extends Fragment {
                     isFirstLoad = false;
                     return; 
                 }
+                currentRequestedPosition = position; // Запоминаем выбор пользователя!
                 fetchAndApplyData(position, activity);
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         }); 
 
-        // === ИНЪЕКЦИЯ ОТ ПРОСАДОК FPS: Отложенный старт вычислений ===
+        // Инициализация при первом запуске
+        currentRequestedPosition = 0;
         new Handler(Looper.getMainLooper()).postDelayed(() -> fetchAndApplyData(0, activity), 200);
         new Handler(Looper.getMainLooper()).postDelayed(() -> loadBottomCardsData(activity, textWeek, textMonth, textYear), 350);
 
@@ -182,6 +188,10 @@ public class StatsTimeFragment extends Fragment {
 
     private void fetchAndApplyData(int position, MainActivity activity) {
         Runnable updateUI = () -> {
+            // === ЗАЩИТА ===
+            // Если пока мы считали/грузили, юзер переключил спиннер на другой период — прерываем отрисовку!
+            if (position != currentRequestedPosition) return;
+            
             loadingSpinner.setVisibility(View.GONE); 
             
             CachedStats cached = statsCache.get(position);
@@ -208,12 +218,14 @@ public class StatsTimeFragment extends Fragment {
         }
 
         if (!isAdded()) return;
-        totalTimeText.setText(activity.getString(R.string.loading));
         
-        loadingSpinner.setVisibility(View.VISIBLE); 
+        // Показываем лоадер только если данные еще актуальны
+        if (position == currentRequestedPosition) {
+            totalTimeText.setText(activity.getString(R.string.loading));
+            loadingSpinner.setVisibility(View.VISIBLE); 
+        }
         
         Utils.backgroundExecutor.execute(() -> {
-            // === ИНЪЕКЦИЯ ОТ ПРОСАДОК FPS: Снижаем приоритет тяжелого потока ===
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
 
             if (UsageMath.todayStartMillis == 0) {
@@ -243,25 +255,17 @@ public class StatsTimeFragment extends Fragment {
             Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
             final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
             
-            // =========================================================================
-            // ТОТАЛЬНАЯ ПРЕДЗАГРУЗКА ИКОНОК И НАЗВАНИЙ (ДЛЯ ВСЕХ ЭКРАНОВ РАЗОМ)
-            // =========================================================================
             PackageManager pm = activity.getPackageManager();
-            
-            // Создаем единый список уникальных приложений, чтобы не загружать одно и то же дважды
             Set<String> allPackagesToPreload = new HashSet<>(finalList);
 
-            // Если это первичный запуск, подтягиваем еще пакеты для Графиков и Истории
             if (position == 0 && statsCache.isEmpty()) {
                 try {
-                    // Тянем пакеты за неделю (для Графиков)
                     Calendar wCal = Calendar.getInstance(); wCal.add(Calendar.DAY_OF_YEAR, -7);
                     Map<String, Long> wStats = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, wCal.getTimeInMillis(), endTime);
                     if (wStats != null) {
                         allPackagesToPreload.addAll(wStats.keySet());
                     }
                     
-                    // Тянем пакеты за год (для экрана "За всё время")
                     Calendar yCal = Calendar.getInstance(); yCal.add(Calendar.YEAR, -1);
                     Map<String, Long> yStats = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, yCal.getTimeInMillis(), endTime);
                     if (yStats != null) {
@@ -270,7 +274,6 @@ public class StatsTimeFragment extends Fragment {
                 } catch (Exception ignored) {}
             }
 
-            // Выкачиваем в оперативку названия и иконки для ВСЕХ собранных пакетов без лимитов, включая УДАЛЕННЫЕ!
             for (String pkg : allPackagesToPreload) {
                 try {
                     int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
@@ -278,19 +281,21 @@ public class StatsTimeFragment extends Fragment {
                     
                     android.content.pm.ApplicationInfo info;
                     try {
-                        info = pm.getApplicationInfo(pkg, 0); // Сначала ищем обычные
+                        info = pm.getApplicationInfo(pkg, 0); 
                     } catch (PackageManager.NameNotFoundException e) {
-                        info = pm.getApplicationInfo(pkg, flag); // Подхватываем "призраков"
+                        info = pm.getApplicationInfo(pkg, flag); 
                     }
 
-                    pm.getApplicationLabel(info); // Загоняем название
-                    pm.getApplicationIcon(info);  // Загоняем картинку
+                    pm.getApplicationLabel(info); 
+                    pm.getApplicationIcon(info);  
                 } catch (Exception ignored) { }
             }
 
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (isAdded()) {
+                    // Кэшируем результаты в любом случае (труд не должен пропадать зря)
                     statsCache.put(position, new CachedStats(finalList, finalExactTimes, finalTotalMillis));
+                    // Но отрисовываем только если это то, что сейчас ждет пользователь
                     updateUI.run();
                 }
             });
@@ -306,7 +311,6 @@ public class StatsTimeFragment extends Fragment {
         }
 
         Utils.backgroundExecutor.execute(() -> {
-            // === ИНЪЕКЦИЯ ОТ ПРОСАДОК FPS: Снижаем приоритет тяжелого потока ===
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
 
             long now = System.currentTimeMillis();
