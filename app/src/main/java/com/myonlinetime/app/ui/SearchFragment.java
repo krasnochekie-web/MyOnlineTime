@@ -46,8 +46,6 @@ public class SearchFragment extends Fragment {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.resetHeader();
             
-            // ВАЖНО: Убрано activity.clearPreviewBackground();
-            // Теперь мы просто мягко ставим плеер на паузу!
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
             }, 400);
@@ -56,7 +54,7 @@ public class SearchFragment extends Fragment {
         View view = inflater.inflate(R.layout.layout_search, container, false);
         
         EditText searchInput = view.findViewById(R.id.search_input);
-        ImageView clearBtn = view.findViewById(R.id.search_clear_btn); // НАШ КРЕСТИК
+        ImageView clearBtn = view.findViewById(R.id.search_clear_btn);
         resultsList = view.findViewById(R.id.search_results_list);
         loadingSpinner = view.findViewById(R.id.search_loading_spinner); 
 
@@ -70,7 +68,6 @@ public class SearchFragment extends Fragment {
                 if (clickedUser.uid != null && clickedUser.uid.equals(myUid)) {
                     activity.navigator.switchScreen(4, myUid);
                 } else {
-                    // === ИСПРАВЛЕНИЕ: Передаем 5 параметров для мгновенной Telegram-загрузки ===
                     activity.navigator.openSubScreen(OtherProfileFragment.newInstance(
                             clickedUser.uid, 
                             activity.getString(R.string.title_search),
@@ -85,7 +82,6 @@ public class SearchFragment extends Fragment {
         resultsList.setAdapter(adapter);
         resultsList.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
-        // Очищаем поле при клике на крестик
         clearBtn.setOnClickListener(v -> searchInput.setText(""));
 
         if (lastSearchQuery.length() > 0) {
@@ -106,7 +102,6 @@ public class SearchFragment extends Fragment {
                 searchHandler.postDelayed(searchRunnable, 400);
             }
             @Override public void afterTextChanged(Editable s) {
-                // Показываем крестик, если текст есть, и скрываем, если пусто
                 if (s.length() > 0) {
                     clearBtn.setVisibility(View.VISIBLE);
                 } else {
@@ -169,6 +164,14 @@ public class SearchFragment extends Fragment {
                 if (!isAdded()) return; 
                 if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
                 adapter.setUsers(users);
+
+                // === ПРЕДЗАГРУЗКА КНОПОК И ЦИФР В ФОНЕ ===
+                MainActivity activity = (MainActivity) getActivity();
+                if (activity != null && activity.vpsToken != null) {
+                    for (User u : users) {
+                        OtherProfileFragment.prefetchProfile(activity.vpsToken, u.uid);
+                    }
+                }
             }
         });
     }
