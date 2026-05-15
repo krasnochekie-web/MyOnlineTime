@@ -734,8 +734,7 @@ public class MainActivity extends AppCompatActivity {
         setIntent(intent); 
         handleNotificationIntent(intent);
     }
-    
-    private void handleNotificationIntent(Intent intent) {
+private void handleNotificationIntent(Intent intent) {
         if (intent != null && intent.hasExtra("open_tab")) {
             String tab = intent.getStringExtra("open_tab");
             
@@ -748,6 +747,12 @@ public class MainActivity extends AppCompatActivity {
                     String targetUid = intent.getStringExtra("target_uid");
                     String targetNickname = intent.getStringExtra("target_nickname");
                     if (targetUid != null && navigator != null) {
+                        // === ОПЕРЕЖАЮЩАЯ ЗАГРУЗКА ПРИ ХОЛОДНОМ СТАРТЕ ===
+                        if (vpsToken != null) {
+                            com.myonlinetime.app.ui.OtherProfileFragment.prefetchProfile(vpsToken, targetUid);
+                        }
+                        // ===============================================
+
                         navigator.openSubScreen(com.myonlinetime.app.ui.OtherProfileFragment.newInstance(
                                 targetUid, 
                                 getString(R.string.title_notifications), 
@@ -769,7 +774,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
-
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
