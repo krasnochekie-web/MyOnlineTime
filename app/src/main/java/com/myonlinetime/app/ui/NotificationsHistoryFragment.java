@@ -119,12 +119,18 @@ public class NotificationsHistoryFragment extends Fragment {
         recycler.getRecycledViewPool().setMaxRecycledViews(NotificationModels.NotificationItem.TYPE_TIME, 20);
         recycler.getRecycledViewPool().setMaxRecycledViews(NotificationModels.NotificationItem.TYPE_FOLLOWER, 20);
 
-        // === ИСПРАВЛЕНИЕ ТЯНУЧКИ: Железобетонная установка Constraints ===
         swipeRefresh = new SwipeRefreshLayout(requireContext());
         ViewGroup.LayoutParams recyclerOriginalParams = recycler.getLayoutParams();
-        swipeRefresh.setLayoutParams(recyclerOriginalParams); // Копируем привязки XML
+        swipeRefresh.setLayoutParams(recyclerOriginalParams); 
         swipeRefresh.setColorSchemeColors(ContextCompat.getColor(requireContext(), R.color.grapefruit)); 
         
+        // === ВОТ ОНА, РАЗГАДКА ВЕКА ===
+        // Сдвигаем тянучку из-под шапки вниз!
+        int startOffset = (int) (70 * getResources().getDisplayMetrics().density); // Высота шапки
+        int endOffset = (int) (110 * getResources().getDisplayMetrics().density); // Где она должна крутиться
+        swipeRefresh.setProgressViewOffset(false, startOffset, endOffset);
+        // ===============================
+
         ViewGroup parent = (ViewGroup) recycler.getParent();
         int index = parent.indexOfChild(recycler);
         parent.removeView(recycler);
@@ -132,7 +138,6 @@ public class NotificationsHistoryFragment extends Fragment {
         recycler.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         swipeRefresh.addView(recycler);
         parent.addView(swipeRefresh, index);
-        // =================================================================
 
         swipeRefresh.setOnRefreshListener(() -> {
             loadHistory(true, System.currentTimeMillis());
@@ -144,7 +149,6 @@ public class NotificationsHistoryFragment extends Fragment {
     }
 
     private void loadFromCacheOnly() {
-        // Защита: Если юзер тянет экран, не смеем трогать адаптер кэшем, иначе жест оборвется!
         if (swipeRefresh != null && swipeRefresh.isRefreshing()) return;
 
         MainActivity activity = (MainActivity) getActivity();
@@ -216,7 +220,6 @@ public class NotificationsHistoryFragment extends Fragment {
         
         if (hasCache) {
             if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-            // Если обновляем свайпом - игнорируем кэш, чтобы спиннер крутился плавно
             if (!isSwipeRefresh) {
                 parseAndDisplayAsync(cachedJson, activity, 0, false); 
             }
@@ -231,7 +234,7 @@ public class NotificationsHistoryFragment extends Fragment {
             if (!hasCache) showEmptyState();
             uiHandler.postDelayed(() -> { 
                 if (swipeRefresh != null) swipeRefresh.setRefreshing(false); 
-            }, 2000); // Приличие! 2 секунды.
+            }, 2000); 
             return; 
         }
 
@@ -272,7 +275,6 @@ public class NotificationsHistoryFragment extends Fragment {
                         prefs.edit().putString(cacheKey, finalJson).commit();
                         prefs.registerOnSharedPreferenceChangeListener(prefsListener);
                         
-                        // === РАСЧЕТ ВРЕМЕНИ ДЛЯ ПРИЛИЧНОЙ АНИМАЦИИ ===
                         long delayBeforeStop = 0;
                         if (isSwipeRefresh) {
                             long elapsed = System.currentTimeMillis() - swipeStartTime;
@@ -353,8 +355,6 @@ public class NotificationsHistoryFragment extends Fragment {
                 uiHandler.postDelayed(() -> {
                     if (!isAdded()) return;
 
-                    // Защита: Если это фоновое обновление, а юзер сейчас тянет свайп, 
-                    // мы ОТМЕНЯЕМ перерисовку UI, чтобы не сбить ему анимацию! 
                     if (!isFromSwipe && swipeRefresh != null && swipeRefresh.isRefreshing()) {
                         return;
                     }
@@ -397,7 +397,6 @@ public class NotificationsHistoryFragment extends Fragment {
 
     private void showEmptyState() {
         if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-        // ВАЖНО: Мы больше никогда не делаем recycler.setVisibility(View.GONE); !!!
         if (adapter != null) adapter.updateItems(new ArrayList<>());
         emptyText.setVisibility(View.VISIBLE);
     }
