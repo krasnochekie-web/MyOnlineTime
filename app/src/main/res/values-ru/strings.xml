@@ -8,6 +8,9 @@
     <string name="find">Поиск</string>
     <string name="time">Время</string>
 	<string name="dialog_change_email_title">Изменить почту</string>
+	<string name="prompt_nickname_setup">Введите своё имя (никнейм), чтобы завершить регистрацию в системе My Online Time</string>
+<string name="hint_enter_nickname_setup">Введите своё имя (никнейм)</string>
+<string name="err_nickname_empty">Никнейм не может быть пустым!</string>
 	<string name="toast_transfer_canceled_restore">Перенос отменен. Выберите ваш текущий аккаунт для возврата.</string>
 	<string name="err_same_account">Вы уже используете данный аккаунт.</string>
 <string name="dialog_change_email_desc">Для того, чтобы изменить почту, привязанную к вашему аккаунту, нажмите на строку ввода данных, а затем выберете аккаунт Google, который ранее не был зарегистрирован в My Online Time.</string>
