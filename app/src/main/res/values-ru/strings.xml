@@ -8,6 +8,11 @@
     <string name="find">Поиск</string>
     <string name="time">Время</string>
 	<string name="notif_max_count">99+</string>	
+	<string name="dialog_delete_account_title">Удалить аккаунт?</string>
+<string name="dialog_delete_account_desc">После нажатия кнопки \"Удалить\" ваш аккаунт будет безвозвратно удалён с наших серверов, без возможности восстановления.\nПринимайте решение взвешенно.\nДля отмены операции нажмите \"Отмена\".</string>
+<string name="btn_delete_uppercase">УДАЛИТЬ</string>
+<string name="btn_cancel_uppercase">ОТМЕНА</string>
+<string name="toast_account_deleted">Ваш аккаунт и все данные успешно удалены.</string>
 	<string name="notif_followers">Уведомления о подписках</string>
 	<string name="notif_channel_followers_name">У вас новый подписчик!</string>
 <string name="notif_someone">Кто-то</string>
