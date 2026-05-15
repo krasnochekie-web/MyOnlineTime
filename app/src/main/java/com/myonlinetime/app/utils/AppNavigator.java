@@ -13,6 +13,8 @@ import com.myonlinetime.app.ui.OtherProfileFragment;
 import com.myonlinetime.app.ui.SearchFragment;
 import com.myonlinetime.app.ui.SettingsFragment; 
 import com.myonlinetime.app.ui.StatsHostFragment; 
+import com.myonlinetime.app.ui.NotificationsHistoryFragment;
+import com.myonlinetime.app.ui.FollowsFragment;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -65,7 +67,7 @@ public class AppNavigator {
         return currentTabIndex;
     }
 
-    // === ИСПРАВЛЕНИЕ: Визуальное расположение кнопок на нижней панели ===
+    // === Визуальное расположение кнопок на нижней панели ===
     // Порядок: Feed(0), Search(1), Profile(4), Time(3), Settings(5)
     private int getVisualIndex(int tabIndex) {
         switch(tabIndex) {
@@ -99,9 +101,11 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
         
-        // === ИСПРАВЛЕНИЕ: Чужой профиль ВСЕГДА выезжает справа ===
-        if (fragment instanceof OtherProfileFragment) {
-            ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left, R.anim.slide_in_right, R.anim.slide_out_right);
+        // === Эти экраны ВСЕГДА выезжают справа ===
+        if (fragment instanceof OtherProfileFragment || 
+            fragment instanceof NotificationsHistoryFragment || 
+            fragment instanceof FollowsFragment) {
+            ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left, R.anim.slide_in_left, R.anim.slide_out_right);
         } else {
             // Все остальные экраны выезжают снизу
             ft.setCustomAnimations(R.anim.slide_in_up, android.R.anim.fade_out, android.R.anim.fade_in, R.anim.slide_out_down);
@@ -126,8 +130,10 @@ public class AppNavigator {
         
         Fragment topFragment = stack.get(stack.size() - 1);
         
-        // === ИСПРАВЛЕНИЕ: Чужой профиль ВСЕГДА уезжает вправо ===
-        if (topFragment instanceof OtherProfileFragment) {
+        // === Эти экраны ВСЕГДА уезжают вправо ===
+        if (topFragment instanceof OtherProfileFragment || 
+            topFragment instanceof NotificationsHistoryFragment || 
+            topFragment instanceof FollowsFragment) {
             ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
         } else {
             ft.setCustomAnimations(android.R.anim.fade_in, R.anim.slide_out_down);
@@ -152,15 +158,13 @@ public class AppNavigator {
         FragmentTransaction ft = fm.beginTransaction();
 
         if (currentTabIndex != -1) {
-            // === ИСПРАВЛЕНИЕ: Математика переходов опирается на ВИЗУАЛЬНЫЙ индекс ===
+            // Математика переходов опирается на ВИЗУАЛЬНЫЙ индекс
             int visualTarget = getVisualIndex(tabIndex);
             int visualCurrent = getVisualIndex(currentTabIndex);
             
             if (visualTarget > visualCurrent) {
-                // Движемся вправо (экран выезжает справа)
                 ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left);
             } else {
-                // Движемся влево (экран выезжает слева)
                 ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
             }
         }
