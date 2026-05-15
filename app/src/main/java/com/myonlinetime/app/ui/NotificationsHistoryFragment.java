@@ -1,9 +1,6 @@
 package com.myonlinetime.app.ui;
 
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
@@ -52,12 +49,13 @@ public class NotificationsHistoryFragment extends Fragment {
     private ProgressBar loadingSpinner;
     private NotificationsAdapter adapter;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private boolean isReceiverRegistered = false;
 
-    // === ЖЕСТКИЙ СЛУХАЧ КЭША ===
+    // Срабатывает, когда кэш поменялся из-за нового уведомления
     private final SharedPreferences.OnSharedPreferenceChangeListener prefsListener = (sharedPrefs, key) -> {
         if (key != null && key.equals(getCacheKey())) {
             uiHandler.post(() -> {
-                if (isAdded()) {
+                if (isAdded() && !isHidden()) {
                     loadFromCacheOnly();
                     MainActivity activity = (MainActivity) getActivity();
                     if (activity != null) activity.updateNotificationBadge();
@@ -66,13 +64,13 @@ public class NotificationsHistoryFragment extends Fragment {
         }
     };
 
-    // === ГЛОБАЛЬНЫЙ ПРИЕМНИК ПУШЕЙ ===
-    private final BroadcastReceiver pushReceiver = new BroadcastReceiver() {
+    // Глобальный приемник. Срабатывает мгновенно.
+    private final android.content.BroadcastReceiver pushReceiver = new android.content.BroadcastReceiver() {
         @Override
-        public void onReceive(Context context, Intent intent) {
+        public void onReceive(Context context, android.content.Intent intent) {
             if ("UPDATE_BADGE_BROADCAST".equals(intent.getAction())) {
                 uiHandler.post(() -> {
-                    if (isAdded()) {
+                    if (isAdded() && !isHidden()) {
                         loadFromCacheOnly(); 
                         MainActivity activity = (MainActivity) getActivity();
                         if (activity != null) activity.updateNotificationBadge();
@@ -120,6 +118,7 @@ public class NotificationsHistoryFragment extends Fragment {
         });
 
         loadHistory(false);
+        registerReceivers();
 
         return view;
     }
@@ -170,7 +169,7 @@ public class NotificationsHistoryFragment extends Fragment {
                                 adapter = new NotificationsAdapter(items, activity);
                                 recycler.setAdapter(adapter);
                             } else {
-                                // Тихо обновляем список. Если был скролл вниз - там и останется.
+                                // Мягкое обновление, которое не ломает спиннер
                                 adapter.updateItems(items);
                             }
 
@@ -196,8 +195,9 @@ public class NotificationsHistoryFragment extends Fragment {
         
         if (hasCache) {
             if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+            // Если обновляем свайпом - игнорируем кэш, чтобы спиннер крутился плавно
             if (!isSwipeRefresh) {
-                parseAndDisplayAsync(cachedJson, activity, 0); // Без задержки для старта
+                parseAndDisplayAsync(cachedJson, activity, 0); 
             }
         } else {
             recycler.setVisibility(View.GONE);
@@ -211,12 +211,11 @@ public class NotificationsHistoryFragment extends Fragment {
             if (!hasCache) showEmptyState();
             uiHandler.postDelayed(() -> { 
                 if (swipeRefresh != null) swipeRefresh.setRefreshing(false); 
-            }, 1200); // Приличие!
+            }, 1000); // 1 секунда уважения
             return; 
         }
 
-        // === ИСПРАВЛЕНИЕ ТЯНУЧКИ: Засекаем время старта ===
-        final long startFetchTime = System.currentTimeMillis();
+        final long fetchStartTime = System.currentTimeMillis();
 
         VpsApi.getNotificationsHistory(activity.vpsToken, new VpsApi.Callback() {
             @Override
@@ -251,14 +250,13 @@ public class NotificationsHistoryFragment extends Fragment {
                         
                         String finalJson = finalArray.toString();
                         
-                        // Сохраняем в кэш без триггера слушателя
+                        // Пишем в кэш тихо
                         prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
                         prefs.edit().putString(cacheKey, finalJson).commit();
                         prefs.registerOnSharedPreferenceChangeListener(prefsListener);
                         
-                        // Вычисляем, сколько нужно подождать, чтобы анимация была не меньше 1200мс
-                        long elapsed = System.currentTimeMillis() - startFetchTime;
-                        long remainingDelay = Math.max(0, 1200 - elapsed);
+                        long elapsed = System.currentTimeMillis() - fetchStartTime;
+                        long remainingDelay = Math.max(0, 1000 - elapsed); // Гарантированная 1 секунда анимации
                         
                         parseAndDisplayAsync(finalJson, activity, remainingDelay);
 
@@ -267,8 +265,8 @@ public class NotificationsHistoryFragment extends Fragment {
                         prefs.edit().putString(cacheKey, result).commit();
                         prefs.registerOnSharedPreferenceChangeListener(prefsListener);
                         
-                        long elapsed = System.currentTimeMillis() - startFetchTime;
-                        long remainingDelay = Math.max(0, 1200 - elapsed);
+                        long elapsed = System.currentTimeMillis() - fetchStartTime;
+                        long remainingDelay = Math.max(0, 1000 - elapsed);
                         
                         parseAndDisplayAsync(result, activity, remainingDelay);
                     }
@@ -277,8 +275,8 @@ public class NotificationsHistoryFragment extends Fragment {
 
             @Override
             public void onError(String error) {
-                long elapsed = System.currentTimeMillis() - startFetchTime;
-                long remainingDelay = Math.max(0, 1200 - elapsed);
+                long elapsed = System.currentTimeMillis() - fetchStartTime;
+                long remainingDelay = Math.max(0, 1000 - elapsed);
                 
                 uiHandler.postDelayed(() -> {
                     if (!isAdded()) return;
@@ -293,7 +291,7 @@ public class NotificationsHistoryFragment extends Fragment {
         });
     }
 
-    private void parseAndDisplayAsync(String jsonResult, MainActivity activity, long delayBeforeStop) {
+    private void parseAndDisplayAsync(String jsonResult, MainActivity activity, long delayStopSpinner) {
         Utils.backgroundExecutor.execute(() -> {
             try {
                 JSONArray array = new JSONArray(jsonResult);
@@ -328,7 +326,7 @@ public class NotificationsHistoryFragment extends Fragment {
                 uiHandler.postDelayed(() -> {
                     if (!isAdded()) return;
 
-                    if (swipeRefresh != null) swipeRefresh.setRefreshing(false); // Заканчиваем крутить
+                    if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
                     if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
 
                     if (items.isEmpty()) {
@@ -348,7 +346,7 @@ public class NotificationsHistoryFragment extends Fragment {
                             markAllAsRead(activity, array, getCacheKey());
                         }
                     }
-                }, delayBeforeStop);
+                }, delayStopSpinner);
 
             } catch (Exception e) {
                 uiHandler.postDelayed(() -> { 
@@ -356,7 +354,7 @@ public class NotificationsHistoryFragment extends Fragment {
                         if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
                         showEmptyState();
                     }
-                }, delayBeforeStop);
+                }, delayStopSpinner);
             }
         });
     }
@@ -408,9 +406,41 @@ public class NotificationsHistoryFragment extends Fragment {
         }
     }
 
+    // === ИСПРАВЛЕНИЕ: Гарантированная регистрация ===
+    private void registerReceivers() {
+        if (isReceiverRegistered || getContext() == null) return;
+        
+        requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .registerOnSharedPreferenceChangeListener(prefsListener);
+
+        LocalBroadcastManager.getInstance(requireContext())
+            .registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"), Context.RECEIVER_EXPORTED);
+        } else {
+            requireContext().registerReceiver(pushReceiver, new android.content.IntentFilter("UPDATE_BADGE_BROADCAST"));
+        }
+        
+        isReceiverRegistered = true;
+    }
+
+    private void unregisterReceivers() {
+        if (!isReceiverRegistered || getContext() == null) return;
+        
+        requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .unregisterOnSharedPreferenceChangeListener(prefsListener);
+            
+        try { LocalBroadcastManager.getInstance(requireContext()).unregisterReceiver(pushReceiver); } catch (Exception e) {}
+        try { requireContext().unregisterReceiver(pushReceiver); } catch (Exception e) {}
+        
+        isReceiverRegistered = false;
+    }
+
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        unregisterReceivers();
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) activity.headerManager.resetHeader(); 
     }
@@ -439,21 +469,7 @@ public class NotificationsHistoryFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        
-        requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .registerOnSharedPreferenceChangeListener(prefsListener);
-
-        // === ГЛОБАЛЬНАЯ РЕГИСТРАЦИЯ ДЛЯ УВЕДОМЛЕНИЙ ===
-        try {
-            LocalBroadcastManager.getInstance(requireContext())
-                .registerReceiver(pushReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"));
-            
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                requireContext().registerReceiver(pushReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"), Context.RECEIVER_EXPORTED);
-            } else {
-                requireContext().registerReceiver(pushReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"));
-            }
-        } catch (Exception e) {}
+        registerReceivers(); // Защита: регистрация при возврате из свернутого приложения
 
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
@@ -472,13 +488,7 @@ public class NotificationsHistoryFragment extends Fragment {
     @Override
     public void onPause() {
         super.onPause();
-        
-        requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .unregisterOnSharedPreferenceChangeListener(prefsListener);
-            
-        try {
-            LocalBroadcastManager.getInstance(requireContext()).unregisterReceiver(pushReceiver);
-            requireContext().unregisterReceiver(pushReceiver);
-        } catch (Exception ignored) {}
+        // ВАЖНО: Мы не отписываемся от кэша в onPause, чтобы если придет пуш пока мы свернуты, 
+        // кэш обновился, и при разворачивании список был актуальным!
     }
 }
