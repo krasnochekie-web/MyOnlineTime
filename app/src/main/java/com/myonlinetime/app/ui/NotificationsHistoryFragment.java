@@ -124,12 +124,10 @@ public class NotificationsHistoryFragment extends Fragment {
         swipeRefresh.setLayoutParams(recyclerOriginalParams); 
         swipeRefresh.setColorSchemeColors(ContextCompat.getColor(requireContext(), R.color.grapefruit)); 
         
-        // === ВОТ ОНА, РАЗГАДКА ВЕКА ===
-        // Сдвигаем тянучку из-под шапки вниз!
-        int startOffset = (int) (70 * getResources().getDisplayMetrics().density); // Высота шапки
-        int endOffset = (int) (110 * getResources().getDisplayMetrics().density); // Где она должна крутиться
+        // === Сдвигаем тянучку из-под шапки вниз ===
+        int startOffset = (int) (70 * getResources().getDisplayMetrics().density); 
+        int endOffset = (int) (110 * getResources().getDisplayMetrics().density); 
         swipeRefresh.setProgressViewOffset(false, startOffset, endOffset);
-        // ===============================
 
         ViewGroup parent = (ViewGroup) recycler.getParent();
         int index = parent.indexOfChild(recycler);
@@ -188,6 +186,7 @@ public class NotificationsHistoryFragment extends Fragment {
                         if (!isAdded()) return;
 
                         if (!items.isEmpty()) {
+                            recycler.setVisibility(View.VISIBLE);
                             emptyText.setVisibility(View.GONE);
                             if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
                             
@@ -197,6 +196,9 @@ public class NotificationsHistoryFragment extends Fragment {
                             } else {
                                 adapter.updateItems(items);
                             }
+                            
+                            // Предзагрузка профилей из кэша
+                            preloadUserProfiles(items, activity);
 
                             if (finalHasUnread) {
                                 markAllAsRead(activity, array, cacheKey);
@@ -224,6 +226,7 @@ public class NotificationsHistoryFragment extends Fragment {
                 parseAndDisplayAsync(cachedJson, activity, 0, false); 
             }
         } else {
+            recycler.setVisibility(View.GONE);
             emptyText.setVisibility(View.GONE);
             if (!isSwipeRefresh && loadingSpinner != null) {
                 loadingSpinner.setVisibility(View.VISIBLE);
@@ -369,6 +372,7 @@ public class NotificationsHistoryFragment extends Fragment {
                     if (items.isEmpty()) {
                         showEmptyState();
                     } else {
+                        recycler.setVisibility(View.VISIBLE);
                         emptyText.setVisibility(View.GONE);
                         
                         if (adapter == null) {
@@ -377,6 +381,9 @@ public class NotificationsHistoryFragment extends Fragment {
                         } else {
                             adapter.updateItems(items);
                         }
+                        
+                        // === ПРЕДЗАГРУЗКА ПРОФИЛЕЙ ПОСЛЕ ЗАПРОСА ===
+                        preloadUserProfiles(items, activity);
                         
                         if (finalHasUnread) {
                             markAllAsRead(activity, array, getCacheKey());
@@ -395,8 +402,19 @@ public class NotificationsHistoryFragment extends Fragment {
         });
     }
 
+    private void preloadUserProfiles(List<NotificationModels.NotificationItem> items, MainActivity activity) {
+        if (activity.vpsToken == null) return;
+        for (NotificationModels.NotificationItem item : items) {
+            if (item instanceof NotificationModels.FollowerNotification) {
+                String uid = ((NotificationModels.FollowerNotification) item).uid;
+                OtherProfileFragment.prefetchProfile(activity.vpsToken, uid);
+            }
+        }
+    }
+
     private void showEmptyState() {
         if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+        // Не скрываем recycler, чтобы тянучка не ломалась!
         if (adapter != null) adapter.updateItems(new ArrayList<>());
         emptyText.setVisibility(View.VISIBLE);
     }
