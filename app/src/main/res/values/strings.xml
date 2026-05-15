@@ -8,6 +8,9 @@
     <string name="feed">Feed</string>
     <string name="find">Find</string>
 	<string name="notif_offline_mode">(Offline)</string>
+	<string name="prompt_nickname_setup">Enter your name (nickname) to complete registration in My Online Time</string>
+<string name="hint_enter_nickname_setup">Enter your name (nickname)</string>
+<string name="err_nickname_empty">Nickname cannot be empty!</string>
 	<string name="toast_transfer_canceled_restore">Transfer canceled. Please select your current account to return.</string>
 	<string name="err_same_account">You are already using this account.</string>
 	<string name="dialog_change_email_title">Change email</string>
