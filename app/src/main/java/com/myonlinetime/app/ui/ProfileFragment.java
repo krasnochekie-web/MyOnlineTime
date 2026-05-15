@@ -168,7 +168,7 @@ public class ProfileFragment extends Fragment {
         
         final View appsCardParent = (View) appsContainerLocal.getParent();
 
-        // === ИСПРАВЛЕНИЕ: Интегрируем спиннер строго на уровень списка приложений ===
+        // === ИНТЕГРАЦИЯ СПИННЕРА ТОЛЬКО ДЛЯ СПИСКА ===
         ViewGroup grandParent = (ViewGroup) appsCardParent.getParent();
         int cardIndex = grandParent.indexOfChild(appsCardParent);
         grandParent.removeView(appsCardParent);
@@ -193,7 +193,6 @@ public class ProfileFragment extends Fragment {
         
         listWrapper.addView(listSpinner);
         grandParent.addView(listWrapper, cardIndex);
-        // =========================================================================
 
         appsContainerLocal.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
             @Override
@@ -215,7 +214,7 @@ public class ProfileFragment extends Fragment {
                         btnCollapse.setVisibility(View.GONE);
                     }
                     
-                    // Прячем спиннер ТОЛЬКО тогда, когда приложения реально появились
+                    // === Снимаем спиннер ТОЛЬКО когда в контейнер добавились приложения ===
                     if (hasApps && listSpinner != null) {
                         listSpinner.setVisibility(View.GONE);
                     }
@@ -237,11 +236,6 @@ public class ProfileFragment extends Fragment {
         loadMyStatsRunnable = () -> {
             if (isAdded() && appsContainerLocal != null && weekTimeText != null) {
                 StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
-                
-                // Страховочное отключение спиннера (если список пуст)
-                uiHandler.postDelayed(() -> {
-                    if (listSpinner != null) listSpinner.setVisibility(View.GONE);
-                }, 700);
             } else {
                 if (listSpinner != null) listSpinner.setVisibility(View.GONE);
             }
@@ -672,8 +666,7 @@ public class ProfileFragment extends Fragment {
 
             btnDesc.setOnClickListener(v12 -> {
                 popupWindow.dismiss();
-                // Никаких делев, открываем сразу и плавно
-                showDescriptionDialog(activity, pkgName, descView);
+                uiHandler.postDelayed(() -> showDescriptionDialog(activity, pkgName, descView), 150);
             });
 
             popupWindow.showAsDropDown(optionsBtn, -40, 0);
@@ -687,7 +680,7 @@ public class ProfileFragment extends Fragment {
         dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         
-        // === АНИМАЦИЯ ПОЯВЛЕНИЯ ===
+        // === АНИМАЦИЯ ДИАЛОГА (КАК НА ЭКРАНЕ "ЗА ВСЁ ВРЕМЯ") ===
         dialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog;
 
         ImageView btnClose = dialog.findViewById(R.id.dialog_close_btn);
