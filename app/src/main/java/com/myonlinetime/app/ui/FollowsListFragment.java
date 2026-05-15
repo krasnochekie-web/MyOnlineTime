@@ -127,11 +127,18 @@ public class FollowsListFragment extends Fragment {
                 } else {
                     statusText.setVisibility(View.GONE);
                     adapter.setUsers(users);
+                    
+                    // === ФОНОВАЯ ПРЕДЗАГРУЗКА КНОПОК И ЦИФР ПРОФИЛЕЙ ===
+                    MainActivity activity = (MainActivity) getActivity();
+                    if (activity != null && activity.vpsToken != null) {
+                        for (User u : users) {
+                            OtherProfileFragment.prefetchProfile(activity.vpsToken, u.uid);
+                        }
+                    }
                 }
             }
         });
     }
 
     // НИКАКИХ onResume И updateHeader ЗДЕСЬ БОЛЬШЕ НЕТ. РАБОТАЕМ СТРОГО ВНУТРИ VIEWPAGER2.
-            }
-                                                     
+}
