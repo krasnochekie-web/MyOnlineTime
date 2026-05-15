@@ -8,6 +8,11 @@
     <string name="feed">Feed</string>
     <string name="find">Find</string>
 	<string name="notif_offline_mode">(Offline)</string>
+	<string name="dialog_change_email_title">Change email</string>
+<string name="dialog_change_email_desc">To change the email linked to your account, click on the input field below and select a Google account that has not been previously registered in My Online Time.</string>
+<string name="err_account_already_registered">This account is already registered and cannot be used for data transfer.</string>
+<string name="toast_email_changed">Email successfully changed!</string>
+<string name="btn_save_uppercase">SAVE</string>
 	<string name="dialog_delete_account_title">Delete account?</string>
 <string name="dialog_delete_account_desc">After clicking the \"Delete\" button, your account will be permanently deleted from our servers, without the possibility of recovery.\nPlease make an informed decision.\nTo cancel the operation, click \"Cancel\".</string>
 <string name="btn_delete_uppercase">DELETE</string>
