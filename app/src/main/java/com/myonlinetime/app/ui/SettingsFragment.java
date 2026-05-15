@@ -26,6 +26,8 @@ import com.bumptech.glide.Glide;
 import com.bumptech.glide.signature.ObjectKey;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.android.gms.common.api.ApiException;
+import com.google.android.gms.tasks.Task;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
@@ -40,6 +42,11 @@ public class SettingsFragment extends Fragment {
 
     private static final String PREFS_NAME = "AppPrefs";
     private static final String KEY_THEME = "selected_theme";
+    private static final int RC_SIGN_IN_TRANSFER = 9003; // Специальный код для смены почты
+
+    // Временные переменные для диалога смены почты
+    private String pendingTransferIdToken = null;
+    private TextView activeEmailInput = null;
 
     private final android.content.BroadcastReceiver profileUpdateReceiver = new android.content.BroadcastReceiver() {
         @Override
@@ -57,7 +64,6 @@ public class SettingsFragment extends Fragment {
         
         if (activity != null) {
             prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-            
             activity.clearPreviewBackground();
             activity.updateGlobalBackground(false);
         }
@@ -67,15 +73,21 @@ public class SettingsFragment extends Fragment {
         
         loadUserData(view);
 
-        view.findViewById(R.id.btn_change_email).setOnClickListener(v -> { /* Пока пусто */ });
+        // === КНОПКА СМЕНЫ ПОЧТЫ ===
+        View btnChangeEmail = view.findViewById(R.id.btn_change_email);
+        if (btnChangeEmail != null) {
+            btnChangeEmail.setOnClickListener(v -> {
+                if (activity != null) {
+                    showChangeEmailDialog(activity);
+                }
+            });
+        }
         
-        // === ЛОГИКА УДАЛЕНИЯ АККАУНТА ===
+        // Кнопка удаления аккаунта
         View btnDeleteAccount = view.findViewById(R.id.btn_delete_account);
         if (btnDeleteAccount != null) {
             btnDeleteAccount.setOnClickListener(v -> {
-                if (activity != null) {
-                    showDeleteAccountDialog(activity);
-                }
+                if (activity != null) showDeleteAccountDialog(activity);
             });
         }
         
@@ -86,7 +98,6 @@ public class SettingsFragment extends Fragment {
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
                         activity.updateGlobalBackground(false);
                         activity.performSignOut(); 
-                        
                         Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
                         activity.startActivityForResult(signInIntent, 9001); 
                     });
@@ -142,7 +153,115 @@ public class SettingsFragment extends Fragment {
         return view;
     }
 
-    // === ДИАЛОГ УДАЛЕНИЯ АККАУНТА ===
+    // === ЛОГИКА ДИАЛОГА СМЕНЫ ПОЧТЫ ===
+    private void showChangeEmailDialog(MainActivity activity) {
+        final Dialog dialog = new Dialog(activity);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setContentView(R.layout.dialog_change_email);
+        
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            dialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog;
+        }
+
+        ImageView btnClose = dialog.findViewById(R.id.dialog_close_btn);
+        Button btnSave = dialog.findViewById(R.id.dialog_btn_save);
+        activeEmailInput = dialog.findViewById(R.id.dialog_email_input);
+        pendingTransferIdToken = null; // Сбрасываем старые значения
+
+        GoogleSignInAccount currentAcct = GoogleSignIn.getLastSignedInAccount(activity);
+        if (currentAcct != null && currentAcct.getEmail() != null) {
+            activeEmailInput.setText(currentAcct.getEmail());
+        }
+
+        btnClose.setOnClickListener(v -> {
+            // Если юзер закрыл диалог, но успел сменить аккаунт в окне Google - восстанавливаем старую сессию
+            if (pendingTransferIdToken != null && activity.mGoogleSignInClient != null) {
+                activity.mGoogleSignInClient.silentSignIn();
+            }
+            dialog.dismiss();
+        });
+
+        activeEmailInput.setOnClickListener(v -> {
+            if (activity.mGoogleSignInClient != null) {
+                // Сбрасываем Google-сессию, чтобы окно выбора аккаунтов появилось принудительно
+                activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
+                    Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
+                    // Запускаем интент прямо из Фрагмента, чтобы onActivityResult пришел сюда
+                    startActivityForResult(signInIntent, RC_SIGN_IN_TRANSFER);
+                });
+            }
+        });
+
+        btnSave.setOnClickListener(v -> {
+            if (pendingTransferIdToken == null) {
+                dialog.dismiss(); // Если почту не меняли, просто закрываем
+                return;
+            }
+            
+            btnSave.setEnabled(false);
+            btnSave.setText(R.string.loading);
+            
+            VpsApi.transferAccount(activity.vpsToken, pendingTransferIdToken, new VpsApi.LoginCallback() {
+                @Override
+                public void onSuccess(String newAccessToken) {
+                    activity.runOnUiThread(() -> {
+                        dialog.dismiss();
+                        // Сохраняем новые токены
+                        activity.vpsToken = newAccessToken;
+                        activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit()
+                            .putString("vps_access_token", newAccessToken).apply();
+                        Toast.makeText(activity, R.string.toast_email_changed, Toast.LENGTH_SHORT).show();
+                        loadUserData(getView()); // Перерисовываем UI
+                    });
+                }
+
+                @Override
+                public void onError(String error) {
+                    activity.runOnUiThread(() -> {
+                        btnSave.setEnabled(true);
+                        btnSave.setText(R.string.btn_save_uppercase);
+                        
+                        if (error.contains("ALREADY_REGISTERED") || error.contains("ALREADY_EXISTS")) {
+                            Toast.makeText(activity, R.string.err_account_already_registered, Toast.LENGTH_LONG).show();
+                        } else {
+                            Toast.makeText(activity, getString(R.string.err_server) + " " + error, Toast.LENGTH_LONG).show();
+                        }
+                    });
+                }
+            });
+        });
+
+        dialog.show();
+    }
+
+    // === ПЕРЕХВАТ ВЫБОРА НОВОГО GOOGLE АККАУНТА ===
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        
+        if (requestCode == RC_SIGN_IN_TRANSFER) {
+            Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
+            try {
+                GoogleSignInAccount newAcct = task.getResult(ApiException.class);
+                if (newAcct != null) {
+                    pendingTransferIdToken = newAcct.getIdToken();
+                    if (activeEmailInput != null) {
+                        activeEmailInput.setText(newAcct.getEmail());
+                    }
+                }
+            } catch (ApiException e) {
+                // Если юзер отменил выбор аккаунта в системном окне, возвращаем тихую авторизацию на старый аккаунт
+                MainActivity activity = (MainActivity) getActivity();
+                if (activity != null && activity.mGoogleSignInClient != null) {
+                    activity.mGoogleSignInClient.silentSignIn();
+                }
+            }
+        }
+    }
+
+    // ДИАЛОГ УДАЛЕНИЯ АККАУНТА
     private void showDeleteAccountDialog(MainActivity activity) {
         final Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -151,30 +270,25 @@ public class SettingsFragment extends Fragment {
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            dialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog; // Красивое появление
+            dialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog;
         }
 
         ImageView btnClose = dialog.findViewById(R.id.dialog_close_btn);
         Button btnDelete = dialog.findViewById(R.id.dialog_btn_delete);
         Button btnCancel = dialog.findViewById(R.id.dialog_btn_cancel);
 
-        // Логика отмены
         btnClose.setOnClickListener(v -> dialog.dismiss());
         btnCancel.setOnClickListener(v -> dialog.dismiss());
 
-        // Логика удаления
         btnDelete.setOnClickListener(v -> {
-            // Защита от двойного клика
             btnDelete.setEnabled(false);
             
             if (activity.vpsToken != null) {
-                // Выжигаем данные с сервера
                 VpsApi.deleteAccount(activity.vpsToken, new VpsApi.Callback() {
                     @Override
                     public void onSuccess(String result) {
                         activity.runOnUiThread(() -> {
                             dialog.dismiss();
-                            // Выжигаем данные локально и превращаем в "Гостя"
                             activity.updateGlobalBackground(false);
                             if (activity.mGoogleSignInClient != null) {
                                 activity.mGoogleSignInClient.signOut();
@@ -194,7 +308,6 @@ public class SettingsFragment extends Fragment {
                     }
                 });
             } else {
-                // Если токена нет, просто выходим локально
                 dialog.dismiss();
                 activity.updateGlobalBackground(false);
                 if (activity.mGoogleSignInClient != null) {
@@ -209,7 +322,7 @@ public class SettingsFragment extends Fragment {
 
     private void loadUserData(View view) {
         MainActivity activity = (MainActivity) getActivity();
-        if (activity == null) return;
+        if (activity == null || view == null) return;
 
         View userHeaderBlock = view.findViewById(R.id.settings_user_header_block);
         View accountBlock = view.findViewById(R.id.settings_account_block);
