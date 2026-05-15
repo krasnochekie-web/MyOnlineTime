@@ -54,7 +54,7 @@ public class OtherProfileFragment extends Fragment {
     private long renderGeneration = 0;
     private long fragmentCreationTime = 0;
     
-    // Спиннер строго для списка приложений
+    // Спиннер строго для списка
     private ProgressBar listSpinner;
     
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
@@ -157,7 +157,7 @@ public class OtherProfileFragment extends Fragment {
         
         final View appsCardParent = (View) appsContainerLocal.getParent();
 
-        // === Интегрируем спиннер строго на уровень списка приложений ===
+        // === ИНТЕГРАЦИЯ СПИННЕРА ТОЛЬКО ДЛЯ СПИСКА ===
         ViewGroup grandParent = (ViewGroup) appsCardParent.getParent();
         int cardIndex = grandParent.indexOfChild(appsCardParent);
         grandParent.removeView(appsCardParent);
@@ -178,7 +178,7 @@ public class OtherProfileFragment extends Fragment {
         sp.gravity = Gravity.CENTER_HORIZONTAL | Gravity.TOP;
         sp.topMargin = (int)(20 * getResources().getDisplayMetrics().density); 
         listSpinner.setLayoutParams(sp);
-        listSpinner.setVisibility(View.VISIBLE); // Крутим сразу при открытии
+        listSpinner.setVisibility(View.VISIBLE); 
         
         listWrapper.addView(listSpinner);
         grandParent.addView(listWrapper, cardIndex);
@@ -240,6 +240,10 @@ public class OtherProfileFragment extends Fragment {
         }
         
         if (!argPhoto.isEmpty()) handleMediaLoading(activity, argPhoto);
+
+        // === ИСПРАВЛЕНИЕ: Мгновенное применение логики схлопывания ===
+        // Чтобы пользователь не видел "прыжка на лету", мы рассчитываем высоту и схлопываем текст сразу!
+        applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
         User cachedUser = prefetchUserCache.get(targetUid);
         if (cachedUser != null) {
@@ -409,7 +413,21 @@ public class OtherProfileFragment extends Fragment {
     }
 
     private void applyCollapseSafely(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
+        boolean isAboutEmpty = aboutView == null || aboutView.getText().toString().trim().isEmpty();
+        
+        // Жестко прячем пустой текст ДО передачи в логику схлопывания
+        if (isAboutEmpty && aboutView != null) {
+            aboutView.setVisibility(View.GONE);
+        }
+
         StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
+        
+        // Убиваем любые анимации и принудительно прячем пустой текст ПОСЛЕ логики
+        if (isAboutEmpty && aboutView != null) {
+            aboutView.setVisibility(View.GONE);
+            aboutView.clearAnimation(); 
+        }
+
         if (container != null && container.getChildCount() == 0) {
             View parent = (View) container.getParent();
             if (parent != null) parent.setVisibility(View.GONE);
