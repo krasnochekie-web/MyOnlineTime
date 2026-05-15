@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="@color/bgDynamic" 
+    android:clickable="true" 
+    android:focusable="true"
+    android:paddingTop="@dimen/header_clearance"
+    android:clipToPadding="false"
+    android:paddingLeft="24dp"
+    android:paddingRight="24dp"> 
+
+    <ImageView
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:src="@drawable/ic_nav_time_h"
+        android:tint="@color/burgundyRed"/> 
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="My Online Time" 
+        android:textColor="@color/burgundyRed" 
+        android:textSize="17sp"
+        android:textStyle="bold"
+        android:layout_marginTop="16dp"/>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/prompt_nickname_setup"
+        android:textColor="@color/textDynamic" 
+        android:textSize="13sp"
+        android:gravity="center"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="32dp"/>
+
+    <EditText
+        android:id="@+id/setup_nickname_input"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/hint_enter_nickname_setup"
+        android:textColorHint="@color/textGrayDynamic"
+        android:textColor="@color/textDynamic"
+        android:background="@drawable/bg_input_field"
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp" 
+        android:paddingTop="14dp"
+        android:paddingBottom="14dp"
+        android:layout_marginBottom="24dp"
+        android:singleLine="true"/>
+    
+    <Button
+        android:id="@+id/setup_nickname_save_btn"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="@string/btn_save_uppercase"
+        android:background="@drawable/bg_button_grapefruit"
+        android:foreground="@drawable/ripple_button_grapefruit" 
+        android:stateListAnimator="@null"
+        android:textColor="@android:color/white" 
+        android:textStyle="bold"
+        android:textSize="14sp"/>
+</LinearLayout>
+
