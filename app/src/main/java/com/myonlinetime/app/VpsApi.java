@@ -71,6 +71,13 @@ public class VpsApi {
         
         OkHttpClient.Builder builder = new OkHttpClient.Builder();
         
+        // === ИСПРАВЛЕНИЕ: Расширяем горлышко бутылки для фоновых предзагрузок! ===
+        okhttp3.Dispatcher dispatcher = new okhttp3.Dispatcher();
+        dispatcher.setMaxRequests(60);
+        dispatcher.setMaxRequestsPerHost(30);
+        builder.dispatcher(dispatcher);
+        // =========================================================================
+
         // Добавляем умный перехватчик, который ловит протухшие токены (код 401)
         builder.authenticator(new Authenticator() {
             @Override
