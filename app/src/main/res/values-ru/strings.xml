@@ -8,6 +8,12 @@
     <string name="find">Поиск</string>
     <string name="time">Время</string>
 	<string name="dialog_change_email_title">Изменить почту</string>
+	<string name="settings_backgrounds">Фон профиля</string>
+<string name="bg_setting_global">Общие фоны</string>
+<string name="bg_setting_my_profile">Фон профиля</string>
+<string name="bg_setting_others_profile">Фон других профилей</string>
+<string name="bg_setting_images">Фон с изображением</string>
+<string name="bg_setting_gifs">Фон с gif файлом</string>
 	<string name="btn_clear_cache">Очистить память</string>
 	<string name="category_app">Приложение</string>
 <string name="category_data">Данные</string>
