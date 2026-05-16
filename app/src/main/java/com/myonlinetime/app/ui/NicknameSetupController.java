@@ -38,7 +38,6 @@ public class NicknameSetupController {
         final EditText inputName = setupView.findViewById(R.id.setup_nickname_input);
         final Button btnSave = setupView.findViewById(R.id.setup_nickname_save_btn);
 
-        // Фильтр от иероглифов и непечатных символов
         InputFilter exoticFilter = new InputFilter() {
             @Override
             public CharSequence filter(CharSequence source, int start, int end, Spanned dest, int dstart, int dend) {
@@ -54,7 +53,6 @@ public class NicknameSetupController {
         };
         inputName.setFilters(new InputFilter[]{ exoticFilter, new InputFilter.LengthFilter(16) });
 
-        // Подтягиваем дефолтное имя из Google
         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
         String defaultName = activity.prefs.getString("my_nickname", "");
         if (defaultName.isEmpty() || defaultName.equals("...") || defaultName.equals("User")) {
@@ -68,7 +66,6 @@ public class NicknameSetupController {
         inputName.setSelection(defaultName.length());
 
         btnSave.setOnClickListener(v -> {
-            // Логическая блокировка от двойных кликов (кнопка визуально не умирает, волна идет)
             if (Boolean.TRUE.equals(btnSave.getTag())) return; 
 
             final String nickname = inputName.getText().toString().trim();
@@ -80,7 +77,6 @@ public class NicknameSetupController {
 
             if (isActionSpam(activity)) return;
 
-            // Вешаем флаг "В процессе"
             btnSave.setTag(true);
 
             final long myUploadTicket = System.currentTimeMillis();
@@ -101,10 +97,16 @@ public class NicknameSetupController {
 
                                     activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
 
-                                    LocalBroadcastManager.getInstance(activity)
-                                            .sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
-
-                                    if (listener != null) listener.onComplete(nickname);
+                                    setupView.animate()
+                                            .translationX(setupView.getWidth())
+                                            .alpha(0f)
+                                            .setDuration(350)
+                                            .withEndAction(() -> {
+                                                setupView.setVisibility(View.GONE);
+                                                LocalBroadcastManager.getInstance(activity)
+                                                        .sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
+                                                if (listener != null) listener.onComplete(nickname);
+                                            }).start();
                                 });
                             }
                             @Override
@@ -115,7 +117,6 @@ public class NicknameSetupController {
                     public void onError(String error) { handleFailure(activity, btnSave, error, myUploadTicket); }
                 });
             } else {
-                // Если нет токена, снимаем блокировку
                 btnSave.setTag(false);
             }
         });
@@ -147,7 +148,6 @@ public class NicknameSetupController {
 
     private static void handleFailure(MainActivity activity, Button btnSave, String error, long myUploadTicket) {
         activity.runOnUiThread(() -> {
-            // Разблокируем кнопку при ошибке
             btnSave.setTag(false);
             
             long currentTicket = activity.prefs.getLong("active_upload_ticket", 0);
