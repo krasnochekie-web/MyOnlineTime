@@ -20,7 +20,6 @@ public class BackgroundsFragment extends Fragment {
 
     private static final String PREFS_NAME = "AppPrefs";
     
-    // Ключи для SharedPreferences (назови их как тебе удобнее для логики загрузки фонов)
     public static final String KEY_BG_GLOBAL = "bg_global_enabled";
     public static final String KEY_BG_MY_PROFILE = "bg_my_profile_enabled";
     public static final String KEY_BG_MY_IMAGES = "bg_my_images_enabled";
@@ -38,7 +37,6 @@ public class BackgroundsFragment extends Fragment {
 
         prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
 
-        // Тумблеры
         SwitchCompat switchGlobal = view.findViewById(R.id.switch_global_bg);
         
         SwitchCompat switchMyProfile = view.findViewById(R.id.switch_my_profile_bg);
@@ -49,13 +47,11 @@ public class BackgroundsFragment extends Fragment {
         SwitchCompat switchOthersImages = view.findViewById(R.id.switch_others_images);
         SwitchCompat switchOthersGifs = view.findViewById(R.id.switch_others_gifs);
 
-        // Контейнеры (для изменения прозрачности)
         View containerMyProfile = view.findViewById(R.id.container_my_profile);
         View containerMySubItems = view.findViewById(R.id.container_my_sub_items);
         View containerOthersProfile = view.findViewById(R.id.container_others_profile);
         View containerOthersSubItems = view.findViewById(R.id.container_others_sub_items);
 
-        // Чтение начальных значений (по умолчанию всё true)
         boolean isGlobalOn = prefs.getBoolean(KEY_BG_GLOBAL, true);
         boolean isMyProfileOn = prefs.getBoolean(KEY_BG_MY_PROFILE, true);
         boolean isMyImagesOn = prefs.getBoolean(KEY_BG_MY_IMAGES, true);
@@ -64,7 +60,6 @@ public class BackgroundsFragment extends Fragment {
         boolean isOthersImagesOn = prefs.getBoolean(KEY_BG_OTHERS_IMAGES, true);
         boolean isOthersGifsOn = prefs.getBoolean(KEY_BG_OTHERS_GIFS, true);
 
-        // Установка начальных состояний тумблеров
         switchGlobal.setChecked(isGlobalOn);
         switchMyProfile.setChecked(isMyProfileOn);
         switchMyImages.setChecked(isMyImagesOn);
@@ -73,65 +68,73 @@ public class BackgroundsFragment extends Fragment {
         switchOthersImages.setChecked(isOthersImagesOn);
         switchOthersGifs.setChecked(isOthersGifsOn);
 
-        // Метод для обновления доступности UI
         Runnable updateUIState = () -> {
             boolean global = switchGlobal.isChecked();
             boolean myProfile = switchMyProfile.isChecked();
             boolean othersProfile = switchOthersProfile.isChecked();
 
-            // Влияние глобального рубильника
             containerMyProfile.setAlpha(global ? 1.0f : 0.5f);
             containerOthersProfile.setAlpha(global ? 1.0f : 0.5f);
             
             switchMyProfile.setEnabled(global);
             switchOthersProfile.setEnabled(global);
 
-            // Влияние рубильника "Мой профиль"
             boolean mySubEnabled = global && myProfile;
             containerMySubItems.setAlpha(mySubEnabled ? 1.0f : 0.5f);
             switchMyImages.setEnabled(mySubEnabled);
             switchMyGifs.setEnabled(mySubEnabled);
 
-            // Влияние рубильника "Чужие профили"
             boolean othersSubEnabled = global && othersProfile;
             containerOthersSubItems.setAlpha(othersSubEnabled ? 1.0f : 0.5f);
             switchOthersImages.setEnabled(othersSubEnabled);
             switchOthersGifs.setEnabled(othersSubEnabled);
         };
 
-        // Применяем начальное состояние
         updateUIState.run();
 
-        // Слушатели изменений
+        // Метод-помощник: дергает MainActivity для перерисовки фона
+        Runnable notifyBgChanged = () -> {
+            if (getActivity() instanceof MainActivity) {
+                ((MainActivity) getActivity()).updateGlobalBackground(false);
+            }
+        };
+
         switchGlobal.setOnCheckedChangeListener((buttonView, isChecked) -> {
             prefs.edit().putBoolean(KEY_BG_GLOBAL, isChecked).apply();
             updateUIState.run();
+            notifyBgChanged.run();
         });
 
         switchMyProfile.setOnCheckedChangeListener((buttonView, isChecked) -> {
             prefs.edit().putBoolean(KEY_BG_MY_PROFILE, isChecked).apply();
             updateUIState.run();
+            notifyBgChanged.run();
         });
 
         switchMyImages.setOnCheckedChangeListener((buttonView, isChecked) -> {
             prefs.edit().putBoolean(KEY_BG_MY_IMAGES, isChecked).apply();
+            notifyBgChanged.run();
         });
 
         switchMyGifs.setOnCheckedChangeListener((buttonView, isChecked) -> {
             prefs.edit().putBoolean(KEY_BG_MY_GIFS, isChecked).apply();
+            notifyBgChanged.run();
         });
 
         switchOthersProfile.setOnCheckedChangeListener((buttonView, isChecked) -> {
             prefs.edit().putBoolean(KEY_BG_OTHERS_PROFILE, isChecked).apply();
             updateUIState.run();
+            notifyBgChanged.run();
         });
 
         switchOthersImages.setOnCheckedChangeListener((buttonView, isChecked) -> {
             prefs.edit().putBoolean(KEY_BG_OTHERS_IMAGES, isChecked).apply();
+            notifyBgChanged.run();
         });
 
         switchOthersGifs.setOnCheckedChangeListener((buttonView, isChecked) -> {
             prefs.edit().putBoolean(KEY_BG_OTHERS_GIFS, isChecked).apply();
+            notifyBgChanged.run();
         });
 
         setupHeader();
@@ -142,7 +145,8 @@ public class BackgroundsFragment extends Fragment {
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
-            activity.headerTitle.setText(getString(R.string.settings_backgrounds)); // "Фон профиля"
+            // ИСПРАВЛЕНИЕ: Теперь пишет "Настройки"
+            activity.headerTitle.setText(getString(R.string.header_settings_sub)); 
             
             activity.headerBackBtn.setVisibility(View.VISIBLE);
             activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow); 
