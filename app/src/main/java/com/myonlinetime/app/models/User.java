@@ -45,5 +45,6 @@ public class User {
     // === P2P МАГИЯ ИМЕН: Глобальный словарь для этого пользователя ===
     @SerializedName("resolvedNames")
     public Map<String, String> resolvedNames;
+    public boolean isNicknameConfirmed;
 
 }
