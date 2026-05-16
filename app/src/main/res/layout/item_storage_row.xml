@@ -11,11 +11,24 @@
     android:clickable="true"
     android:focusable="true">
 
-    <View
-        android:id="@+id/color_marker"
-        android:layout_width="12dp"
-        android:layout_height="12dp"
-        android:layout_marginEnd="12dp" />
+    <FrameLayout
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginEnd="8dp">
+
+        <View
+            android:id="@+id/color_marker"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+
+        <CheckBox
+            android:id="@+id/checkbox_marker"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center" />
+    </FrameLayout>
 
     <TextView
         android:id="@+id/text_category_name"
