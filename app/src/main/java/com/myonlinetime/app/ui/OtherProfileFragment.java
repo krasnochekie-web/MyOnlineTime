@@ -45,6 +45,7 @@ import java.util.Map;
 public class OtherProfileFragment extends Fragment {
 
     private ImageView avatarView;
+    private ImageView bgImageView; // Вынесли фон в класс
     private String targetUid = "";
     private String backTitle = "";
 
@@ -120,7 +121,7 @@ public class OtherProfileFragment extends Fragment {
         wrapper.setLayoutParams(originalView.getLayoutParams() != null ? originalView.getLayoutParams() : new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         originalView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        ImageView bgImageView = new ImageView(activity);
+        bgImageView = new ImageView(activity);
         bgImageView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         bgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
 
@@ -250,19 +251,14 @@ public class OtherProfileFragment extends Fragment {
 
         if (cachedUser != null) {
             renderOtherUserStats(cachedUser.topApps, cachedUser.totalTime, cachedUser.hiddenApps, cachedUser.appDescriptions, cachedUser.resolvedNames, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
-            if (cachedUser.background != null && cachedUser.background.length() > 5) {
-                Glide.with(activity).load(cachedUser.background).centerCrop().into(bgImageView);
-            } else {
-                bgImageView.setImageDrawable(null); 
-            }
+            updateBackgroundFromPrefs(activity, cachedUser.background); // Проверка тумблеров здесь
         }
 
-        // === ИСПРАВЛЕНИЕ: МГНОВЕННЫЙ ЗАПРОС ЦИФР И ПОДПИСОК (БЕЗ ЗАДЕРЖЕК) ===
         String cachedCounts = prefetchCountsCache.get(targetUid);
         if (cachedCounts != null) {
             applyCountsJson(cachedCounts);
         } else {
-            refreshCounts(activity); // Грузим сразу!
+            refreshCounts(activity); 
         }
 
         Boolean cachedFollow = prefetchFollowCache.get(targetUid);
@@ -281,7 +277,6 @@ public class OtherProfileFragment extends Fragment {
                 }
             });
         }
-        // =====================================================================
 
         btnExpand.setOnClickListener(v -> {
             btnExpand.setVisibility(View.GONE);
@@ -396,11 +391,7 @@ public class OtherProfileFragment extends Fragment {
                             if (user.photo != null && user.photo.length() > 5) handleMediaLoading(act, user.photo);
                             renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, user.resolvedNames, appsContainerLocal, act, weekTimeText, aboutView, btnExpand, btnCollapse);
 
-                            if (user.background != null && user.background.length() > 5) {
-                                Glide.with(act).load(user.background).centerCrop().into(bgImageView);
-                            } else {
-                                bgImageView.setImageDrawable(null); 
-                            }
+                            updateBackgroundFromPrefs(act, user.background); // И тут проверяем тумблеры
                         } else {
                             nameView.setText(act.getString(R.string.new_user));
                             if (listSpinner != null) listSpinner.setVisibility(View.GONE);
@@ -413,10 +404,34 @@ public class OtherProfileFragment extends Fragment {
             }
         };
         
-        // Откладываем только тяжелый парсинг профиля (чтобы не тормозить анимацию слайда)
         uiHandler.postDelayed(dataLoader, 200); 
 
         return wrapper; 
+    }
+
+    // === НОВЫЙ МЕТОД ДЛЯ ЧТЕНИЯ НАСТРОЕК (ЧУЖОЙ ПРОФИЛЬ) ===
+    private void updateBackgroundFromPrefs(MainActivity activity, String bgUrl) {
+        if (bgImageView == null || !isAdded()) return;
+        
+        SharedPreferences appPrefs = activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
+        boolean isGlobalEnabled = appPrefs.getBoolean("bg_global_enabled", true);
+        boolean isOthersEnabled = appPrefs.getBoolean("bg_others_profile_enabled", true);
+        boolean isOthersImages = appPrefs.getBoolean("bg_others_images_enabled", true);
+        boolean isOthersGifs = appPrefs.getBoolean("bg_others_gifs_enabled", true);
+        
+        boolean allowBg = true;
+        if (!isGlobalEnabled || !isOthersEnabled || bgUrl == null || bgUrl.length() < 5) allowBg = false;
+        else {
+             boolean isGif = bgUrl.toLowerCase().endsWith(".gif");
+             if (isGif && !isOthersGifs) allowBg = false;
+             if (!isGif && !isOthersImages) allowBg = false;
+        }
+
+        if (allowBg) {
+            Glide.with(activity).load(bgUrl).centerCrop().into(bgImageView);
+        } else {
+            bgImageView.setImageDrawable(null); 
+        }
     }
 
     private void applyCollapseSafely(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
@@ -488,7 +503,12 @@ public class OtherProfileFragment extends Fragment {
     public void onResume() {
         super.onResume();
         MainActivity activity = (MainActivity) getActivity();
-        if (activity != null && !isHidden()) refreshCounts(activity);
+        if (activity != null && !isHidden()) {
+            refreshCounts(activity);
+            // Если вернулись на профиль, чекаем настройки фона еще раз
+            User cachedUser = prefetchUserCache.get(targetUid);
+            if (cachedUser != null) updateBackgroundFromPrefs(activity, cachedUser.background);
+        }
         
         if (getView() != null) {
             TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
@@ -509,6 +529,10 @@ public class OtherProfileFragment extends Fragment {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
             refreshCounts(activity);
+            
+            // Если вернулись на профиль из-за кулис, чекаем настройки фона еще раз
+            User cachedUser = prefetchUserCache.get(targetUid);
+            if (cachedUser != null) updateBackgroundFromPrefs(activity, cachedUser.background);
             
             if (getView() != null) {
                 TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
