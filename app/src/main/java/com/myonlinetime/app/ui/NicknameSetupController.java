@@ -29,7 +29,7 @@ public class NicknameSetupController {
     private static final LinkedList<Long> textAttemptTimes = new LinkedList<>();
 
     public interface OnSetupCompleteListener {
-        void onComplete(String nickname); // Универсальный интерфейс с параметром
+        void onComplete(String nickname); 
     }
 
     public static View inflateAndSetup(LayoutInflater inflater, ViewGroup container, MainActivity activity, OnSetupCompleteListener listener) {
@@ -60,7 +60,6 @@ public class NicknameSetupController {
         if (defaultName.isEmpty() || defaultName.equals("...") || defaultName.equals("User")) {
             if (acct != null && acct.getDisplayName() != null) {
                 defaultName = acct.getDisplayName();
-                // Убираем потенциальные эмодзи из системного имени Google
                 defaultName = defaultName.replaceAll("[\\p{So}\\p{Cn}]", "").trim();
             }
         }
@@ -69,6 +68,9 @@ public class NicknameSetupController {
         inputName.setSelection(defaultName.length());
 
         btnSave.setOnClickListener(v -> {
+            // Логическая блокировка от двойных кликов (кнопка визуально не умирает, волна идет)
+            if (Boolean.TRUE.equals(btnSave.getTag())) return; 
+
             final String nickname = inputName.getText().toString().trim();
 
             if (nickname.isEmpty()) {
@@ -78,23 +80,20 @@ public class NicknameSetupController {
 
             if (isActionSpam(activity)) return;
 
-            btnSave.setEnabled(false);
-            btnSave.setText(R.string.loading);
+            // Вешаем флаг "В процессе"
+            btnSave.setTag(true);
 
             final long myUploadTicket = System.currentTimeMillis();
             activity.prefs.edit().putLong("active_upload_ticket", myUploadTicket).apply();
 
             if (activity.vpsToken != null) {
-                // 1. Проверяем на сервере, не занят ли никнейм
                 VpsApi.checkNickname(activity.vpsToken, nickname, new VpsApi.Callback() {
                     @Override
                     public void onSuccess(String result) {
-                        // 2. Сохраняем никнейм (передаем null для остальных полей, чтобы не стереть аву)
                         VpsApi.saveUserProfile(activity.vpsToken, nickname, null, null, null, myUploadTicket, new VpsApi.Callback() {
                             @Override
                             public void onSuccess(String saveResult) {
                                 activity.runOnUiThread(() -> {
-                                    // Сохраняем флаги и имя локально
                                     SharedPreferences.Editor editor = activity.prefs.edit();
                                     editor.putString("my_nickname", nickname);
                                     editor.putBoolean("is_nickname_confirmed", true);
@@ -116,8 +115,8 @@ public class NicknameSetupController {
                     public void onError(String error) { handleFailure(activity, btnSave, error, myUploadTicket); }
                 });
             } else {
-                btnSave.setEnabled(true);
-                btnSave.setText(R.string.btn_save_uppercase);
+                // Если нет токена, снимаем блокировку
+                btnSave.setTag(false);
             }
         });
 
@@ -148,10 +147,9 @@ public class NicknameSetupController {
 
     private static void handleFailure(MainActivity activity, Button btnSave, String error, long myUploadTicket) {
         activity.runOnUiThread(() -> {
-            btnSave.setEnabled(true);
-            btnSave.setText(R.string.btn_save_uppercase);
+            // Разблокируем кнопку при ошибке
+            btnSave.setTag(false);
             
-            // ИСПРАВЛЕНИЕ: Убрали лишний вызов .getSharedPreferences()
             long currentTicket = activity.prefs.getLong("active_upload_ticket", 0);
             if (currentTicket == myUploadTicket) {
                 activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
@@ -169,4 +167,4 @@ public class NicknameSetupController {
             Toast.makeText(activity, displayError, Toast.LENGTH_LONG).show();
         });
     }
-            }
+}
