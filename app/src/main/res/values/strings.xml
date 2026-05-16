@@ -19,7 +19,6 @@
 <string name="format_tooltip">%1$s: %2$.1f %3$s (%4$d%% of total)</string>
 <string name="title_clear_storage">Clear storage</string>
 <string name="btn_clear_data_confirm">Clear</string>
-<string name="btn_cancel">Cancel</string>
 	<string name="prompt_nickname_setup">Enter your name (nickname) to complete registration in My Online Time</string>
 <string name="hint_enter_nickname_setup">Enter your name (nickname)</string>
 <string name="err_nickname_empty">Nickname cannot be empty!</string>
