@@ -8,6 +8,7 @@
     <string name="feed">Feed</string>
     <string name="find">Find</string>
 	<string name="notif_offline_mode">(Offline)</string>
+	<string name="btn_clear_cache">Clear storage</string>
 	<string name="category_app">App</string>
 <string name="category_data">Data</string>
 <string name="category_cache">Cache</string>
