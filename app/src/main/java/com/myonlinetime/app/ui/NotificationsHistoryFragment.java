@@ -53,6 +53,9 @@ public class NotificationsHistoryFragment extends Fragment {
     private NotificationsAdapter adapter;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private boolean isReceiverRegistered = false;
+    
+    // Флаг для предотвращения рывков во время анимации
+    private boolean isTransitioning = false;
 
     // Срабатывает, когда кэш поменялся 
     private final SharedPreferences.OnSharedPreferenceChangeListener prefsListener = (sharedPrefs, key) -> {
@@ -141,6 +144,11 @@ public class NotificationsHistoryFragment extends Fragment {
             loadHistory(true, System.currentTimeMillis());
         });
 
+        // ИСПРАВЛЕНИЕ: Защита от рывков при первом открытии
+        isTransitioning = true;
+        uiHandler.postDelayed(() -> isTransitioning = false, 400); // 400 мс - время анимации
+        
+        if (loadingSpinner != null) loadingSpinner.setVisibility(View.VISIBLE);
         loadHistory(false, 0);
 
         return view;
@@ -182,7 +190,10 @@ public class NotificationsHistoryFragment extends Fragment {
 
                     final boolean finalHasUnread = hasUnread;
 
-                    uiHandler.post(() -> {
+                    // Ожидаем завершения анимации, если она еще идет
+                    long delay = isTransitioning ? 400 : 0;
+
+                    uiHandler.postDelayed(() -> {
                         if (!isAdded()) return;
 
                         if (!items.isEmpty()) {
@@ -204,7 +215,7 @@ public class NotificationsHistoryFragment extends Fragment {
                                 markAllAsRead(activity, array, cacheKey);
                             }
                         }
-                    });
+                    }, delay);
                 } catch (Exception e) { e.printStackTrace(); }
             });
         }
@@ -221,7 +232,8 @@ public class NotificationsHistoryFragment extends Fragment {
         boolean hasCache = !cachedJson.equals("[]") && cachedJson.length() > 5;
         
         if (hasCache) {
-            if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+            // ИСПРАВЛЕНИЕ: Не скрываем спиннер здесь! Он скроется сам в parseAndDisplayAsync, 
+            // когда пройдет задержка анимации. Иначе будет черный экран на 400мс.
             if (!isSwipeRefresh) {
                 parseAndDisplayAsync(cachedJson, activity, 0, false); 
             }
@@ -355,6 +367,13 @@ public class NotificationsHistoryFragment extends Fragment {
                 
                 final boolean finalHasUnread = hasUnread;
 
+                // ИСПРАВЛЕНИЕ: Ждем завершения анимации, если она еще не закончилась
+                long baseDelay = delayStopSpinner;
+                if (isTransitioning) {
+                    baseDelay = Math.max(baseDelay, 400); // Принудительно откладываем рендер
+                }
+                final long finalDelay = baseDelay;
+
                 uiHandler.postDelayed(() -> {
                     if (!isAdded()) return;
 
@@ -389,7 +408,7 @@ public class NotificationsHistoryFragment extends Fragment {
                             markAllAsRead(activity, array, getCacheKey());
                         }
                     }
-                }, delayStopSpinner);
+                }, finalDelay);
 
             } catch (Exception e) {
                 uiHandler.postDelayed(() -> { 
@@ -508,7 +527,16 @@ public class NotificationsHistoryFragment extends Fragment {
 
         if (!hidden) {
             setupHeader(); 
+            
+            // ИСПРАВЛЕНИЕ: Защита от рывков при возврате на экран
+            isTransitioning = true;
+            uiHandler.postDelayed(() -> isTransitioning = false, 400);
+            
+            if (loadingSpinner != null && recycler.getVisibility() != View.VISIBLE) {
+                loadingSpinner.setVisibility(View.VISIBLE);
+            }
             loadHistory(false, 0); 
+            
             if (hideBgRunnable == null) {
                 hideBgRunnable = () -> {
                     if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
