@@ -3,6 +3,7 @@ package com.myonlinetime.app.ui;
 import android.animation.ValueAnimator;
 import android.app.Dialog;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -20,7 +21,6 @@ import android.view.Window;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.CheckBox;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.ProgressBar;
@@ -30,6 +30,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
+import androidx.core.widget.CompoundButtonCompat;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
@@ -38,6 +39,9 @@ import com.myonlinetime.app.R;
 import com.myonlinetime.app.utils.Utils;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 
 public class ClearCacheFragment extends Fragment {
@@ -49,17 +53,30 @@ public class ClearCacheFragment extends Fragment {
     private TextView textTotalSize;
     private Button btnClear;
 
-    private long sizeApp = 0;
-    private long sizeData = 0;
-    private long sizeCache = 0;
-    private long sizeBg = 0;
     private boolean isGuest = true;
+    private List<StorageCategory> categories = new ArrayList<>();
 
     // Палитра для диаграммы
     private final int COLOR_APP = Color.parseColor("#4A90E2");
     private final int COLOR_DATA = Color.parseColor("#50E3C2");
     private final int COLOR_CACHE = Color.parseColor("#F5A623");
     private final int COLOR_BG = Color.parseColor("#B8E986");
+
+    // Класс для сортировки и управления чекбоксами
+    private static class StorageCategory {
+        String name;
+        long size;
+        int color;
+        int type; // 0=APP, 1=DATA, 2=CACHE, 3=BG
+        boolean isChecked = true;
+
+        StorageCategory(String name, long size, int color, int type) {
+            this.name = name;
+            this.size = size;
+            this.color = color;
+            this.type = type;
+        }
+    }
 
     @Nullable
     @Override
@@ -81,7 +98,7 @@ public class ClearCacheFragment extends Fragment {
 
         isGuest = (activity == null || activity.vpsToken == null);
 
-        btnClear.setOnClickListener(v -> showClearModal(activity));
+        btnClear.setOnClickListener(v -> showClearConfirmModal(activity));
 
         startCalculatingSizes(activity);
 
@@ -94,21 +111,20 @@ public class ClearCacheFragment extends Fragment {
         loadingSpinner.setVisibility(View.VISIBLE);
         contentLayout.setVisibility(View.GONE);
         listContainer.removeAllViews();
+        categories.clear();
 
         Utils.backgroundExecutor.execute(() -> {
+            long sizeApp = 0, sizeData = 0, sizeCache = 0, sizeBg = 0;
+
             try {
-                // 1. Приложение (размер APK)
                 File apkFile = new File(activity.getApplicationInfo().publicSourceDir);
                 sizeApp = apkFile.exists() ? apkFile.length() : 0;
 
-                // 2. Кэш
                 sizeCache = getDirSize(activity.getCacheDir());
                 if (activity.getExternalCacheDir() != null) {
                     sizeCache += getDirSize(activity.getExternalCacheDir());
                 }
 
-                // 3. Фоны (только если авторизован)
-                sizeBg = 0;
                 if (!isGuest) {
                     String uid = GoogleSignIn.getLastSignedInAccount(activity) != null ? GoogleSignIn.getLastSignedInAccount(activity).getId() : "";
                     File dir = activity.getFilesDir();
@@ -120,11 +136,20 @@ public class ClearCacheFragment extends Fragment {
                     }
                 }
 
-                // 4. Данные (Исключаем кэш и папку shared_prefs с токенами!)
                 long totalData = getAppDataSizeSafe(activity);
                 sizeData = Math.max(0, totalData - sizeBg);
 
             } catch (Exception e) { e.printStackTrace(); }
+
+            categories.add(new StorageCategory(getString(R.string.category_app), sizeApp, COLOR_APP, 0));
+            categories.add(new StorageCategory(getString(R.string.category_data), sizeData, COLOR_DATA, 1));
+            categories.add(new StorageCategory(getString(R.string.category_cache), sizeCache, COLOR_CACHE, 2));
+            if (!isGuest) {
+                categories.add(new StorageCategory(getString(R.string.category_backgrounds), sizeBg, COLOR_BG, 3));
+            }
+
+            // Сортируем от большего к меньшему
+            Collections.sort(categories, (a, b) -> Long.compare(b.size, a.size));
 
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (!isAdded()) return;
@@ -136,51 +161,79 @@ public class ClearCacheFragment extends Fragment {
     }
 
     private void renderDashboard() {
-        long totalSize = sizeApp + sizeData + sizeCache + (isGuest ? 0 : sizeBg);
-        double totalMb = totalSize / (1024.0 * 1024.0);
+        long totalSize = 0;
+        for (StorageCategory cat : categories) totalSize += cat.size;
         
+        double totalMb = totalSize / (1024.0 * 1024.0);
         textTotalSize.setText(String.format(getString(R.string.format_size_mb), totalMb, ""));
 
-        float[] values = isGuest ? new float[]{sizeApp, sizeData, sizeCache} : new float[]{sizeApp, sizeData, sizeCache, sizeBg};
-        int[] colors = isGuest ? new int[]{COLOR_APP, COLOR_DATA, COLOR_CACHE} : new int[]{COLOR_APP, COLOR_DATA, COLOR_CACHE, COLOR_BG};
-        
+        float[] values = new float[categories.size()];
+        int[] colors = new int[categories.size()];
+        for (int i = 0; i < categories.size(); i++) {
+            values[i] = categories.get(i).size;
+            colors[i] = categories.get(i).color;
+            buildListItem(categories.get(i), totalSize);
+        }
         donutChart.setData(values, colors);
 
-        buildListItem(getString(R.string.category_app), sizeApp, totalSize, COLOR_APP);
-        buildListItem(getString(R.string.category_data), sizeData, totalSize, COLOR_DATA);
-        buildListItem(getString(R.string.category_cache), sizeCache, totalSize, COLOR_CACHE);
-        if (!isGuest) {
-            buildListItem(getString(R.string.category_backgrounds), sizeBg, totalSize, COLOR_BG);
-        }
-
-        // Строка "Всего"
         buildTotalItem(getString(R.string.category_total), totalSize);
     }
 
-    // === ИСПРАВЛЕНИЕ: Инфлейтим XML вместо хардкода UI в Java ===
-    private void buildListItem(String name, long size, long total, int color) {
-        if (size <= 0) return;
+    private void buildListItem(StorageCategory category, long totalSize) {
+        if (category.size <= 0) return;
         
         View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_storage_row, listContainer, false);
         
         View marker = row.findViewById(R.id.color_marker);
+        CheckBox cb = row.findViewById(R.id.checkbox_marker);
         TextView txtName = row.findViewById(R.id.text_category_name);
         TextView txtSize = row.findViewById(R.id.text_category_size);
+
+        int percent = (int) Math.round((double) category.size / totalSize * 100);
+        txtName.setText(String.format("%s %s", category.name, getString(R.string.format_percent, percent)));
         
-        GradientDrawable markerDrawable = new GradientDrawable();
-        markerDrawable.setShape(GradientDrawable.OVAL);
-        markerDrawable.setColor(color);
-        marker.setBackground(markerDrawable);
-        
-        int percent = (int) Math.round((double) size / total * 100);
-        txtName.setText(String.format("%s %s", name, getString(R.string.format_percent, percent)));
-        
-        double sizeMb = size / (1024.0 * 1024.0);
+        double sizeMb = category.size / (1024.0 * 1024.0);
         txtSize.setText(getString(R.string.format_size_mb, sizeMb, getString(R.string.unit_mb)));
 
-        // ИСТИННОЕ ОБЛАЧКО
+        // Если это Приложение (type == 0), показываем только цветной кружок
+        if (category.type == 0) {
+            cb.setVisibility(View.GONE);
+            marker.setVisibility(View.VISIBLE);
+            
+            GradientDrawable markerDrawable = new GradientDrawable();
+            markerDrawable.setShape(GradientDrawable.OVAL);
+            markerDrawable.setColor(category.color);
+            marker.setBackground(markerDrawable);
+        } else {
+            // Для всех остальных показываем чекбокс цвета категории
+            marker.setVisibility(View.GONE);
+            cb.setVisibility(View.VISIBLE);
+            CompoundButtonCompat.setButtonTintList(cb, ColorStateList.valueOf(category.color));
+            cb.setChecked(category.isChecked);
+            
+            cb.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                category.isChecked = isChecked;
+            });
+            
+            // Если кликнули по всей строке, меняем состояние чекбокса (плюс показываем облачко)
+            row.setOnClickListener(v -> {
+                cb.setChecked(!cb.isChecked());
+                String msg = getString(R.string.format_tooltip, category.name, sizeMb, getString(R.string.unit_mb), percent);
+                showCloudTooltip(v, msg);
+            });
+            
+            // Если кликнули только по самому чекбоксу, показываем облачко
+            cb.setOnClickListener(v -> {
+                String msg = getString(R.string.format_tooltip, category.name, sizeMb, getString(R.string.unit_mb), percent);
+                showCloudTooltip(row, msg);
+            });
+            
+            listContainer.addView(row);
+            return; // Выходим, так как клик-листенер уже назначен
+        }
+
         row.setOnClickListener(v -> {
-            String msg = getString(R.string.format_tooltip, name, sizeMb, getString(R.string.unit_mb), percent);
+            String msg = getString(R.string.format_tooltip, category.name, sizeMb, getString(R.string.unit_mb), percent);
             showCloudTooltip(v, msg);
         });
 
@@ -190,17 +243,14 @@ public class ClearCacheFragment extends Fragment {
     private void buildTotalItem(String name, long totalSize) {
         View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_storage_row, listContainer, false);
         
-        View marker = row.findViewById(R.id.color_marker);
-        TextView txtName = row.findViewById(R.id.text_category_name);
-        TextView txtSize = row.findViewById(R.id.text_category_size);
-        
-        marker.setVisibility(View.GONE);
+        row.findViewById(R.id.color_marker).setVisibility(View.GONE);
+        row.findViewById(R.id.checkbox_marker).setVisibility(View.GONE);
         
         row.setClickable(false);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            row.setForeground(null);
-        }
         row.setBackgroundColor(Color.TRANSPARENT);
+
+        TextView txtName = row.findViewById(R.id.text_category_name);
+        TextView txtSize = row.findViewById(R.id.text_category_size);
 
         txtName.setText(name);
         txtName.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -214,7 +264,6 @@ public class ClearCacheFragment extends Fragment {
         listContainer.addView(row);
     }
 
-    // === КАСТОМНОЕ ОБЛАЧКО (POPUP WINDOW) ===
     private void showCloudTooltip(View anchor, String message) {
         TextView tv = new TextView(requireContext());
         tv.setText(message);
@@ -243,8 +292,17 @@ public class ClearCacheFragment extends Fragment {
         popupWindow.showAsDropDown(anchor, xOffset, yOffset);
     }
 
-    // === КАСТОМНОЕ МОДАЛЬНОЕ ОКНО ОЧИСТКИ ===
-    private void showClearModal(MainActivity activity) {
+    private void showClearConfirmModal(MainActivity activity) {
+        boolean anythingSelected = false;
+        for (StorageCategory cat : categories) {
+            if (cat.type > 0 && cat.isChecked) anythingSelected = true;
+        }
+
+        if (!anythingSelected) {
+            Toast.makeText(activity, "Нет выбранных категорий", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         final Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         
@@ -265,26 +323,11 @@ public class ClearCacheFragment extends Fragment {
         title.setPadding(0, 0, 0, 40);
         dialogLayout.addView(title);
 
-        CheckBox cbCache = new CheckBox(activity);
-        cbCache.setText(R.string.category_cache);
-        cbCache.setTextColor(ContextCompat.getColor(activity, R.color.textDynamic));
-        cbCache.setChecked(true);
-        dialogLayout.addView(cbCache);
-
-        CheckBox cbData = new CheckBox(activity);
-        cbData.setText(R.string.category_data);
-        cbData.setTextColor(ContextCompat.getColor(activity, R.color.textDynamic));
-        dialogLayout.addView(cbData);
-
-        CheckBox cbBg = new CheckBox(activity);
-        cbBg.setText(R.string.category_backgrounds);
-        cbBg.setTextColor(ContextCompat.getColor(activity, R.color.textDynamic));
-        if (isGuest) {
-            cbBg.setVisibility(View.GONE);
-        } else {
-            cbBg.setChecked(true);
-            dialogLayout.addView(cbBg);
-        }
+        TextView message = new TextView(activity);
+        message.setText("Очистить выбранные данные?"); // Здесь можно вынести в strings
+        message.setTextColor(ContextCompat.getColor(activity, R.color.textDynamic));
+        message.setTextSize(16f);
+        dialogLayout.addView(message);
 
         LinearLayout btnLayout = new LinearLayout(activity);
         btnLayout.setOrientation(LinearLayout.HORIZONTAL);
@@ -310,15 +353,15 @@ public class ClearCacheFragment extends Fragment {
             dialog.dismiss();
 
             Utils.backgroundExecutor.execute(() -> {
-                if (cbCache.isChecked()) {
-                    deleteDir(activity.getCacheDir());
-                    if (activity.getExternalCacheDir() != null) deleteDir(activity.getExternalCacheDir());
-                }
-                if (cbData.isChecked()) {
-                    clearAppDataSafe(activity);
-                }
-                if (cbBg.isChecked() && !isGuest) {
-                    activity.deleteMyBackgroundLocal();
+                for (StorageCategory cat : categories) {
+                    if (cat.isChecked) {
+                        if (cat.type == 2) { // Кэш
+                            deleteDir(activity.getCacheDir());
+                            if (activity.getExternalCacheDir() != null) deleteDir(activity.getExternalCacheDir());
+                        }
+                        if (cat.type == 1) clearAppDataSafe(activity); // Данные
+                        if (cat.type == 3 && !isGuest) activity.deleteMyBackgroundLocal(); // Фоны
+                    }
                 }
                 new Handler(Looper.getMainLooper()).post(() -> startCalculatingSizes(activity));
             });
@@ -336,9 +379,6 @@ public class ClearCacheFragment extends Fragment {
         dialog.show();
     }
 
-    // ==========================================
-    // БЕЗОПАСНАЯ ОЧИСТКА ДАННЫХ (БЕЗ РАЗЛОГИНА)
-    // ==========================================
     private long getAppDataSizeSafe(Context context) {
         long size = 0;
         File dataDir = new File(context.getApplicationInfo().dataDir);
@@ -346,7 +386,6 @@ public class ClearCacheFragment extends Fragment {
             File[] files = dataDir.listFiles();
             if (files != null) {
                 for (File f : files) {
-                    // Пропускаем кэш и папку shared_prefs (там токены авторизации)
                     if (f.getName().equals("cache") || f.getName().equals("code_cache") || f.getName().equals("shared_prefs")) continue;
                     size += getDirSize(f);
                 }
@@ -361,7 +400,6 @@ public class ClearCacheFragment extends Fragment {
             File[] files = dataDir.listFiles();
             if (files != null) {
                 for (File f : files) {
-                    // Ни в коем случае не удаляем shared_prefs, чтобы юзер остался в аккаунте
                     if (f.getName().equals("cache") || f.getName().equals("code_cache") || f.getName().equals("shared_prefs")) continue;
                     deleteDir(f);
                 }
@@ -404,7 +442,7 @@ public class ClearCacheFragment extends Fragment {
     private void setupHeader(MainActivity activity) {
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
-            activity.headerTitle.setText(getString(R.string.title_clear_storage)); 
+            activity.headerTitle.setText(getString(R.string.header_settings_sub)); 
             activity.headerBackBtn.setVisibility(View.VISIBLE);
             activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow);
         }
@@ -454,8 +492,9 @@ public class ClearCacheFragment extends Fragment {
         private void init() {
             paint = new Paint(Paint.ANTI_ALIAS_FLAG);
             paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeCap(Paint.Cap.ROUND);
-            paint.setStrokeWidth(65f); // Идеальная толщина кольца
+            // ИСПРАВЛЕНИЕ: Резкие края вместо скругленных
+            paint.setStrokeCap(Paint.Cap.BUTT); 
+            paint.setStrokeWidth(65f);
             rectF = new RectF();
         }
 
@@ -465,7 +504,6 @@ public class ClearCacheFragment extends Fragment {
             total = 0;
             for (float v : values) total += v;
 
-            // Плавная анимация закручивания
             ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
             animator.setDuration(1200);
             animator.setInterpolator(new DecelerateInterpolator());
@@ -492,9 +530,9 @@ public class ClearCacheFragment extends Fragment {
                 paint.setColor(colors[i]);
                 float sweepAngle = (values[i] / total) * 360f * animationProgress;
                 
-                // Чтобы округлые края разных дуг не наслаивались криво друг на друга
+                // Рисуем резкие секторы без отступов, чтобы они стыковались идеально
                 if (sweepAngle > 0) {
-                    canvas.drawArc(rectF, startAngle, sweepAngle - 2f, false, paint);
+                    canvas.drawArc(rectF, startAngle, sweepAngle, false, paint);
                 }
                 startAngle += sweepAngle;
             }
