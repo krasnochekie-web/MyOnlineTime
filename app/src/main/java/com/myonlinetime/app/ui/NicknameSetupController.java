@@ -8,6 +8,8 @@ import android.text.Spanned;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
@@ -77,6 +79,12 @@ public class NicknameSetupController {
 
             if (isActionSpam(activity)) return;
 
+            // Прячем клавиатуру принудительно
+            InputMethodManager imm = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.hideSoftInputFromWindow(inputName.getWindowToken(), 0);
+            }
+
             btnSave.setTag(true);
 
             final long myUploadTicket = System.currentTimeMillis();
@@ -97,10 +105,12 @@ public class NicknameSetupController {
 
                                     activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
 
+                                    // Быстрая и плавная анимация отъезда
                                     setupView.animate()
                                             .translationX(setupView.getWidth())
                                             .alpha(0f)
-                                            .setDuration(350)
+                                            .setDuration(250)
+                                            .setInterpolator(new AccelerateDecelerateInterpolator())
                                             .withEndAction(() -> {
                                                 setupView.setVisibility(View.GONE);
                                                 LocalBroadcastManager.getInstance(activity)
