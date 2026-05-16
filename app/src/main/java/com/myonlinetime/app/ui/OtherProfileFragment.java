@@ -7,6 +7,7 @@ import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -45,7 +46,7 @@ import java.util.Map;
 public class OtherProfileFragment extends Fragment {
 
     private ImageView avatarView;
-    private ImageView bgImageView; // Вынесли фон в класс
+    private ImageView bgImageView; 
     private String targetUid = "";
     private String backTitle = "";
 
@@ -124,6 +125,9 @@ public class OtherProfileFragment extends Fragment {
         bgImageView = new ImageView(activity);
         bgImageView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         bgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        
+        // СТАВИМ ЩИТ: Сразу заливаем фон цветом приложения, чтобы чужие фоны не просвечивали снизу
+        bgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
 
         wrapper.addView(bgImageView);
         wrapper.addView(originalView);
@@ -251,7 +255,7 @@ public class OtherProfileFragment extends Fragment {
 
         if (cachedUser != null) {
             renderOtherUserStats(cachedUser.topApps, cachedUser.totalTime, cachedUser.hiddenApps, cachedUser.appDescriptions, cachedUser.resolvedNames, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
-            updateBackgroundFromPrefs(activity, cachedUser.background); // Проверка тумблеров здесь
+            updateBackgroundFromPrefs(activity, cachedUser.background); 
         }
 
         String cachedCounts = prefetchCountsCache.get(targetUid);
@@ -391,7 +395,7 @@ public class OtherProfileFragment extends Fragment {
                             if (user.photo != null && user.photo.length() > 5) handleMediaLoading(act, user.photo);
                             renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, user.resolvedNames, appsContainerLocal, act, weekTimeText, aboutView, btnExpand, btnCollapse);
 
-                            updateBackgroundFromPrefs(act, user.background); // И тут проверяем тумблеры
+                            updateBackgroundFromPrefs(act, user.background); 
                         } else {
                             nameView.setText(act.getString(R.string.new_user));
                             if (listSpinner != null) listSpinner.setVisibility(View.GONE);
@@ -409,7 +413,6 @@ public class OtherProfileFragment extends Fragment {
         return wrapper; 
     }
 
-    // === НОВЫЙ МЕТОД ДЛЯ ЧТЕНИЯ НАСТРОЕК (ЧУЖОЙ ПРОФИЛЬ) ===
     private void updateBackgroundFromPrefs(MainActivity activity, String bgUrl) {
         if (bgImageView == null || !isAdded()) return;
         
@@ -430,7 +433,8 @@ public class OtherProfileFragment extends Fragment {
         if (allowBg) {
             Glide.with(activity).load(bgUrl).centerCrop().into(bgImageView);
         } else {
-            bgImageView.setImageDrawable(null); 
+            // ФРАНКЕНШТЕЙН УНИЧТОЖЕН: Глухой цвет приложения вместо прозрачности!
+            bgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
         }
     }
 
@@ -505,7 +509,6 @@ public class OtherProfileFragment extends Fragment {
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null && !isHidden()) {
             refreshCounts(activity);
-            // Если вернулись на профиль, чекаем настройки фона еще раз
             User cachedUser = prefetchUserCache.get(targetUid);
             if (cachedUser != null) updateBackgroundFromPrefs(activity, cachedUser.background);
         }
@@ -530,7 +533,6 @@ public class OtherProfileFragment extends Fragment {
             activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
             refreshCounts(activity);
             
-            // Если вернулись на профиль из-за кулис, чекаем настройки фона еще раз
             User cachedUser = prefetchUserCache.get(targetUid);
             if (cachedUser != null) updateBackgroundFromPrefs(activity, cachedUser.background);
             
