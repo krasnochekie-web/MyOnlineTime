@@ -3,8 +3,10 @@ package com.myonlinetime.app.ui;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.text.Editable;
 import android.text.InputFilter;
 import android.text.Spanned;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -40,6 +42,7 @@ public class NicknameSetupController {
         final EditText inputName = setupView.findViewById(R.id.setup_nickname_input);
         final Button btnSave = setupView.findViewById(R.id.setup_nickname_save_btn);
 
+        // Фильтр от иероглифов и непечатных символов
         InputFilter exoticFilter = new InputFilter() {
             @Override
             public CharSequence filter(CharSequence source, int start, int end, Spanned dest, int dstart, int dend) {
@@ -55,19 +58,39 @@ public class NicknameSetupController {
         };
         inputName.setFilters(new InputFilter[]{ exoticFilter, new InputFilter.LengthFilter(16) });
 
-        GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
-        String defaultName = activity.prefs.getString("my_nickname", "");
-        if (defaultName.isEmpty() || defaultName.equals("...") || defaultName.equals("User")) {
-            if (acct != null && acct.getDisplayName() != null) {
-                defaultName = acct.getDisplayName();
-                defaultName = defaultName.replaceAll("[\\p{So}\\p{Cn}]", "").trim();
+        // === ИСПРАВЛЕНИЕ: ЧЕРНОВИК НИКНЕЙМА ===
+        // Проверяем, не начал ли пользователь вводить никнейм на другом экране
+        String draftNickname = activity.prefs.getString("draft_setup_nickname", null);
+        
+        if (draftNickname != null) {
+            inputName.setText(draftNickname);
+            inputName.setSelection(draftNickname.length());
+        } else {
+            // Подтягиваем дефолтное имя из Google только если черновик пуст
+            GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
+            String defaultName = activity.prefs.getString("my_nickname", "");
+            if (defaultName.isEmpty() || defaultName.equals("...") || defaultName.equals("User")) {
+                if (acct != null && acct.getDisplayName() != null) {
+                    defaultName = acct.getDisplayName();
+                    defaultName = defaultName.replaceAll("[\\p{So}\\p{Cn}]", "").trim();
+                }
             }
+            if (defaultName.length() > 16) defaultName = defaultName.substring(0, 16);
+            inputName.setText(defaultName);
+            inputName.setSelection(defaultName.length());
         }
-        if (defaultName.length() > 16) defaultName = defaultName.substring(0, 16);
-        inputName.setText(defaultName);
-        inputName.setSelection(defaultName.length());
+
+        // Сохраняем каждую введенную букву в фоне, чтобы синхронизировать между вкладками
+        inputName.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(Editable s) {
+                activity.prefs.edit().putString("draft_setup_nickname", s.toString()).apply();
+            }
+        });
 
         btnSave.setOnClickListener(v -> {
+            // Логическая блокировка от двойных кликов (кнопка визуально не умирает, волна идет)
             if (Boolean.TRUE.equals(btnSave.getTag())) return; 
 
             final String nickname = inputName.getText().toString().trim();
@@ -85,6 +108,7 @@ public class NicknameSetupController {
                 imm.hideSoftInputFromWindow(inputName.getWindowToken(), 0);
             }
 
+            // Вешаем флаг "В процессе"
             btnSave.setTag(true);
 
             final long myUploadTicket = System.currentTimeMillis();
@@ -101,11 +125,12 @@ public class NicknameSetupController {
                                     SharedPreferences.Editor editor = activity.prefs.edit();
                                     editor.putString("my_nickname", nickname);
                                     editor.putBoolean("is_nickname_confirmed", true);
+                                    editor.remove("draft_setup_nickname"); // Удаляем черновик после успешного сохранения!
                                     editor.apply();
 
                                     activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
 
-                                    // Быстрая и плавная анимация отъезда
+                                    // Быстрая и плавная анимация отъезда ВПРАВО
                                     setupView.animate()
                                             .translationX(setupView.getWidth())
                                             .alpha(0f)
@@ -127,6 +152,7 @@ public class NicknameSetupController {
                     public void onError(String error) { handleFailure(activity, btnSave, error, myUploadTicket); }
                 });
             } else {
+                // Если нет токена, снимаем блокировку
                 btnSave.setTag(false);
             }
         });
@@ -158,6 +184,7 @@ public class NicknameSetupController {
 
     private static void handleFailure(MainActivity activity, Button btnSave, String error, long myUploadTicket) {
         activity.runOnUiThread(() -> {
+            // Разблокируем кнопку при ошибке
             btnSave.setTag(false);
             
             long currentTicket = activity.prefs.getLong("active_upload_ticket", 0);
