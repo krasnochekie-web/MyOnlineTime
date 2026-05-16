@@ -7,7 +7,7 @@
     android:background="@color/bgDynamic" 
     android:clickable="true" 
     android:focusable="true"
-    android:paddingTop="40dp" 
+    android:paddingTop="110dp" 
     android:clipToPadding="false"
     android:paddingLeft="24dp"
     android:paddingRight="24dp"> 
@@ -52,7 +52,7 @@
         android:paddingRight="16dp" 
         android:paddingTop="14dp"
         android:paddingBottom="14dp"
-        android:layout_marginBottom="32dp"
+        android:layout_marginBottom="24dp"
         android:singleLine="true"/>
     
     <Button
