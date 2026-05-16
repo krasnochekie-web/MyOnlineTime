@@ -7,7 +7,7 @@
     android:background="@color/bgDynamic" 
     android:clickable="true" 
     android:focusable="true"
-    android:paddingTop="110dp" 
+    android:paddingTop="150dp" 
     android:clipToPadding="false"
     android:paddingLeft="24dp"
     android:paddingRight="24dp"> 
