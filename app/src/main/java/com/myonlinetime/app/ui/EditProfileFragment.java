@@ -4,6 +4,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.fragment.app.Fragment;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
@@ -155,7 +156,7 @@ public class EditProfileFragment extends Fragment {
         View btnChangePhoto = view.findViewById(R.id.btn_change_photo);
         View btnChangeBackground = view.findViewById(R.id.btn_change_background);
         ImageView avatarPreview = view.findViewById(R.id.edit_avatar_preview);
-        Button btnSave = view.findViewById(R.id.btn_save_changes);
+        final Button btnSave = view.findViewById(R.id.btn_save_changes);
 
         InputFilter exoticFilter = new InputFilter() {
             @Override
@@ -228,6 +229,8 @@ public class EditProfileFragment extends Fragment {
         }
 
         btnSave.setOnClickListener(v -> { 
+            if (Boolean.TRUE.equals(btnSave.getTag())) return;
+
              final String n = inputName.getText().toString().trim();
              final String a = inputAbout.getText().toString().trim();
 
@@ -243,17 +246,18 @@ public class EditProfileFragment extends Fragment {
 
              if (isActionSpam(pendingPhotoFile != null || pendingBgFile != null)) return; 
              
-             btnSave.setEnabled(false); 
+             btnSave.setTag(true);
 
-             String uid = acct.getId();
-             File finalBgFile = pendingBgFile;
-             File finalPhotoFile = pendingPhotoFile;
+             final String capturedToken = activity.vpsToken;
+             final String currentUid = acct.getId();
+             final File finalBgFile = pendingBgFile;
+             final File finalPhotoFile = pendingPhotoFile;
 
              final long myGeneration = ++currentUploadGeneration;
              final long myUploadTicket = System.currentTimeMillis();
              activity.prefs.edit().putLong("active_upload_ticket", myUploadTicket).apply();
 
-             Runnable performOptimisticSaveAndUpload = () -> {
+             Runnable applyOptimisticAndUpload = () -> {
                  SharedPreferences.Editor editor = activity.prefs.edit();
                  editor.putString("my_nickname", n);
                  editor.putString("my_about", a);
@@ -262,23 +266,23 @@ public class EditProfileFragment extends Fragment {
                      File[] files = activity.getFilesDir().listFiles();
                      if (files != null) {
                          for (File f : files) {
-                             if (finalPhotoFile != null && f.getName().startsWith("avatar_" + uid)) f.delete();
-                             if (finalBgFile != null && f.getName().startsWith("my_bg_" + uid)) f.delete();
+                             if (finalPhotoFile != null && f.getName().startsWith("avatar_" + currentUid)) f.delete();
+                             if (finalBgFile != null && f.getName().startsWith("my_bg_" + currentUid)) f.delete();
                          }
                      }
                  }
 
                  if (finalPhotoFile != null) {
-                     File pPath = new File(activity.getFilesDir(), "avatar_" + uid + "_" + System.currentTimeMillis() + ".png");
+                     File pPath = new File(activity.getFilesDir(), "avatar_" + currentUid + "_" + System.currentTimeMillis() + ".png");
                      try { copyFile(finalPhotoFile, pPath); } catch (Exception ignored) {}
-                     editor.putString("custom_avatar_path_" + uid, pPath.getAbsolutePath());
+                     editor.putString("custom_avatar_path_" + currentUid, pPath.getAbsolutePath());
                  }
                  
                  if (finalBgFile != null) {
                      String ext = finalBgFile.getName().endsWith(".gif") ? ".gif" : ".jpg";
-                     File bPath = new File(activity.getFilesDir(), "my_bg_" + uid + "_" + System.currentTimeMillis() + ext);
+                     File bPath = new File(activity.getFilesDir(), "my_bg_" + currentUid + "_" + System.currentTimeMillis() + ext);
                      try { copyFile(finalBgFile, bPath); } catch (Exception ignored) {}
-                     editor.putString("custom_bg_path_" + uid, bPath.getAbsolutePath());
+                     editor.putString("custom_bg_path_" + currentUid, bPath.getAbsolutePath());
                  }
                  
                  editor.apply();
@@ -287,7 +291,7 @@ public class EditProfileFragment extends Fragment {
                  EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
 
                  if (finalPhotoFile != null) {
-                     activity.mMemoryCache.remove("avatar_" + uid);
+                     activity.mMemoryCache.remove("avatar_" + currentUid);
                      activity.updateAvatarInUI();
                  }
 
@@ -304,98 +308,27 @@ public class EditProfileFragment extends Fragment {
                          if (myGeneration != currentUploadGeneration) return;
 
                          if (finalPhotoFile != null && finalPhotoFile.exists()) {
-                             serverUploadPhoto = new File(activity.getCacheDir(), "server_upload_avatar_" + uid + (finalPhotoFile.getName().endsWith(".gif") ? ".gif" : ".png"));
+                             serverUploadPhoto = new File(activity.getCacheDir(), "server_upload_avatar_" + currentUid + (finalPhotoFile.getName().endsWith(".gif") ? ".gif" : ".png"));
                              copyFile(finalPhotoFile, serverUploadPhoto);
                          }
                          if (finalBgFile != null && finalBgFile.exists()) {
-                             serverUploadBg = new File(activity.getCacheDir(), "server_upload_bg_" + uid + (finalBgFile.getName().endsWith(".gif") ? ".gif" : ".jpg"));
+                             serverUploadBg = new File(activity.getCacheDir(), "server_upload_bg_" + currentUid + (finalBgFile.getName().endsWith(".gif") ? ".gif" : ".jpg"));
                              copyFile(finalBgFile, serverUploadBg);
                          }
                      } catch (Exception e) { e.printStackTrace(); }
 
-                     final File isolatedPhoto = serverUploadPhoto;
-                     final File isolatedBg = serverUploadBg;
-
-                     if (activity.vpsToken != null) {
-                         VpsApi.saveUserProfile(activity.vpsToken, n, a, isolatedPhoto, isolatedBg, myUploadTicket, new VpsApi.Callback() {
-                             @Override 
-                             public void onSuccess(String result) {
-                                 long currentTicket = activity.prefs.getLong("active_upload_ticket", 0);
-                                 if (myGeneration != currentUploadGeneration || currentTicket != myUploadTicket) {
-                                     cleanupFiles(isolatedPhoto, isolatedBg);
-                                     return;
-                                 }
-
-                                 try {
-                                     JSONObject json = new JSONObject(result);
-                                     
-                                     if ("ignored".equals(json.optString("status"))) {
-                                         cleanupFiles(isolatedPhoto, isolatedBg);
-                                         return;
-                                     }
-                                     
-                                     activity.runOnUiThread(() -> {
-                                         SharedPreferences.Editor successEditor = activity.prefs.edit();
-                                         
-                                         if (finalPhotoFile != null) {
-                                             String newPhotoUrl = json.optString("photoUrl", json.optString("photo", null));
-                                             if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null") && newPhotoUrl.startsWith("http")) {
-                                                 if (newPhotoUrl.contains("?")) newPhotoUrl = newPhotoUrl.substring(0, newPhotoUrl.indexOf("?"));
-                                                 successEditor.putString("my_photo_base64", newPhotoUrl);
-                                                 successEditor.putString("synced_photo_url_" + uid, newPhotoUrl);
-                                             }
-                                         }
-
-                                         if (finalBgFile != null) {
-                                             String newBgUrl = json.optString("backgroundUrl", json.optString("background", null));
-                                             if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null") && newBgUrl.startsWith("http")) {
-                                                 if (newBgUrl.contains("?")) newBgUrl = newBgUrl.substring(0, newBgUrl.indexOf("?"));
-                                                 successEditor.putString("my_bg_base64", newBgUrl);
-                                                 successEditor.putString("synced_bg_url_" + uid, newBgUrl); 
-                                             }
-                                         }
-
-                                         successEditor.apply();
-                                         activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
-                                         EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
-                                         if (myGeneration == currentUploadGeneration) EditProfileFragment.isProfileUploading = false;
-                                         LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
-                                     });
-                                 } catch (Exception ignored) {} 
-                                 finally { cleanupFiles(isolatedPhoto, isolatedBg); }
-                             }
-                             @Override public void onError(String error) {
-                                 if (myGeneration == currentUploadGeneration) {
-                                     EditProfileFragment.isProfileUploading = false;
-                                     long currentTicket = activity.prefs.getLong("active_upload_ticket", 0);
-                                     if (currentTicket == myUploadTicket) {
-                                         activity.prefs.edit().putLong("active_upload_ticket", 0).apply(); 
-                                     }
-                                 }
-                                 cleanupFiles(isolatedPhoto, isolatedBg);
-                             }
-                         });
-                     } else {
-                         if (myGeneration == currentUploadGeneration) {
-                             EditProfileFragment.isProfileUploading = false;
-                             activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
-                         }
-                     }
+                     executeFinalUpload(capturedToken, currentUid, n, a, serverUploadPhoto, serverUploadBg, myUploadTicket, myGeneration, activity);
                  });
              };
 
-             if (!n.equals(initialName) && activity.vpsToken != null) {
-                 VpsApi.checkNickname(activity.vpsToken, n, new VpsApi.Callback() {
+             if (capturedToken != null && !n.equals(initialName)) {
+                 VpsApi.checkNickname(capturedToken, n, new VpsApi.Callback() {
                      @Override public void onSuccess(String result) {
-                         activity.runOnUiThread(performOptimisticSaveAndUpload);
+                         activity.runOnUiThread(applyOptimisticAndUpload);
                      }
                      @Override public void onError(String error) {
                          activity.runOnUiThread(() -> {
-                             btnSave.setEnabled(true);
-                             if (myGeneration == currentUploadGeneration) {
-                                 EditProfileFragment.isProfileUploading = false;
-                                 activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
-                             }
+                             btnSave.setTag(false);
                              String displayError = activity.getString(R.string.err_server);
                              try {
                                  if (error.contains("{")) {
@@ -407,15 +340,76 @@ public class EditProfileFragment extends Fragment {
                          });
                      }
                  });
+             } else if (capturedToken != null) {
+                 applyOptimisticAndUpload.run();
              } else {
-                 performOptimisticSaveAndUpload.run();
+                 btnSave.setTag(false);
              }
         });
 
         return view;
     }
 
-    // === ВЕРНУЛИ КРИТИЧЕСКИ ВАЖНУЮ ФУНКЦИЮ ===
+    private void executeFinalUpload(String token, String targetUid, String nickname, String about, File photo, File bg, long ticket, long generation, MainActivity activity) {
+        VpsApi.saveUserProfile(token, nickname, about, photo, bg, ticket, new VpsApi.Callback() {
+            @Override 
+            public void onSuccess(String result) {
+                long currentTicket = activity.prefs.getLong("active_upload_ticket", 0);
+                if (generation != currentUploadGeneration || currentTicket != ticket) {
+                    cleanupFiles(photo, bg);
+                    return;
+                }
+
+                try {
+                    JSONObject json = new JSONObject(result);
+                    if ("ignored".equals(json.optString("status"))) {
+                        cleanupFiles(photo, bg);
+                        return;
+                    }
+                    
+                    activity.runOnUiThread(() -> {
+                        SharedPreferences.Editor successEditor = activity.prefs.edit();
+                        
+                        if (photo != null) {
+                            String newPhotoUrl = json.optString("photoUrl", json.optString("photo", null));
+                            if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null") && newPhotoUrl.startsWith("http")) {
+                                if (newPhotoUrl.contains("?")) newPhotoUrl = newPhotoUrl.substring(0, newPhotoUrl.indexOf("?"));
+                                successEditor.putString("my_photo_base64", newPhotoUrl);
+                                successEditor.putString("synced_photo_url_" + targetUid, newPhotoUrl);
+                            }
+                        }
+
+                        if (bg != null) {
+                            String newBgUrl = json.optString("backgroundUrl", json.optString("background", null));
+                            if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null") && newBgUrl.startsWith("http")) {
+                                if (newBgUrl.contains("?")) newBgUrl = newBgUrl.substring(0, newBgUrl.indexOf("?"));
+                                successEditor.putString("my_bg_base64", newBgUrl);
+                                successEditor.putString("synced_bg_url_" + targetUid, newBgUrl); 
+                            }
+                        }
+
+                        successEditor.apply();
+                        activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
+                        EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
+                        if (generation == currentUploadGeneration) EditProfileFragment.isProfileUploading = false;
+                        LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
+                    });
+                } catch (Exception ignored) {} 
+                finally { cleanupFiles(photo, bg); }
+            }
+            @Override public void onError(String error) {
+                if (generation == currentUploadGeneration) {
+                    EditProfileFragment.isProfileUploading = false;
+                    long currentTicket = activity.prefs.getLong("active_upload_ticket", 0);
+                    if (currentTicket == ticket) {
+                        activity.prefs.edit().putLong("active_upload_ticket", 0).apply(); 
+                    }
+                }
+                cleanupFiles(photo, bg);
+            }
+        });
+    }
+
     private void cleanupFiles(File photo, File bg) {
         if (photo != null && photo.exists()) photo.delete();
         if (bg != null && bg.exists()) bg.delete();
