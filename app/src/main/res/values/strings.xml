@@ -8,6 +8,12 @@
     <string name="feed">Feed</string>
     <string name="find">Find</string>
 	<string name="notif_offline_mode">(Offline)</string>
+	<string name="settings_backgrounds">Profile Background</string>
+<string name="bg_setting_global">Global Backgrounds</string>
+<string name="bg_setting_my_profile">My Profile Background</string>
+<string name="bg_setting_others_profile">Other Profiles Background</string>
+<string name="bg_setting_images">Image Backgrounds</string>
+<string name="bg_setting_gifs">GIF Backgrounds</string>
 	<string name="btn_clear_cache">Clear storage</string>
 	<string name="category_app">App</string>
 <string name="category_data">Data</string>
