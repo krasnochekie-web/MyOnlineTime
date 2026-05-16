@@ -260,11 +260,10 @@ public class MainActivity extends AppCompatActivity {
         refreshGoogleAndVpsToken(true);
     }
 
-    // === ИСПРАВЛЕНИЕ: 100% ВАЛИДАЦИЯ ЧЕРЕЗ СЕРВЕР ===
+    // === ИСПРАВЛЕНИЕ: Бронебойный парсер даты ===
     private void checkIfNewUserAndEnforce(String uid) {
         if (vpsToken == null) return;
         
-        // Если мы уже точно знаем, что юзер подтвержден (или ветеран) - не дергаем сервер зря
         if (prefs.getBoolean("is_nickname_confirmed", false)) {
             enforceLoginOverlays();
             return;
@@ -276,16 +275,35 @@ public class MainActivity extends AppCompatActivity {
                 
                 boolean isConfirmed = true; 
                 if (user != null) {
-                    // ЧИТАЕМ ПРАВДУ НАПРЯМУЮ С СЕРВЕРА
                     isConfirmed = user.isNicknameConfirmed;
-                    prefs.edit().putString("my_created_at", user.createdAt).apply();
+                    
+                    if (user.createdAt != null) {
+                        try {
+                            String clean = user.createdAt;
+                            if (clean.endsWith("Z")) clean = clean.replace("Z", "+0000");
+                            java.text.SimpleDateFormat serverFormat = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", java.util.Locale.US);
+                            java.util.Date date = serverFormat.parse(clean);
+                            java.text.SimpleDateFormat appFormat = new java.text.SimpleDateFormat("dd MMMM yyyy", new java.util.Locale("ru"));
+                            prefs.edit().putString("my_created_at", appFormat.format(date)).apply();
+                        } catch (Exception e1) {
+                            try {
+                                String clean = user.createdAt;
+                                if (clean.endsWith("Z")) clean = clean.replace("Z", "+0000");
+                                java.text.SimpleDateFormat serverFormat2 = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", java.util.Locale.US);
+                                java.util.Date date2 = serverFormat2.parse(clean);
+                                java.text.SimpleDateFormat appFormat2 = new java.text.SimpleDateFormat("dd MMMM yyyy", new java.util.Locale("ru"));
+                                prefs.edit().putString("my_created_at", appFormat2.format(date2)).apply();
+                            } catch (Exception e2) {
+                                prefs.edit().putString("my_created_at", user.createdAt).apply();
+                            }
+                        }
+                    }
                 }
                 
                 prefs.edit().putBoolean("is_nickname_confirmed", isConfirmed).apply();
                 runOnUiThread(() -> enforceLoginOverlays());
             }
             @Override public void onError(String error) {
-                // При ошибке интернета не блокируем интерфейс ложно
                 prefs.edit().putBoolean("is_nickname_confirmed", true).apply();
                 runOnUiThread(() -> enforceLoginOverlays());
             }
