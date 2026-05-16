@@ -260,11 +260,11 @@ public class MainActivity extends AppCompatActivity {
         refreshGoogleAndVpsToken(true);
     }
 
-    // === ИСПРАВЛЕНИЕ ЛОГИКИ: ЖЕЛЕЗОБЕТОННАЯ ПРОВЕРКА БЕЗ ОШИБКИ В МАТЕМАТИКЕ ===
+    // === ИСПРАВЛЕНИЕ: 100% ВАЛИДАЦИЯ ЧЕРЕЗ СЕРВЕР ===
     private void checkIfNewUserAndEnforce(String uid) {
         if (vpsToken == null) return;
         
-        // Если мы уже точно знаем, что юзер подтвержден - не дергаем сервер
+        // Если мы уже точно знаем, что юзер подтвержден (или ветеран) - не дергаем сервер зря
         if (prefs.getBoolean("is_nickname_confirmed", false)) {
             enforceLoginOverlays();
             return;
@@ -275,30 +275,17 @@ public class MainActivity extends AppCompatActivity {
                 if (isDestroyed()) return;
                 
                 boolean isConfirmed = true; 
-                
-                if (user != null && user.createdAt != null) {
-                    try {
-                        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
-                        sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
-                        long createdTime = sdf.parse(user.createdAt).getTime();
-                        
-                        // ИСПРАВЛЕНИЕ: Безопасный парсинг даты релиза (без хардкора миллисекунд)
-                        long featureReleaseDate = sdf.parse("2026-05-15T00:00:00.000Z").getTime();
-                        
-                        if (createdTime >= featureReleaseDate) {
-                            isConfirmed = false; 
-                        }
-                        
-                        prefs.edit().putString("my_created_at", user.createdAt).apply();
-                    } catch (Exception e) {
-                        isConfirmed = true;
-                    }
+                if (user != null) {
+                    // ЧИТАЕМ ПРАВДУ НАПРЯМУЮ С СЕРВЕРА
+                    isConfirmed = user.isNicknameConfirmed;
+                    prefs.edit().putString("my_created_at", user.createdAt).apply();
                 }
                 
                 prefs.edit().putBoolean("is_nickname_confirmed", isConfirmed).apply();
                 runOnUiThread(() -> enforceLoginOverlays());
             }
             @Override public void onError(String error) {
+                // При ошибке интернета не блокируем интерфейс ложно
                 prefs.edit().putBoolean("is_nickname_confirmed", true).apply();
                 runOnUiThread(() -> enforceLoginOverlays());
             }
