@@ -15,7 +15,7 @@
             android:id="@+id/loading_spinner"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
+            android:layout_gravity="center_horizontal"
             android:layout_marginTop="80dp"
             android:indeterminateTint="@color/grapefruit"
             android:visibility="visible" />
@@ -33,7 +33,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:paddingHorizontal="16dp"
-                android:paddingTop="14dp"
+                android:paddingTop="4dp"
                 android:paddingBottom="40dp">
 
                 <RelativeLayout
@@ -86,12 +86,7 @@
                     android:layout_height="56dp"
                     android:layout_marginBottom="24dp"
                     android:layout_marginTop="16dp"
-                    android:text="@string/btn_clear_cache"
                     android:textColor="@android:color/white"
-                    android:background="@color/grapefruit"
-                    app:backgroundTint="@null"
-                    app:cornerRadius="0dp"
-                    android:foreground="?attr/selectableItemBackground"
                     android:textStyle="bold"
                     android:textSize="16sp" />
             </LinearLayout>
