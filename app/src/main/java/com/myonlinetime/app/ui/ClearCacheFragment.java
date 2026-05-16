@@ -11,6 +11,7 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -24,6 +25,7 @@ import android.view.Window;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.ProgressBar;
@@ -60,7 +62,6 @@ public class ClearCacheFragment extends Fragment {
     private List<StorageCategory> categories = new ArrayList<>();
     private final List<View> rowViews = new ArrayList<>();
 
-    // Палитра для диаграммы
     private final int COLOR_APP = Color.parseColor("#4A90E2");
     private final int COLOR_DATA = Color.parseColor("#50E3C2");
     private final int COLOR_CACHE = Color.parseColor("#F5A623");
@@ -103,17 +104,35 @@ public class ClearCacheFragment extends Fragment {
         donutChart.setOnSegmentTouchListener((index, isDown) -> {
             if (index >= 0 && index < rowViews.size()) {
                 View row = rowViews.get(index);
-                row.setPressed(isDown); // Запускает Ripple-эффект
+                row.setPressed(isDown); 
             }
         });
 
         isGuest = (activity == null || activity.vpsToken == null);
 
+        setupClearButton();
         btnClear.setOnClickListener(v -> showClearConfirmModal(activity));
 
         startCalculatingSizes(activity);
 
         return view;
+    }
+
+    private void setupClearButton() {
+        float density = getResources().getDisplayMetrics().density;
+        
+        // Основа кнопки - грейпфрут со слегка скругленными краями (6dp)
+        GradientDrawable shape = new GradientDrawable();
+        shape.setShape(GradientDrawable.RECTANGLE);
+        shape.setCornerRadius(6f * density); 
+        shape.setColor(ContextCompat.getColor(requireContext(), R.color.grapefruit));
+
+        // Эффект волны, который ИСПОЛЬЗУЕТ ФОРМУ КАК МАСКУ (никогда не выйдет за края)
+        ColorStateList rippleColor = ColorStateList.valueOf(Color.parseColor("#33000000"));
+        RippleDrawable ripple = new RippleDrawable(rippleColor, shape, shape);
+        
+        btnClear.setBackground(ripple);
+        btnClear.setAllCaps(false); // Отключаем капс
     }
 
     private void startCalculatingSizes(MainActivity activity) {
@@ -189,7 +208,7 @@ public class ClearCacheFragment extends Fragment {
 
         buildTotalItem(getString(R.string.category_total), totalSize);
         
-        updateClearButtonText(); // Первичный расчет кнопки
+        updateClearButtonText(); 
     }
 
     private void updateClearButtonText() {
@@ -200,9 +219,9 @@ public class ClearCacheFragment extends Fragment {
         
         if (totalSelected > 0) {
             double sizeMb = totalSelected / (1024.0 * 1024.0);
-            btnClear.setText(String.format(Locale.getDefault(), "%s %.1f %s", getString(R.string.btn_clear_cache), sizeMb, getString(R.string.unit_mb)));
+            btnClear.setText(String.format(Locale.getDefault(), "Очистить память %.1f %s", sizeMb, getString(R.string.unit_mb)));
         } else {
-            btnClear.setText(R.string.btn_clear_cache);
+            btnClear.setText(String.format(Locale.getDefault(), "Очистить память 0.0 %s", getString(R.string.unit_mb)));
         }
     }
 
@@ -223,12 +242,22 @@ public class ClearCacheFragment extends Fragment {
         double sizeMb = category.size / (1024.0 * 1024.0);
         txtSize.setText(getString(R.string.format_size_mb, sizeMb, getString(R.string.unit_mb)));
 
-        if (category.type == 0) { // Приложение
+        float density = getResources().getDisplayMetrics().density;
+
+        if (category.type == 0) { // Приложение (нельзя удалить)
             cb.setVisibility(View.GONE);
             marker.setVisibility(View.VISIBLE);
             
+            // Задаем квадрату размер в точности как у чекбокса (22dp)
+            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) marker.getLayoutParams();
+            params.width = (int) (22 * density);
+            params.height = (int) (22 * density);
+            params.gravity = Gravity.CENTER;
+            marker.setLayoutParams(params);
+
             GradientDrawable markerDrawable = new GradientDrawable();
             markerDrawable.setShape(GradientDrawable.RECTANGLE); 
+            markerDrawable.setCornerRadius(4f * density); // Закругление углов квадрата
             markerDrawable.setColor(category.color);
             marker.setBackground(markerDrawable);
             
@@ -320,10 +349,7 @@ public class ClearCacheFragment extends Fragment {
             if (cat.type > 0 && cat.isChecked) totalSelected += cat.size;
         }
 
-        if (totalSelected == 0) {
-            Toast.makeText(activity, "Нет выбранных категорий", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        if (totalSelected == 0) return;
 
         final Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -347,7 +373,7 @@ public class ClearCacheFragment extends Fragment {
 
         TextView message = new TextView(activity);
         double sizeMb = totalSelected / (1024.0 * 1024.0);
-        message.setText(String.format(Locale.getDefault(), "Очистить выбранные данные (%.1f МБ)?", sizeMb));
+        message.setText(String.format(Locale.getDefault(), "Очистить выбранные данные (%.1f %s)?", sizeMb, getString(R.string.unit_mb)));
         message.setTextColor(ContextCompat.getColor(activity, R.color.textDynamic));
         message.setTextSize(16f);
         dialogLayout.addView(message);
@@ -357,18 +383,17 @@ public class ClearCacheFragment extends Fragment {
         btnLayout.setGravity(Gravity.END);
         btnLayout.setPadding(0, 40, 0, 0);
 
-        // Получаем системный эффект волны (ripple)
         TypedValue rippleValue = new TypedValue();
         activity.getTheme().resolveAttribute(android.R.attr.selectableItemBackground, rippleValue, true);
 
         Button btnCancel = new Button(activity);
         btnCancel.setText(R.string.btn_cancel);
-        btnCancel.setBackgroundResource(rippleValue.resourceId); // Эффект волны
+        btnCancel.setBackgroundResource(rippleValue.resourceId); 
         btnCancel.setTextColor(ContextCompat.getColor(activity, R.color.textGrayDynamic));
         
         Button btnConfirm = new Button(activity);
         btnConfirm.setText(R.string.btn_clear_data_confirm);
-        btnConfirm.setBackgroundResource(rippleValue.resourceId); // Эффект волны
+        btnConfirm.setBackgroundResource(rippleValue.resourceId); 
         btnConfirm.setTextColor(ContextCompat.getColor(activity, R.color.grapefruit));
 
         btnCancel.setOnClickListener(v -> dialog.dismiss());
@@ -399,11 +424,10 @@ public class ClearCacheFragment extends Fragment {
         dialogLayout.addView(btnLayout);
 
         dialog.setContentView(dialogLayout);
-        
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             dialog.getWindow().setLayout((int)(getResources().getDisplayMetrics().widthPixels * 0.85), ViewGroup.LayoutParams.WRAP_CONTENT);
-            dialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog; // Анимация появления
+            dialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog; 
         }
         dialog.show();
     }
@@ -471,7 +495,7 @@ public class ClearCacheFragment extends Fragment {
     private void setupHeader(MainActivity activity) {
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
-            activity.headerTitle.setText(getString(R.string.title_clear_storage)); 
+            activity.headerTitle.setText(getString(R.string.header_settings_sub)); 
             activity.headerBackBtn.setVisibility(View.VISIBLE);
             activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow);
         }
