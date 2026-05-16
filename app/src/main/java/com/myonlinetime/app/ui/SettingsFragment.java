@@ -38,6 +38,7 @@ public class SettingsFragment extends Fragment {
 
     private TextView themeAuto, themeLight, themeDark;
     private TextView regDateTxt, accountIdTxt;
+    private View btnBackgrounds; // <-- Ссылка на кнопку
     private SharedPreferences prefs;
 
     private static final String PREFS_NAME = "AppPrefs";
@@ -70,6 +71,7 @@ public class SettingsFragment extends Fragment {
 
         regDateTxt = view.findViewById(R.id.settings_reg_date_txt);
         accountIdTxt = view.findViewById(R.id.settings_account_id_txt);
+        btnBackgrounds = view.findViewById(R.id.btn_backgrounds); // <-- Инициализация
         
         loadUserData(view);
 
@@ -137,6 +139,16 @@ public class SettingsFragment extends Fragment {
                 activity.navigator.openSubScreen(new NotificationsFragment());
             }
         });
+
+        // НОВЫЙ СЛУШАТЕЛЬ ДЛЯ ФОНОВ
+        if (btnBackgrounds != null) {
+            btnBackgrounds.setOnClickListener(v -> {
+                if (activity != null && activity.navigator != null) {
+                    activity.navigator.openSubScreen(new BackgroundsFragment());
+                }
+            });
+        }
+
         view.findViewById(R.id.btn_clear_cache).setOnClickListener(v -> {
             if (activity != null && activity.navigator != null) {
                 activity.navigator.openSubScreen(new ClearCacheFragment());
@@ -179,7 +191,6 @@ public class SettingsFragment extends Fragment {
 
         activeEmailInput.setOnClickListener(v -> {
             if (activity.mGoogleSignInClient != null) {
-                // Вынужденно сбрасываем сессию, чтобы Google показал окно выбора аккаунтов
                 activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
                     Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
                     startActivityForResult(signInIntent, RC_SIGN_IN_TRANSFER);
@@ -193,7 +204,7 @@ public class SettingsFragment extends Fragment {
                 return;
             }
             
-            btnSave.setEnabled(false); // Блокируем от двойного клика, но текст НЕ меняем
+            btnSave.setEnabled(false); 
             
             VpsApi.transferAccount(activity.vpsToken, pendingTransferIdToken, new VpsApi.LoginCallback() {
                 @Override
@@ -229,7 +240,6 @@ public class SettingsFragment extends Fragment {
         currentTransferDialog.show();
     }
 
-    // === ПЕРЕХВАТ ВЫБОРА НОВОГО GOOGLE АККАУНТА ===
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -245,9 +255,6 @@ public class SettingsFragment extends Fragment {
                     }
                 }
             } catch (ApiException e) {
-                // ЮЗЕР ОТМЕНИЛ ВЫБОР!
-                // Так как сессия была уничтожена для вызова окна, мы мгновенно просим выбрать старый аккаунт,
-                // чтобы не оставить пользователя "выкинутым".
                 MainActivity activity = (MainActivity) getActivity();
                 if (activity != null && activity.mGoogleSignInClient != null) {
                     if (currentTransferDialog != null && currentTransferDialog.isShowing()) {
@@ -256,14 +263,12 @@ public class SettingsFragment extends Fragment {
                     Toast.makeText(activity, R.string.toast_transfer_canceled_restore, Toast.LENGTH_LONG).show();
                     
                     Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
-                    // Вызываем стандартный вход MainActivity, который сам всё восстановит
                     activity.startActivityForResult(signInIntent, 9001); 
                 }
             }
         }
     }
 
-    // === ДИАЛОГ УДАЛЕНИЯ АККАУНТА ===
     private void showDeleteAccountDialog(MainActivity activity) {
         final Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -333,9 +338,13 @@ public class SettingsFragment extends Fragment {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         
         if (account != null && activity.vpsToken != null) {
+            // АВТОРИЗОВАН
             if (userHeaderBlock != null) userHeaderBlock.setVisibility(View.VISIBLE);
             if (accountBlock != null) accountBlock.setVisibility(View.VISIBLE);
             if (guestBlock != null) guestBlock.setVisibility(View.GONE);
+            
+            // <-- ПОКАЗЫВАЕМ КНОПКУ ФОНОВ ДЛЯ АВТОРИЗОВАННОГО -->
+            if (btnBackgrounds != null) btnBackgrounds.setVisibility(View.VISIBLE);
 
             ImageView avatarView = view.findViewById(R.id.settings_avatar);
             TextView nicknameView = view.findViewById(R.id.settings_nickname);
@@ -388,9 +397,13 @@ public class SettingsFragment extends Fragment {
                 }
             }
         } else {
+            // ГОСТЬ
             if (userHeaderBlock != null) userHeaderBlock.setVisibility(View.GONE);
             if (accountBlock != null) accountBlock.setVisibility(View.GONE);
             if (guestBlock != null) guestBlock.setVisibility(View.VISIBLE);
+            
+            // <-- СКРЫВАЕМ КНОПКУ ФОНОВ ДЛЯ ГОСТЯ -->
+            if (btnBackgrounds != null) btnBackgrounds.setVisibility(View.GONE);
         }
     }
 
