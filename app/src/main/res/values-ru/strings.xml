@@ -19,7 +19,6 @@
 <string name="format_tooltip">%1$s: %2$.1f %3$s (%4$d%% от общего)</string>
 <string name="title_clear_storage">Очистка памяти</string>
 <string name="btn_clear_data_confirm">Очистить</string>
-<string name="btn_cancel">Отмена</string>
 	<string name="prompt_nickname_setup">Введите своё имя (никнейм), чтобы завершить регистрацию в системе My Online Time</string>
 <string name="hint_enter_nickname_setup">Введите своё имя (никнейм)</string>
 <string name="err_nickname_empty">Никнейм не может быть пустым!</string>
