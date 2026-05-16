@@ -16,6 +16,7 @@ import android.text.Editable;
 import android.text.InputFilter;
 import android.text.Spanned;
 import android.text.TextWatcher;
+import android.view.inputmethod.InputMethodManager;
 import com.myonlinetime.app.utils.Utils;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -231,33 +232,40 @@ public class EditProfileFragment extends Fragment {
         btnSave.setOnClickListener(v -> { 
             if (Boolean.TRUE.equals(btnSave.getTag())) return;
 
-             final String n = inputName.getText().toString().trim();
-             final String a = inputAbout.getText().toString().trim();
+            final String n = inputName.getText().toString().trim();
+            final String a = inputAbout.getText().toString().trim();
 
-             if (n.equals(initialName) && a.equals(initialAbout) && pendingPhotoFile == null && pendingBgFile == null) {
-                 activity.navigator.closeSubScreen();
-                 return;
-             }
+            if (n.equals(initialName) && a.equals(initialAbout) && pendingPhotoFile == null && pendingBgFile == null) {
+                activity.navigator.closeSubScreen();
+                return;
+            }
              
-             if (n.isEmpty()) {
-                 Toast.makeText(activity, R.string.err_empty_nickname, Toast.LENGTH_SHORT).show();
-                 return;
-             }
+            if (n.isEmpty()) {
+                Toast.makeText(activity, R.string.err_empty_nickname, Toast.LENGTH_SHORT).show();
+                return;
+            }
 
-             if (isActionSpam(pendingPhotoFile != null || pendingBgFile != null)) return; 
+            if (isActionSpam(pendingPhotoFile != null || pendingBgFile != null)) return; 
              
-             btnSave.setTag(true);
+            btnSave.setTag(true);
 
-             final String capturedToken = activity.vpsToken;
-             final String currentUid = acct.getId();
-             final File finalBgFile = pendingBgFile;
-             final File finalPhotoFile = pendingPhotoFile;
+            // Прячем клавиатуру
+            InputMethodManager imm = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.hideSoftInputFromWindow(inputName.getWindowToken(), 0);
+            }
 
-             final long myGeneration = ++currentUploadGeneration;
-             final long myUploadTicket = System.currentTimeMillis();
-             activity.prefs.edit().putLong("active_upload_ticket", myUploadTicket).apply();
+            // ИСПРАВЛЕНИЕ ГОНКИ: Жестко фиксируем поколение ПЕРЕД любыми асинхронными запросами!
+            final long myGeneration = ++currentUploadGeneration;
+            final String capturedToken = activity.vpsToken;
+            final String currentUid = acct.getId();
+            final File finalBgFile = pendingBgFile;
+            final File finalPhotoFile = pendingPhotoFile;
 
-             Runnable applyOptimisticAndUpload = () -> {
+            final long myUploadTicket = System.currentTimeMillis();
+            activity.prefs.edit().putLong("active_upload_ticket", myUploadTicket).apply();
+
+            Runnable applyOptimisticAndUpload = () -> {
                  SharedPreferences.Editor editor = activity.prefs.edit();
                  editor.putString("my_nickname", n);
                  editor.putString("my_about", a);
@@ -319,14 +327,17 @@ public class EditProfileFragment extends Fragment {
 
                      executeFinalUpload(capturedToken, currentUid, n, a, serverUploadPhoto, serverUploadBg, myUploadTicket, myGeneration, activity);
                  });
-             };
+            };
 
-             if (capturedToken != null && !n.equals(initialName)) {
+            if (capturedToken != null && !n.equals(initialName)) {
                  VpsApi.checkNickname(capturedToken, n, new VpsApi.Callback() {
                      @Override public void onSuccess(String result) {
+                         // Проверка поколения: если юзер уже успел нажать кнопку с другим ником, этот запрос умрет
+                         if (myGeneration != currentUploadGeneration) return;
                          activity.runOnUiThread(applyOptimisticAndUpload);
                      }
                      @Override public void onError(String error) {
+                         if (myGeneration != currentUploadGeneration) return;
                          activity.runOnUiThread(() -> {
                              btnSave.setTag(false);
                              String displayError = activity.getString(R.string.err_server);
@@ -340,11 +351,11 @@ public class EditProfileFragment extends Fragment {
                          });
                      }
                  });
-             } else if (capturedToken != null) {
+            } else if (capturedToken != null) {
                  applyOptimisticAndUpload.run();
-             } else {
+            } else {
                  btnSave.setTag(false);
-             }
+            }
         });
 
         return view;
