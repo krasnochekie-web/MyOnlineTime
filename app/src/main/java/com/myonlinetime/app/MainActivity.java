@@ -340,7 +340,7 @@ public class MainActivity extends AppCompatActivity {
 
                             Utils.backgroundExecutor.execute(() -> {
                                 try {
-                                    SharedPreferences dbNames = getSharedPreferences("MyOnlineTime_AppNamesDB", Context.PRIVATE);
+                                    SharedPreferences dbNames = getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
                                     java.util.Map<String, ?> allNames = dbNames.getAll();
                                     if (!allNames.isEmpty()) {
                                         VpsApi.syncAppNames(ourServerToken, new org.json.JSONObject(allNames));
