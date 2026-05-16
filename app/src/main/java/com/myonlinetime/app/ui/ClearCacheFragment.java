@@ -8,9 +8,11 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -20,12 +22,14 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.PopupWindow;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
@@ -34,7 +38,6 @@ import com.myonlinetime.app.R;
 import com.myonlinetime.app.utils.Utils;
 
 import java.io.File;
-import java.util.Locale;
 
 public class ClearCacheFragment extends Fragment {
 
@@ -51,7 +54,7 @@ public class ClearCacheFragment extends Fragment {
     private long sizeBg = 0;
     private boolean isGuest = true;
 
-    // Палитра диаграммы
+    // Палитра для диаграммы
     private final int COLOR_APP = Color.parseColor("#4A90E2");
     private final int COLOR_DATA = Color.parseColor("#50E3C2");
     private final int COLOR_CACHE = Color.parseColor("#F5A623");
@@ -71,7 +74,6 @@ public class ClearCacheFragment extends Fragment {
         textTotalSize = view.findViewById(R.id.text_total_size);
         btnClear = view.findViewById(R.id.btn_open_clear_modal);
         
-        // Инжектим кастомный график программно, чтобы не трогать твой XML
         ViewGroup chartContainer = view.findViewById(R.id.chart_container);
         donutChart = new DonutChartView(requireContext());
         chartContainer.addView(donutChart, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -117,9 +119,9 @@ public class ClearCacheFragment extends Fragment {
                     }
                 }
 
-                // 4. Данные (весь DataDir минус кэш и фоны)
-                long totalData = getDirSize(activity.getDataDir());
-                sizeData = Math.max(0, totalData - sizeCache - sizeBg);
+                // 4. Данные (Исключаем кэш и папку shared_prefs с токенами!)
+                long totalData = getAppDataSizeSafe(activity);
+                sizeData = Math.max(0, totalData - sizeBg);
 
             } catch (Exception e) { e.printStackTrace(); }
 
@@ -135,7 +137,9 @@ public class ClearCacheFragment extends Fragment {
     private void renderDashboard() {
         long totalSize = sizeApp + sizeData + sizeCache + (isGuest ? 0 : sizeBg);
         double totalMb = totalSize / (1024.0 * 1024.0);
-        textTotalSize.setText(String.format(Locale.getDefault(), "%.1f МБ", totalMb));
+        
+        String unitMb = getString(R.string.unit_mb);
+        textTotalSize.setText(String.format(getString(R.string.format_size_mb), totalMb, ""));
 
         float[] values = isGuest ? new float[]{sizeApp, sizeData, sizeCache} : new float[]{sizeApp, sizeData, sizeCache, sizeBg};
         int[] colors = isGuest ? new int[]{COLOR_APP, COLOR_DATA, COLOR_CACHE} : new int[]{COLOR_APP, COLOR_DATA, COLOR_CACHE, COLOR_BG};
@@ -148,59 +152,178 @@ public class ClearCacheFragment extends Fragment {
         if (!isGuest) {
             buildListItem(getString(R.string.category_backgrounds), sizeBg, totalSize, COLOR_BG);
         }
+
+        // Строка "Всего"
+        buildTotalItem(getString(R.string.category_total), totalSize);
     }
 
     private void buildListItem(String name, long size, long total, int color) {
         if (size <= 0) return;
         
-        View row = LayoutInflater.from(getContext()).inflate(R.layout.item_storage_row, listContainer, false);
-        View marker = row.findViewById(R.id.color_marker);
-        TextView txtName = row.findViewById(R.id.text_category_name);
-        TextView txtSize = row.findViewById(R.id.text_category_size);
+        LinearLayout row = new LinearLayout(requireContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(40, 30, 40, 30);
         
-        marker.setBackgroundColor(color);
+        // Красивая волна (ripple)
+        row.setBackgroundResource(R.drawable.bg_app_card);
+        row.setForeground(ContextCompat.getDrawable(requireContext(), androidx.appcompat.R.attr.selectableItemBackground));
+        row.setClickable(true);
+        row.setFocusable(true);
+
+        View marker = new View(requireContext());
+        LinearLayout.LayoutParams markerParams = new LinearLayout.LayoutParams(30, 30);
+        markerParams.setMargins(0, 0, 30, 0);
+        marker.setLayoutParams(markerParams);
+        
+        GradientDrawable markerDrawable = new GradientDrawable();
+        markerDrawable.setShape(GradientDrawable.OVAL);
+        markerDrawable.setColor(color);
+        marker.setBackground(markerDrawable);
+
+        TextView txtName = new TextView(requireContext());
+        txtName.setTextColor(ContextCompat.getColor(requireContext(), R.color.textDynamic));
+        txtName.setTextSize(16f);
+        
+        int percent = (int) Math.round((double) size / total * 100);
+        txtName.setText(String.format("%s %s", name, getString(R.string.format_percent, percent)));
+        
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
+        txtName.setLayoutParams(nameParams);
+
+        TextView txtSize = new TextView(requireContext());
+        txtSize.setTextColor(ContextCompat.getColor(requireContext(), R.color.textGrayDynamic));
+        txtSize.setTextSize(14f);
         
         double sizeMb = size / (1024.0 * 1024.0);
-        int percent = (int) Math.round((double) size / total * 100);
-        
-        txtName.setText(String.format(Locale.getDefault(), "%s %d%%", name, percent));
-        txtSize.setText(String.format(Locale.getDefault(), "%.1f МБ", sizeMb));
+        txtSize.setText(getString(R.string.format_size_mb, sizeMb, getString(R.string.unit_mb)));
 
-        // Эффект облачка
+        row.addView(marker);
+        row.addView(txtName);
+        row.addView(txtSize);
+
+        // ИСТИННОЕ ОБЛАЧКО
         row.setOnClickListener(v -> {
-            String msg = String.format(Locale.getDefault(), "%s: %.1f МБ (%d%% от общего)", name, sizeMb, percent);
+            String msg = getString(R.string.format_tooltip, name, sizeMb, getString(R.string.unit_mb), percent);
             showCloudTooltip(v, msg);
         });
 
         listContainer.addView(row);
     }
 
-    private void showCloudTooltip(View anchor, String message) {
-        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show(); 
-        // Примечание: Для кастомного "облачка" поверх UI нужен PopupWindow, 
-        // оставил Toast как безопасный fallback, если у тебя нет готового XML для облачка.
+    private void buildTotalItem(String name, long totalSize) {
+        LinearLayout row = new LinearLayout(requireContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(40, 40, 40, 40);
+
+        TextView txtName = new TextView(requireContext());
+        txtName.setTextColor(ContextCompat.getColor(requireContext(), R.color.textDynamic));
+        txtName.setTextSize(16f);
+        txtName.setTypeface(null, android.graphics.Typeface.BOLD);
+        txtName.setText(name);
+        
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
+        txtName.setLayoutParams(nameParams);
+
+        TextView txtSize = new TextView(requireContext());
+        txtSize.setTextColor(ContextCompat.getColor(requireContext(), R.color.textDynamic));
+        txtSize.setTextSize(16f);
+        txtSize.setTypeface(null, android.graphics.Typeface.BOLD);
+        
+        double sizeMb = totalSize / (1024.0 * 1024.0);
+        txtSize.setText(getString(R.string.format_size_mb, sizeMb, getString(R.string.unit_mb)));
+
+        row.addView(txtName);
+        row.addView(txtSize);
+        listContainer.addView(row);
     }
 
+    // === КАСТОМНОЕ ОБЛАЧКО (POPUP WINDOW) ===
+    private void showCloudTooltip(View anchor, String message) {
+        TextView tv = new TextView(requireContext());
+        tv.setText(message);
+        tv.setTextColor(Color.WHITE);
+        tv.setTextSize(14f);
+        tv.setPadding(40, 20, 40, 20);
+        tv.setGravity(Gravity.CENTER);
+        
+        GradientDrawable gd = new GradientDrawable();
+        gd.setColor(Color.parseColor("#E6202020")); 
+        gd.setCornerRadius(30f);
+        tv.setBackground(gd);
+
+        PopupWindow popupWindow = new PopupWindow(tv, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        popupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        popupWindow.setOutsideTouchable(true);
+        popupWindow.setElevation(20f);
+        popupWindow.setAnimationStyle(android.R.style.Animation_Toast);
+        
+        anchor.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        tv.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        
+        int xOffset = (anchor.getWidth() - tv.getMeasuredWidth()) / 2;
+        int yOffset = -anchor.getHeight() - tv.getMeasuredHeight() - 20;
+        
+        popupWindow.showAsDropDown(anchor, xOffset, yOffset);
+    }
+
+    // === КАСТОМНОЕ МОДАЛЬНОЕ ОКНО ОЧИСТКИ ===
     private void showClearModal(MainActivity activity) {
         final Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        dialog.setContentView(R.layout.dialog_clear_storage);
         
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        }
+        LinearLayout dialogLayout = new LinearLayout(activity);
+        dialogLayout.setOrientation(LinearLayout.VERTICAL);
+        dialogLayout.setPadding(60, 60, 60, 60);
+        
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(ContextCompat.getColor(activity, R.color.bgDynamic));
+        bg.setCornerRadius(40f);
+        dialogLayout.setBackground(bg);
 
-        CheckBox cbCache = dialog.findViewById(R.id.cb_clear_cache);
-        CheckBox cbData = dialog.findViewById(R.id.cb_clear_data);
-        CheckBox cbBg = dialog.findViewById(R.id.cb_clear_bg);
-        Button btnConfirm = dialog.findViewById(R.id.btn_confirm_clear);
-        Button btnCancel = dialog.findViewById(R.id.btn_cancel_clear);
+        TextView title = new TextView(activity);
+        title.setText(R.string.title_clear_storage);
+        title.setTextSize(20f);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setTextColor(ContextCompat.getColor(activity, R.color.textDynamic));
+        title.setPadding(0, 0, 0, 40);
+        dialogLayout.addView(title);
 
+        CheckBox cbCache = new CheckBox(activity);
+        cbCache.setText(R.string.category_cache);
+        cbCache.setTextColor(ContextCompat.getColor(activity, R.color.textDynamic));
+        cbCache.setChecked(true);
+        dialogLayout.addView(cbCache);
+
+        CheckBox cbData = new CheckBox(activity);
+        cbData.setText(R.string.category_data);
+        cbData.setTextColor(ContextCompat.getColor(activity, R.color.textDynamic));
+        dialogLayout.addView(cbData);
+
+        CheckBox cbBg = new CheckBox(activity);
+        cbBg.setText(R.string.category_backgrounds);
+        cbBg.setTextColor(ContextCompat.getColor(activity, R.color.textDynamic));
         if (isGuest) {
             cbBg.setVisibility(View.GONE);
-            cbBg.setChecked(false);
+        } else {
+            cbBg.setChecked(true);
+            dialogLayout.addView(cbBg);
         }
+
+        LinearLayout btnLayout = new LinearLayout(activity);
+        btnLayout.setOrientation(LinearLayout.HORIZONTAL);
+        btnLayout.setGravity(Gravity.END);
+        btnLayout.setPadding(0, 40, 0, 0);
+
+        Button btnCancel = new Button(activity);
+        btnCancel.setText(R.string.btn_cancel);
+        btnCancel.setBackgroundColor(Color.TRANSPARENT);
+        btnCancel.setTextColor(ContextCompat.getColor(activity, R.color.textGrayDynamic));
+        
+        Button btnConfirm = new Button(activity);
+        btnConfirm.setText(R.string.btn_clear_data_confirm);
+        btnConfirm.setBackgroundColor(Color.TRANSPARENT);
+        btnConfirm.setTextColor(ContextCompat.getColor(activity, R.color.grapefruit));
 
         btnCancel.setOnClickListener(v -> dialog.dismiss());
 
@@ -216,26 +339,60 @@ public class ClearCacheFragment extends Fragment {
                     if (activity.getExternalCacheDir() != null) deleteDir(activity.getExternalCacheDir());
                 }
                 if (cbData.isChecked()) {
-                    // Чистим кэш и файлы, но не удаляем SharedPreferences с токеном авторизации
-                    File[] files = activity.getFilesDir().listFiles();
-                    if (files != null) {
-                        for (File f : files) if (!f.getName().startsWith("my_bg_")) deleteDir(f);
-                    }
+                    clearAppDataSafe(activity);
                 }
                 if (cbBg.isChecked() && !isGuest) {
                     activity.deleteMyBackgroundLocal();
                 }
-
                 new Handler(Looper.getMainLooper()).post(() -> startCalculatingSizes(activity));
             });
         });
 
+        btnLayout.addView(btnCancel);
+        btnLayout.addView(btnConfirm);
+        dialogLayout.addView(btnLayout);
+
+        dialog.setContentView(dialogLayout);
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            dialog.getWindow().setLayout((int)(getResources().getDisplayMetrics().widthPixels * 0.85), ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
         dialog.show();
     }
 
     // ==========================================
-    // УТИЛИТЫ И КАСТОМНЫЙ ГРАФИК
+    // БЕЗОПАСНАЯ ОЧИСТКА ДАННЫХ (БЕЗ РАЗЛОГИНА)
     // ==========================================
+    private long getAppDataSizeSafe(Context context) {
+        long size = 0;
+        File dataDir = new File(context.getApplicationInfo().dataDir);
+        if (dataDir.exists() && dataDir.isDirectory()) {
+            File[] files = dataDir.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    // Пропускаем кэш и папку shared_prefs (там токены авторизации)
+                    if (f.getName().equals("cache") || f.getName().equals("code_cache") || f.getName().equals("shared_prefs")) continue;
+                    size += getDirSize(f);
+                }
+            }
+        }
+        return size;
+    }
+
+    private void clearAppDataSafe(Context context) {
+        File dataDir = new File(context.getApplicationInfo().dataDir);
+        if (dataDir.exists() && dataDir.isDirectory()) {
+            File[] files = dataDir.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    // Ни в коем случае не удаляем shared_prefs, чтобы юзер остался в аккаунте
+                    if (f.getName().equals("cache") || f.getName().equals("code_cache") || f.getName().equals("shared_prefs")) continue;
+                    deleteDir(f);
+                }
+            }
+        }
+    }
+
     private long getDirSize(File dir) {
         long size = 0;
         if (dir != null && dir.isDirectory()) {
@@ -271,7 +428,7 @@ public class ClearCacheFragment extends Fragment {
     private void setupHeader(MainActivity activity) {
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
-            activity.headerTitle.setText(getString(R.string.header_settings_sub)); 
+            activity.headerTitle.setText(getString(R.string.title_clear_storage)); 
             activity.headerBackBtn.setVisibility(View.VISIBLE);
             activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow);
         }
@@ -302,7 +459,9 @@ public class ClearCacheFragment extends Fragment {
         }
     }
 
-    // Внутренний класс для отрисовки кольцевой диаграммы с анимацией
+    // ==========================================
+    // ВЬЮШКА: АНИМИРОВАННАЯ ДИАГРАММА
+    // ==========================================
     private static class DonutChartView extends View {
         private Paint paint;
         private RectF rectF;
@@ -320,8 +479,7 @@ public class ClearCacheFragment extends Fragment {
             paint = new Paint(Paint.ANTI_ALIAS_FLAG);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeCap(Paint.Cap.ROUND);
-            // Толщина кольца
-            paint.setStrokeWidth(60f); 
+            paint.setStrokeWidth(65f); // Идеальная толщина кольца
             rectF = new RectF();
         }
 
@@ -331,6 +489,7 @@ public class ClearCacheFragment extends Fragment {
             total = 0;
             for (float v : values) total += v;
 
+            // Плавная анимация закручивания
             ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
             animator.setDuration(1200);
             animator.setInterpolator(new DecelerateInterpolator());
@@ -356,7 +515,11 @@ public class ClearCacheFragment extends Fragment {
             for (int i = 0; i < values.length; i++) {
                 paint.setColor(colors[i]);
                 float sweepAngle = (values[i] / total) * 360f * animationProgress;
-                canvas.drawArc(rectF, startAngle, sweepAngle, false, paint);
+                
+                // Чтобы округлые края разных дуг не наслаивались криво друг на друга
+                if (sweepAngle > 0) {
+                    canvas.drawArc(rectF, startAngle, sweepAngle - 2f, false, paint);
+                }
                 startAngle += sweepAngle;
             }
         }
