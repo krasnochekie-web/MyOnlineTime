@@ -33,6 +33,7 @@ import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.tasks.Task;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.signature.ObjectKey;
+import com.myonlinetime.app.ui.BackgroundsFragment; // <-- ДОБАВЛЕН ИМПОРТ
 
 import java.io.File;
 import org.json.JSONArray;
@@ -339,7 +340,7 @@ public class MainActivity extends AppCompatActivity {
 
                             Utils.backgroundExecutor.execute(() -> {
                                 try {
-                                    SharedPreferences dbNames = getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
+                                    SharedPreferences dbNames = getSharedPreferences("MyOnlineTime_AppNamesDB", Context.PRIVATE);
                                     java.util.Map<String, ?> allNames = dbNames.getAll();
                                     if (!allNames.isEmpty()) {
                                         VpsApi.syncAppNames(ourServerToken, new org.json.JSONObject(allNames));
@@ -622,10 +623,23 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // === ИСПРАВЛЕНО: Чтение тумблеров из настроек перед загрузкой фона ===
     public void updateGlobalBackground(boolean show) {
         if (!show) {
             if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
             if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
+            return;
+        }
+
+        // Читаем настройки из SharedPreferences (AppPrefs)
+        SharedPreferences appPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
+        boolean isGlobalEnabled = appPrefs.getBoolean(BackgroundsFragment.KEY_BG_GLOBAL, true);
+        
+        // Если рубильник "Общие фоны" ВЫКЛЮЧЕН — прячем фон вообще
+        if (!isGlobalEnabled) {
+            if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
+            if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
+            currentBgPath = null;
             return;
         }
 
@@ -640,6 +654,29 @@ public class MainActivity extends AppCompatActivity {
         }
         
         String targetPath = resolveMyBackground();
+
+        // Проверяем, чей это фон (наш профиль или чужой) и какой тип
+        // Предполагаем, что resolveMyBackground возвращает НАШ фон, если мы находимся на своем профиле
+        // Для чужих фонов (currentBgBase64 из OtherProfile) логика ниже:
+        
+        boolean isMyProfile = (currentTab == 4 && (currentBgBase64 == null || currentBgBase64.isEmpty() || currentBgBase64.equals("null")));
+        boolean isGif = targetPath != null && targetPath.toLowerCase().endsWith(".gif");
+
+        if (targetPath != null && !targetPath.isEmpty()) {
+            if (isMyProfile) {
+                // Это МОЙ профиль
+                boolean isMyProfileEnabled = appPrefs.getBoolean(BackgroundsFragment.KEY_BG_MY_PROFILE, true);
+                if (!isMyProfileEnabled) targetPath = null;
+                else if (isGif && !appPrefs.getBoolean(BackgroundsFragment.KEY_BG_MY_GIFS, true)) targetPath = null;
+                else if (!isGif && !appPrefs.getBoolean(BackgroundsFragment.KEY_BG_MY_IMAGES, true)) targetPath = null;
+            } else {
+                // Это ЧУЖОЙ профиль (или лента и т.д.)
+                boolean isOthersProfileEnabled = appPrefs.getBoolean(BackgroundsFragment.KEY_BG_OTHERS_PROFILE, true);
+                if (!isOthersProfileEnabled) targetPath = null;
+                else if (isGif && !appPrefs.getBoolean(BackgroundsFragment.KEY_BG_OTHERS_GIFS, true)) targetPath = null;
+                else if (!isGif && !appPrefs.getBoolean(BackgroundsFragment.KEY_BG_OTHERS_IMAGES, true)) targetPath = null;
+            }
+        }
 
         if (targetPath == null || targetPath.isEmpty()) {
             currentBgPath = null;
@@ -1027,7 +1064,6 @@ public class MainActivity extends AppCompatActivity {
                                 setupOverlay.setTranslationZ(50f);
                             }
                             
-                            // === ИСПРАВЛЕНИЕ: СИНХРОНИЗАЦИЯ ЧЕРНОВИКА ПРИ ПЕРЕХОДЕ МЕЖДУ ВКЛАДКАМИ ===
                             EditText inputName = setupOverlay.findViewById(R.id.setup_nickname_input);
                             if (inputName != null) {
                                 String draft = prefs.getString("draft_setup_nickname", null);
