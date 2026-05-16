@@ -8,6 +8,7 @@
     <string name="find">Поиск</string>
     <string name="time">Время</string>
 	<string name="dialog_change_email_title">Изменить почту</string>
+	<string name="btn_clear_cache">Очистить память</string>
 	<string name="category_app">Приложение</string>
 <string name="category_data">Данные</string>
 <string name="category_cache">Кэш</string>
