@@ -127,23 +127,6 @@ public class ProfileFragment extends Fragment {
         if (account == null) return wrapper;
         myUid = account.getId();
 
-        String bgPath = activity.prefs.getString("custom_bg_path_" + myUid, null);
-        String remoteBg = activity.prefs.getString("my_bg_base64", null);
-        if (bgPath != null && new File(bgPath).exists()) {
-            currentLoadedBg = myUid + "_local_bg_" + new File(bgPath).lastModified();
-            if (bgPath.toLowerCase().endsWith(".gif")) {
-                Glide.with(activity).load(new File(bgPath))
-                     .diskCacheStrategy(DiskCacheStrategy.NONE)
-                     .signature(new ObjectKey(new File(bgPath).lastModified()))
-                     .centerCrop().into(myBgImageView);
-            } else {
-                myBgImageView.setImageURI(android.net.Uri.fromFile(new File(bgPath)));
-            }
-        } else if (remoteBg != null && remoteBg.startsWith("http")) {
-            currentLoadedBg = myUid + "_remote_bg_" + String.valueOf(remoteBg.hashCode());
-            Glide.with(activity).load(remoteBg).dontAnimate().centerCrop().into(myBgImageView);
-        }
-
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.resetHeader();
 
@@ -193,8 +176,6 @@ public class ProfileFragment extends Fragment {
         listWrapper.addView(listSpinner);
         grandParent.addView(listWrapper, cardIndex);
 
-        // === ИСПРАВЛЕНИЕ: ЖЕЛЕЗОБЕТОННОЕ СНЯТИЕ СПИННЕРА ПРИ ЛЮБОМ РАСКЛАДЕ ===
-        // StatsHelper в конце своей работы обновляет weekTimeText. Это лучший маркер того, что загрузка окончена!
         if (weekTimeText != null) {
             weekTimeText.addTextChangedListener(new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -243,7 +224,6 @@ public class ProfileFragment extends Fragment {
         loadMyStatsRunnable = () -> {
             if (isAdded() && appsContainerLocal != null && weekTimeText != null) {
                 StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
-                // Страховочный таймер на случай системного сбоя StatsHelper'а (3 секунды)
                 uiHandler.postDelayed(() -> {
                     if (listSpinner != null) listSpinner.setVisibility(View.GONE);
                 }, 3000);
@@ -379,6 +359,7 @@ public class ProfileFragment extends Fragment {
         return wrapper; 
     }
 
+    // === ИСПРАВЛЕНА ЛОГИКА ОТОБРАЖЕНИЯ ФОНА (ПРОВЕРКА ТУМБЛЕРОВ) ===
     private void updateUiFromPrefs(MainActivity activity) {
         if (getView() == null || !isAdded()) return;
         TextView nameView = getView().findViewById(R.id.profile_name);
@@ -394,11 +375,33 @@ public class ProfileFragment extends Fragment {
         String b64 = activity.prefs.getString("my_photo_base64", null);
         handleMediaLoading(activity, b64, true, myUid);
 
+        // Читаем тумблеры из настроек
+        SharedPreferences appPrefs = activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
+        boolean isGlobalEnabled = appPrefs.getBoolean("bg_global_enabled", true);
+        boolean isMyProfileEnabled = appPrefs.getBoolean("bg_my_profile_enabled", true);
+        boolean isMyImagesEnabled = appPrefs.getBoolean("bg_my_images_enabled", true);
+        boolean isMyGifsEnabled = appPrefs.getBoolean("bg_my_gifs_enabled", true);
+
         String bgPath = activity.prefs.getString("custom_bg_path_" + myUid, null);
         String remoteBg = activity.prefs.getString("my_bg_base64", null);
         
+        String targetPath = null;
+        if (bgPath != null && new File(bgPath).exists()) targetPath = bgPath;
+        else if (remoteBg != null && remoteBg.startsWith("http")) targetPath = remoteBg;
+
+        // Проверяем разрешен ли фон
+        boolean allowBg = true;
+        if (!isGlobalEnabled || !isMyProfileEnabled || targetPath == null) allowBg = false;
+        else {
+            boolean isGif = targetPath.toLowerCase().endsWith(".gif");
+            if (isGif && !isMyGifsEnabled) allowBg = false;
+            if (!isGif && !isMyImagesEnabled) allowBg = false;
+        }
+
         String newBgKey;
-        if (bgPath != null && new File(bgPath).exists()) {
+        if (!allowBg) {
+            newBgKey = "disabled";
+        } else if (targetPath.equals(bgPath)) {
             newBgKey = myUid + "_local_bg_" + new File(bgPath).lastModified();
         } else {
             newBgKey = myUid + "_remote_bg_" + (remoteBg != null ? String.valueOf(remoteBg.hashCode()) : "empty");
@@ -407,7 +410,9 @@ public class ProfileFragment extends Fragment {
         if (!newBgKey.equals(currentLoadedBg)) {
             currentLoadedBg = newBgKey;
             
-            if (bgPath != null && new File(bgPath).exists()) {
+            if (!allowBg) {
+                myBgImageView.setImageDrawable(null);
+            } else if (targetPath.equals(bgPath)) {
                 if (bgPath.toLowerCase().endsWith(".gif")) {
                     Glide.with(this).load(new File(bgPath))
                          .diskCacheStrategy(DiskCacheStrategy.NONE)
@@ -731,7 +736,6 @@ public class ProfileFragment extends Fragment {
                     descView.setVisibility(View.GONE);
                 }
             }
-            // Обновляем тихим способом
             requestLoadMyStats(false);
             dialog.dismiss();
             
