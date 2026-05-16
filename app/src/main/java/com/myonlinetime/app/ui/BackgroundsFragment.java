@@ -20,6 +20,7 @@ public class BackgroundsFragment extends Fragment {
 
     private static final String PREFS_NAME = "AppPrefs";
     
+    // Ключи жестко заданы
     public static final String KEY_BG_GLOBAL = "bg_global_enabled";
     public static final String KEY_BG_MY_PROFILE = "bg_my_profile_enabled";
     public static final String KEY_BG_MY_IMAGES = "bg_my_images_enabled";
@@ -92,10 +93,10 @@ public class BackgroundsFragment extends Fragment {
 
         updateUIState.run();
 
-        // Метод-помощник: дергает MainActivity для перерисовки фона
+        // ИСПРАВЛЕНО: передаем TRUE, чтобы MainActivity ПЕРЕРИСОВАЛ фон, а не просто скрыл
         Runnable notifyBgChanged = () -> {
             if (getActivity() instanceof MainActivity) {
-                ((MainActivity) getActivity()).updateGlobalBackground(false);
+                ((MainActivity) getActivity()).updateGlobalBackground(true);
             }
         };
 
@@ -145,7 +146,6 @@ public class BackgroundsFragment extends Fragment {
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
-            // ИСПРАВЛЕНИЕ: Теперь пишет "Настройки"
             activity.headerTitle.setText(getString(R.string.header_settings_sub)); 
             
             activity.headerBackBtn.setVisibility(View.VISIBLE);
@@ -173,7 +173,7 @@ public class BackgroundsFragment extends Fragment {
         if (!hidden && getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
             setupHeader();
-            activity.updateGlobalBackground(false); 
+            activity.updateGlobalBackground(true); // Тоже заставляем перерисовать при возврате
         }
     }
 
@@ -181,7 +181,8 @@ public class BackgroundsFragment extends Fragment {
     public void onResume() {
         super.onResume();
         if (!isHidden() && getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+            ((MainActivity) getActivity()).updateGlobalBackground(true); 
         }
     }
-}
+                                                        }
+            
