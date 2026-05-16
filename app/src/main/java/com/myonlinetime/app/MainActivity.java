@@ -71,7 +71,6 @@ public class MainActivity extends AppCompatActivity {
     private boolean isSyncingBg = false; 
 
     private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-    private Runnable hideBgRunnable;
     
     private BroadcastReceiver badgeReceiver;
 
@@ -256,18 +255,18 @@ public class MainActivity extends AppCompatActivity {
                 weeklyWorkRequest
         );
         
-        androidx.work.WorkManager.getInstance(this).cancelUniqueWork("FollowerSync");
-
         handleNotificationIntent(getIntent());
         
         refreshGoogleAndVpsToken(true);
     }
 
-    // === ИСПРАВЛЕНИЕ: ЖЕЛЕЗОБЕТОННАЯ ПРОВЕРКА "НОВИЧКА" ===
+    // === ИСПРАВЛЕНИЕ: ДОКТОР ОТРАВЛЕННОГО КЭША ===
     private void checkIfNewUserAndEnforce(String uid) {
         if (vpsToken == null) return;
         
-        if (prefs.contains("is_nickname_confirmed")) {
+        // Если флаг TRUE - юзер 100% подтвержден или ветеран, пускаем сразу.
+        // Если флага нет ИЛИ ОН FALSE (из-за старого бага) - проверяем дату на сервере!
+        if (prefs.getBoolean("is_nickname_confirmed", false)) {
             enforceLoginOverlays();
             return;
         }
@@ -276,7 +275,7 @@ public class MainActivity extends AppCompatActivity {
             @Override public void onLoaded(com.myonlinetime.app.models.User user) {
                 if (isDestroyed()) return;
                 
-                boolean isConfirmed = true; // По умолчанию считаем всех ветеранами, чтобы никого случайно не заблокировать
+                boolean isConfirmed = true; 
                 
                 if (user != null && user.createdAt != null) {
                     try {
@@ -287,24 +286,21 @@ public class MainActivity extends AppCompatActivity {
                         // ДАТА РЕЛИЗА ЭТОГО ОБНОВЛЕНИЯ (15 мая 2026 года)
                         long featureReleaseDate = 1715731200000L; 
                         
-                        // Если аккаунт создан ПОСЛЕ релиза фичи - это новичок, требуем никнейм
                         if (createdTime >= featureReleaseDate) {
                             isConfirmed = false; 
                         }
                         
                         prefs.edit().putString("my_created_at", user.createdAt).apply();
                     } catch (Exception e) {
-                        // Если дата не спарсилась, пускаем (лучше пустить новичка, чем заблокировать ветерана)
                         isConfirmed = true;
                     }
                 }
                 
-                // Сохраняем финальный вердикт
+                // Перезаписываем кэш правильным значением!
                 prefs.edit().putBoolean("is_nickname_confirmed", isConfirmed).apply();
                 runOnUiThread(() -> enforceLoginOverlays());
             }
             @Override public void onError(String error) {
-                // Если сервер упал, пока считаем юзера старым, чтобы не блокировать приложение
                 prefs.edit().putBoolean("is_nickname_confirmed", true).apply();
                 runOnUiThread(() -> enforceLoginOverlays());
             }
@@ -928,7 +924,6 @@ public class MainActivity extends AppCompatActivity {
         container.post(this::enforceLoginOverlays);
     } 
 
-    // === ИСПРАВЛЕНИЕ: ЖЕЛЕЗОБЕТОННЫЙ КОНТРОЛЬ ОВЕРЛЕЕВ ===
     public void enforceLoginOverlays() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         boolean noAuth = (account == null);
@@ -936,13 +931,12 @@ public class MainActivity extends AppCompatActivity {
 
         boolean needsNicknameSetup = false;
 
-        // Если пользователь авторизован, проверяем, нужен ли ему экран никнейма
+        // Если пользователь авторизован, проверяем флаг
         if (!noAuth) {
             if (prefs.contains("is_nickname_confirmed")) {
                 needsNicknameSetup = !prefs.getBoolean("is_nickname_confirmed", true);
             } else {
-                // ВАЖНО: Если мы еще не получили ответ от сервера, мы ПО УМОЛЧАНИЮ
-                // не блокируем интерфейс, чтобы не мучить старых пользователей на время загрузки.
+                // Если флаг еще не получен от сервера - не блокируем!
                 needsNicknameSetup = false; 
             }
         }
@@ -966,7 +960,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Чистим старые глобальные оверлеи
         View oldGlobalOverlay = container.findViewWithTag("login_screen_overlay");
         if (oldGlobalOverlay != null && oldGlobalOverlay.getParent() == container) {
             container.removeView(oldGlobalOverlay);
@@ -980,7 +973,6 @@ public class MainActivity extends AppCompatActivity {
                     continue;
                 }
 
-                // Экраны, которые требуют авторизации и никнейма
                 boolean needsAuthScreens = fragName.equals("ProfileFragment") || fragName.equals("SearchFragment");
 
                 if (needsAuthScreens) {
@@ -989,7 +981,6 @@ public class MainActivity extends AppCompatActivity {
                     View setupOverlay = root.findViewWithTag("setup_screen_overlay");
 
                     if (noAuth) {
-                        // 1. ГОСТЬ -> ПОКАЗЫВАЕМ ВХОД
                         if (setupOverlay != null) setupOverlay.setVisibility(View.GONE);
                         
                         if (loginOverlay == null) {
@@ -1012,7 +1003,6 @@ public class MainActivity extends AppCompatActivity {
                             }
                         }
                     } else if (needsNicknameSetup) {
-                        // 2. НОВИЧОК -> ПОКАЗЫВАЕМ ЭКРАН НИКНЕЙМА
                         if (loginOverlay != null) loginOverlay.setVisibility(View.GONE);
 
                         if (setupOverlay == null) {
@@ -1022,7 +1012,7 @@ public class MainActivity extends AppCompatActivity {
                                             enforceLoginOverlays();
                                         }
                                 );
-                                setupOverlay.setClickable(true); // Блокируем клики под экраном
+                                setupOverlay.setClickable(true); 
                                 setupOverlay.setFocusable(true);
                                 setupOverlay.setTag("setup_screen_overlay");
                                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
@@ -1038,7 +1028,6 @@ public class MainActivity extends AppCompatActivity {
                             }
                         }
                     } else {
-                        // 3. ВЕТЕРАН -> ПРЯЧЕМ ВСЁ
                         if (loginOverlay != null) loginOverlay.setVisibility(View.GONE);
                         if (setupOverlay != null) setupOverlay.setVisibility(View.GONE);
                     }
