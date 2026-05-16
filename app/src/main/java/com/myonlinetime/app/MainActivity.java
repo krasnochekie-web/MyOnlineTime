@@ -263,11 +263,10 @@ public class MainActivity extends AppCompatActivity {
         refreshGoogleAndVpsToken(true);
     }
 
-    // === НОВЫЙ МЕТОД: ТОЧНОЕ ОПРЕДЕЛЕНИЕ НОВИЧКА (ВАТЕРЛИНИЯ) ===
+    // === ИСПРАВЛЕНИЕ: ЖЕЛЕЗОБЕТОННАЯ ПРОВЕРКА "НОВИЧКА" ===
     private void checkIfNewUserAndEnforce(String uid) {
         if (vpsToken == null) return;
         
-        // Если мы локально уже ставили флаг (пользователь успешно прошел экран) - не дергаем сервер
         if (prefs.contains("is_nickname_confirmed")) {
             enforceLoginOverlays();
             return;
@@ -275,33 +274,37 @@ public class MainActivity extends AppCompatActivity {
         
         VpsApi.getUser(this, vpsToken, uid, new VpsApi.UserCallback() {
             @Override public void onLoaded(com.myonlinetime.app.models.User user) {
-                if (!isDestroyed() && user != null && user.createdAt != null) {
+                if (isDestroyed()) return;
+                
+                boolean isConfirmed = true; // По умолчанию считаем всех ветеранами, чтобы никого случайно не заблокировать
+                
+                if (user != null && user.createdAt != null) {
                     try {
                         java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
                         sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
                         long createdTime = sdf.parse(user.createdAt).getTime();
                         
-                        // ДАТА РЕЛИЗА ЭТОГО ОБНОВЛЕНИЯ (15 мая 2026 года = 1715731200000L в миллисекундах)
-                        // Все, кто зарегистрировался ДО этой даты - "ветераны", пропускаем их навсегда.
-                        // Все, кто ПОСЛЕ - новички, будут видеть экран настройки вечно, пока не введут никнейм!
+                        // ДАТА РЕЛИЗА ЭТОГО ОБНОВЛЕНИЯ (15 мая 2026 года)
                         long featureReleaseDate = 1715731200000L; 
                         
-                        if (createdTime < featureReleaseDate) {
-                            prefs.edit().putBoolean("is_nickname_confirmed", true).apply();
-                        } else {
-                            prefs.edit().putBoolean("is_nickname_confirmed", false).apply();
+                        // Если аккаунт создан ПОСЛЕ релиза фичи - это новичок, требуем никнейм
+                        if (createdTime >= featureReleaseDate) {
+                            isConfirmed = false; 
                         }
-                        prefs.edit().putString("my_created_at", user.createdAt).apply();
                         
-                        runOnUiThread(() -> enforceLoginOverlays());
+                        prefs.edit().putString("my_created_at", user.createdAt).apply();
                     } catch (Exception e) {
-                        prefs.edit().putBoolean("is_nickname_confirmed", true).apply();
-                        runOnUiThread(() -> enforceLoginOverlays());
+                        // Если дата не спарсилась, пускаем (лучше пустить новичка, чем заблокировать ветерана)
+                        isConfirmed = true;
                     }
                 }
+                
+                // Сохраняем финальный вердикт
+                prefs.edit().putBoolean("is_nickname_confirmed", isConfirmed).apply();
+                runOnUiThread(() -> enforceLoginOverlays());
             }
             @Override public void onError(String error) {
-                // В случае ошибки сервера пока считаем юзера старым, чтобы не блокировать интерфейс ложно
+                // Если сервер упал, пока считаем юзера старым, чтобы не блокировать приложение
                 prefs.edit().putBoolean("is_nickname_confirmed", true).apply();
                 runOnUiThread(() -> enforceLoginOverlays());
             }
@@ -334,7 +337,6 @@ public class MainActivity extends AppCompatActivity {
                             vpsToken = ourServerToken;
                             StatsHelper.syncUserProfile(MainActivity.this);
                             
-                            // Запускаем проверку новичка
                             checkIfNewUserAndEnforce(account.getId());
 
                             Utils.backgroundExecutor.execute(() -> {
@@ -926,18 +928,23 @@ public class MainActivity extends AppCompatActivity {
         container.post(this::enforceLoginOverlays);
     } 
 
-    // === ЖЕЛЕЗОБЕТОННЫЙ КОНТРОЛЬ ОВЕРЛЕЕВ ===
+    // === ИСПРАВЛЕНИЕ: ЖЕЛЕЗОБЕТОННЫЙ КОНТРОЛЬ ОВЕРЛЕЕВ ===
     public void enforceLoginOverlays() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         boolean noAuth = (account == null);
         boolean hasPerm = hasPermission();
 
-        boolean isProfileLoaded = prefs.contains("is_nickname_confirmed");
         boolean needsNicknameSetup = false;
 
-        // Если профиль загрузился (или мы локально уже ставили флаг)
-        if (!noAuth && isProfileLoaded) {
-            needsNicknameSetup = !prefs.getBoolean("is_nickname_confirmed", true);
+        // Если пользователь авторизован, проверяем, нужен ли ему экран никнейма
+        if (!noAuth) {
+            if (prefs.contains("is_nickname_confirmed")) {
+                needsNicknameSetup = !prefs.getBoolean("is_nickname_confirmed", true);
+            } else {
+                // ВАЖНО: Если мы еще не получили ответ от сервера, мы ПО УМОЛЧАНИЮ
+                // не блокируем интерфейс, чтобы не мучить старых пользователей на время загрузки.
+                needsNicknameSetup = false; 
+            }
         }
 
         View headerBellContainer = findViewById(R.id.header_bell_container);
@@ -959,7 +966,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Чистим старые оверлеи
+        // Чистим старые глобальные оверлеи
         View oldGlobalOverlay = container.findViewWithTag("login_screen_overlay");
         if (oldGlobalOverlay != null && oldGlobalOverlay.getParent() == container) {
             container.removeView(oldGlobalOverlay);
@@ -1015,7 +1022,7 @@ public class MainActivity extends AppCompatActivity {
                                             enforceLoginOverlays();
                                         }
                                 );
-                                setupOverlay.setClickable(true); // Запрещаем кликать на задний фон
+                                setupOverlay.setClickable(true); // Блокируем клики под экраном
                                 setupOverlay.setFocusable(true);
                                 setupOverlay.setTag("setup_screen_overlay");
                                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
@@ -1031,7 +1038,7 @@ public class MainActivity extends AppCompatActivity {
                             }
                         }
                     } else {
-                        // 3. СТАРЫЙ ЮЗЕР -> ПРЯЧЕМ ВСЁ
+                        // 3. ВЕТЕРАН -> ПРЯЧЕМ ВСЁ
                         if (loginOverlay != null) loginOverlay.setVisibility(View.GONE);
                         if (setupOverlay != null) setupOverlay.setVisibility(View.GONE);
                     }
@@ -1061,7 +1068,6 @@ public class MainActivity extends AppCompatActivity {
                         vpsToken = ourServerToken;
                         StatsHelper.syncUserProfile(MainActivity.this);
                         
-                        // Запускаем проверку новичка при входе!
                         checkIfNewUserAndEnforce(acct.getId());
 
                         runOnUiThread(() -> {
