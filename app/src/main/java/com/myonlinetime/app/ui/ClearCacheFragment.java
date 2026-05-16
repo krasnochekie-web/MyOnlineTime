@@ -8,13 +8,16 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -55,6 +58,7 @@ public class ClearCacheFragment extends Fragment {
 
     private boolean isGuest = true;
     private List<StorageCategory> categories = new ArrayList<>();
+    private final List<View> rowViews = new ArrayList<>();
 
     // Палитра для диаграммы
     private final int COLOR_APP = Color.parseColor("#4A90E2");
@@ -62,7 +66,6 @@ public class ClearCacheFragment extends Fragment {
     private final int COLOR_CACHE = Color.parseColor("#F5A623");
     private final int COLOR_BG = Color.parseColor("#B8E986");
 
-    // Класс для сортировки и управления чекбоксами
     private static class StorageCategory {
         String name;
         long size;
@@ -96,6 +99,14 @@ public class ClearCacheFragment extends Fragment {
         donutChart = new DonutChartView(requireContext());
         chartContainer.addView(donutChart, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
+        // СЛУШАТЕЛЬ ДИАГРАММЫ: Делаем волну на нужном пункте списка
+        donutChart.setOnSegmentTouchListener((index, isDown) -> {
+            if (index >= 0 && index < rowViews.size()) {
+                View row = rowViews.get(index);
+                row.setPressed(isDown); // Запускает Ripple-эффект
+            }
+        });
+
         isGuest = (activity == null || activity.vpsToken == null);
 
         btnClear.setOnClickListener(v -> showClearConfirmModal(activity));
@@ -112,6 +123,7 @@ public class ClearCacheFragment extends Fragment {
         contentLayout.setVisibility(View.GONE);
         listContainer.removeAllViews();
         categories.clear();
+        rowViews.clear();
 
         Utils.backgroundExecutor.execute(() -> {
             long sizeApp = 0, sizeData = 0, sizeCache = 0, sizeBg = 0;
@@ -148,7 +160,6 @@ public class ClearCacheFragment extends Fragment {
                 categories.add(new StorageCategory(getString(R.string.category_backgrounds), sizeBg, COLOR_BG, 3));
             }
 
-            // Сортируем от большего к меньшему
             Collections.sort(categories, (a, b) -> Long.compare(b.size, a.size));
 
             new Handler(Looper.getMainLooper()).post(() -> {
@@ -177,12 +188,29 @@ public class ClearCacheFragment extends Fragment {
         donutChart.setData(values, colors);
 
         buildTotalItem(getString(R.string.category_total), totalSize);
+        
+        updateClearButtonText(); // Первичный расчет кнопки
+    }
+
+    private void updateClearButtonText() {
+        long totalSelected = 0;
+        for (StorageCategory cat : categories) {
+            if (cat.type > 0 && cat.isChecked) totalSelected += cat.size;
+        }
+        
+        if (totalSelected > 0) {
+            double sizeMb = totalSelected / (1024.0 * 1024.0);
+            btnClear.setText(String.format(Locale.getDefault(), "%s %.1f %s", getString(R.string.btn_clear_cache), sizeMb, getString(R.string.unit_mb)));
+        } else {
+            btnClear.setText(R.string.btn_clear_cache);
+        }
     }
 
     private void buildListItem(StorageCategory category, long totalSize) {
         if (category.size <= 0) return;
         
         View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_storage_row, listContainer, false);
+        rowViews.add(row);
         
         View marker = row.findViewById(R.id.color_marker);
         CheckBox cb = row.findViewById(R.id.checkbox_marker);
@@ -195,17 +223,20 @@ public class ClearCacheFragment extends Fragment {
         double sizeMb = category.size / (1024.0 * 1024.0);
         txtSize.setText(getString(R.string.format_size_mb, sizeMb, getString(R.string.unit_mb)));
 
-        // Если это Приложение (type == 0), показываем только цветной кружок
-        if (category.type == 0) {
+        if (category.type == 0) { // Приложение
             cb.setVisibility(View.GONE);
             marker.setVisibility(View.VISIBLE);
             
             GradientDrawable markerDrawable = new GradientDrawable();
-            markerDrawable.setShape(GradientDrawable.OVAL);
+            markerDrawable.setShape(GradientDrawable.RECTANGLE); 
             markerDrawable.setColor(category.color);
             marker.setBackground(markerDrawable);
+            
+            row.setOnClickListener(v -> {
+                String msg = getString(R.string.format_tooltip, category.name, sizeMb, getString(R.string.unit_mb), percent);
+                showCloudTooltip(v, msg);
+            });
         } else {
-            // Для всех остальных показываем чекбокс цвета категории
             marker.setVisibility(View.GONE);
             cb.setVisibility(View.VISIBLE);
             CompoundButtonCompat.setButtonTintList(cb, ColorStateList.valueOf(category.color));
@@ -213,29 +244,20 @@ public class ClearCacheFragment extends Fragment {
             
             cb.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 category.isChecked = isChecked;
+                updateClearButtonText(); // Динамический текст на кнопке
             });
             
-            // Если кликнули по всей строке, меняем состояние чекбокса (плюс показываем облачко)
             row.setOnClickListener(v -> {
                 cb.setChecked(!cb.isChecked());
                 String msg = getString(R.string.format_tooltip, category.name, sizeMb, getString(R.string.unit_mb), percent);
                 showCloudTooltip(v, msg);
             });
             
-            // Если кликнули только по самому чекбоксу, показываем облачко
             cb.setOnClickListener(v -> {
                 String msg = getString(R.string.format_tooltip, category.name, sizeMb, getString(R.string.unit_mb), percent);
                 showCloudTooltip(row, msg);
             });
-            
-            listContainer.addView(row);
-            return; // Выходим, так как клик-листенер уже назначен
         }
-
-        row.setOnClickListener(v -> {
-            String msg = getString(R.string.format_tooltip, category.name, sizeMb, getString(R.string.unit_mb), percent);
-            showCloudTooltip(v, msg);
-        });
 
         listContainer.addView(row);
     }
@@ -293,12 +315,12 @@ public class ClearCacheFragment extends Fragment {
     }
 
     private void showClearConfirmModal(MainActivity activity) {
-        boolean anythingSelected = false;
+        long totalSelected = 0;
         for (StorageCategory cat : categories) {
-            if (cat.type > 0 && cat.isChecked) anythingSelected = true;
+            if (cat.type > 0 && cat.isChecked) totalSelected += cat.size;
         }
 
-        if (!anythingSelected) {
+        if (totalSelected == 0) {
             Toast.makeText(activity, "Нет выбранных категорий", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -324,7 +346,8 @@ public class ClearCacheFragment extends Fragment {
         dialogLayout.addView(title);
 
         TextView message = new TextView(activity);
-        message.setText("Очистить выбранные данные?"); // Здесь можно вынести в strings
+        double sizeMb = totalSelected / (1024.0 * 1024.0);
+        message.setText(String.format(Locale.getDefault(), "Очистить выбранные данные (%.1f МБ)?", sizeMb));
         message.setTextColor(ContextCompat.getColor(activity, R.color.textDynamic));
         message.setTextSize(16f);
         dialogLayout.addView(message);
@@ -334,14 +357,18 @@ public class ClearCacheFragment extends Fragment {
         btnLayout.setGravity(Gravity.END);
         btnLayout.setPadding(0, 40, 0, 0);
 
+        // Получаем системный эффект волны (ripple)
+        TypedValue rippleValue = new TypedValue();
+        activity.getTheme().resolveAttribute(android.R.attr.selectableItemBackground, rippleValue, true);
+
         Button btnCancel = new Button(activity);
         btnCancel.setText(R.string.btn_cancel);
-        btnCancel.setBackgroundColor(Color.TRANSPARENT);
+        btnCancel.setBackgroundResource(rippleValue.resourceId); // Эффект волны
         btnCancel.setTextColor(ContextCompat.getColor(activity, R.color.textGrayDynamic));
         
         Button btnConfirm = new Button(activity);
         btnConfirm.setText(R.string.btn_clear_data_confirm);
-        btnConfirm.setBackgroundColor(Color.TRANSPARENT);
+        btnConfirm.setBackgroundResource(rippleValue.resourceId); // Эффект волны
         btnConfirm.setTextColor(ContextCompat.getColor(activity, R.color.grapefruit));
 
         btnCancel.setOnClickListener(v -> dialog.dismiss());
@@ -355,12 +382,12 @@ public class ClearCacheFragment extends Fragment {
             Utils.backgroundExecutor.execute(() -> {
                 for (StorageCategory cat : categories) {
                     if (cat.isChecked) {
-                        if (cat.type == 2) { // Кэш
+                        if (cat.type == 2) { 
                             deleteDir(activity.getCacheDir());
                             if (activity.getExternalCacheDir() != null) deleteDir(activity.getExternalCacheDir());
                         }
-                        if (cat.type == 1) clearAppDataSafe(activity); // Данные
-                        if (cat.type == 3 && !isGuest) activity.deleteMyBackgroundLocal(); // Фоны
+                        if (cat.type == 1) clearAppDataSafe(activity); 
+                        if (cat.type == 3 && !isGuest) activity.deleteMyBackgroundLocal(); 
                     }
                 }
                 new Handler(Looper.getMainLooper()).post(() -> startCalculatingSizes(activity));
@@ -372,9 +399,11 @@ public class ClearCacheFragment extends Fragment {
         dialogLayout.addView(btnLayout);
 
         dialog.setContentView(dialogLayout);
+        
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             dialog.getWindow().setLayout((int)(getResources().getDisplayMetrics().widthPixels * 0.85), ViewGroup.LayoutParams.WRAP_CONTENT);
+            dialog.getWindow().getAttributes().windowAnimations = android.R.style.Animation_Dialog; // Анимация появления
         }
         dialog.show();
     }
@@ -442,7 +471,7 @@ public class ClearCacheFragment extends Fragment {
     private void setupHeader(MainActivity activity) {
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
-            activity.headerTitle.setText(getString(R.string.header_settings_sub)); 
+            activity.headerTitle.setText(getString(R.string.title_clear_storage)); 
             activity.headerBackBtn.setVisibility(View.VISIBLE);
             activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow);
         }
@@ -474,27 +503,44 @@ public class ClearCacheFragment extends Fragment {
     }
 
     // ==========================================
-    // ВЬЮШКА: АНИМИРОВАННАЯ ДИАГРАММА
+    // ВЬЮШКА: АНИМИРОВАННАЯ ИНТЕРАКТИВНАЯ ДИАГРАММА
     // ==========================================
     private static class DonutChartView extends View {
         private Paint paint;
+        private Paint textPaint;
         private RectF rectF;
         private float[] values;
         private int[] colors;
         private float total = 0;
         private float animationProgress = 0f;
+        private int activeIndex = -1;
+
+        public interface OnSegmentTouchListener {
+            void onSegmentTouched(int index, boolean isDown);
+        }
+        private OnSegmentTouchListener touchListener;
 
         public DonutChartView(Context context) {
             super(context);
             init();
         }
 
+        public void setOnSegmentTouchListener(OnSegmentTouchListener listener) {
+            this.touchListener = listener;
+        }
+
         private void init() {
             paint = new Paint(Paint.ANTI_ALIAS_FLAG);
             paint.setStyle(Paint.Style.STROKE);
-            // ИСПРАВЛЕНИЕ: Резкие края вместо скругленных
             paint.setStrokeCap(Paint.Cap.BUTT); 
             paint.setStrokeWidth(65f);
+            
+            textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            textPaint.setColor(Color.WHITE);
+            textPaint.setTextSize(36f);
+            textPaint.setTextAlign(Paint.Align.CENTER);
+            textPaint.setTypeface(Typeface.DEFAULT_BOLD);
+            
             rectF = new RectF();
         }
 
@@ -502,6 +548,7 @@ public class ClearCacheFragment extends Fragment {
             this.values = values;
             this.colors = colors;
             total = 0;
+            activeIndex = -1;
             for (float v : values) total += v;
 
             ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
@@ -512,6 +559,57 @@ public class ClearCacheFragment extends Fragment {
                 invalidate();
             });
             animator.start();
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            if (values == null || total == 0 || animationProgress < 1f) return false;
+
+            float cx = getWidth() / 2f;
+            float cy = getHeight() / 2f;
+            float dx = event.getX() - cx;
+            float dy = event.getY() - cy;
+            
+            float radius = Math.min(getWidth(), getHeight()) / 2f - paint.getStrokeWidth();
+            float distance = (float) Math.sqrt(dx * dx + dy * dy);
+            float halfStroke = paint.getStrokeWidth() / 2f;
+
+            if (distance >= radius - halfStroke && distance <= radius + halfStroke) {
+                float angle = (float) Math.toDegrees(Math.atan2(dy, dx));
+                if (angle < 0) angle += 360f;
+                
+                float touchAngle = angle + 90f; 
+                if (touchAngle >= 360f) touchAngle -= 360f;
+
+                if (event.getAction() == MotionEvent.ACTION_DOWN || event.getAction() == MotionEvent.ACTION_MOVE) {
+                    float currentAngle = 0f;
+                    int touchedIndex = -1;
+                    for (int i = 0; i < values.length; i++) {
+                        float sweep = (values[i] / total) * 360f;
+                        if (touchAngle >= currentAngle && touchAngle < currentAngle + sweep) {
+                            touchedIndex = i;
+                            break;
+                        }
+                        currentAngle += sweep;
+                    }
+                    
+                    if (touchedIndex != activeIndex) {
+                        activeIndex = touchedIndex;
+                        invalidate();
+                        if (touchListener != null) touchListener.onSegmentTouched(activeIndex, true);
+                    }
+                    return true;
+                }
+            }
+            
+            if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                if (activeIndex != -1) {
+                    if (touchListener != null) touchListener.onSegmentTouched(activeIndex, false);
+                    activeIndex = -1;
+                    invalidate();
+                }
+            }
+            return true;
         }
 
         @Override
@@ -530,9 +628,28 @@ public class ClearCacheFragment extends Fragment {
                 paint.setColor(colors[i]);
                 float sweepAngle = (values[i] / total) * 360f * animationProgress;
                 
-                // Рисуем резкие секторы без отступов, чтобы они стыковались идеально
                 if (sweepAngle > 0) {
+                    canvas.save();
+                    
+                    if (i == activeIndex) {
+                        double midRad = Math.toRadians(startAngle + sweepAngle / 2f);
+                        canvas.translate((float) Math.cos(midRad) * 15f, (float) Math.sin(midRad) * 15f);
+                    }
+                    
                     canvas.drawArc(rectF, startAngle, sweepAngle, false, paint);
+                    
+                    if (sweepAngle >= 15f && animationProgress > 0.8f) {
+                        double midRad = Math.toRadians(startAngle + sweepAngle / 2f);
+                        float x = width / 2f + (float) Math.cos(midRad) * radius;
+                        float y = height / 2f + (float) Math.sin(midRad) * radius - ((textPaint.descent() + textPaint.ascent()) / 2f);
+                        
+                        int pct = (int) Math.round((values[i] / total) * 100);
+                        if (pct > 0) {
+                            canvas.drawText(pct + "%", x, y, textPaint);
+                        }
+                    }
+                    
+                    canvas.restore();
                 }
                 startAngle += sweepAngle;
             }
