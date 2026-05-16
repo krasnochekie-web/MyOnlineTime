@@ -260,12 +260,11 @@ public class MainActivity extends AppCompatActivity {
         refreshGoogleAndVpsToken(true);
     }
 
-    // === ИСПРАВЛЕНИЕ: ДОКТОР ОТРАВЛЕННОГО КЭША ===
+    // === ИСПРАВЛЕНИЕ ЛОГИКИ: ЖЕЛЕЗОБЕТОННАЯ ПРОВЕРКА БЕЗ ОШИБКИ В МАТЕМАТИКЕ ===
     private void checkIfNewUserAndEnforce(String uid) {
         if (vpsToken == null) return;
         
-        // Если флаг TRUE - юзер 100% подтвержден или ветеран, пускаем сразу.
-        // Если флага нет ИЛИ ОН FALSE (из-за старого бага) - проверяем дату на сервере!
+        // Если мы уже точно знаем, что юзер подтвержден - не дергаем сервер
         if (prefs.getBoolean("is_nickname_confirmed", false)) {
             enforceLoginOverlays();
             return;
@@ -283,8 +282,8 @@ public class MainActivity extends AppCompatActivity {
                         sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
                         long createdTime = sdf.parse(user.createdAt).getTime();
                         
-                        // ДАТА РЕЛИЗА ЭТОГО ОБНОВЛЕНИЯ (15 мая 2026 года)
-                        long featureReleaseDate = 1715731200000L; 
+                        // ИСПРАВЛЕНИЕ: Безопасный парсинг даты релиза (без хардкора миллисекунд)
+                        long featureReleaseDate = sdf.parse("2026-05-15T00:00:00.000Z").getTime();
                         
                         if (createdTime >= featureReleaseDate) {
                             isConfirmed = false; 
@@ -296,7 +295,6 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
                 
-                // Перезаписываем кэш правильным значением!
                 prefs.edit().putBoolean("is_nickname_confirmed", isConfirmed).apply();
                 runOnUiThread(() -> enforceLoginOverlays());
             }
@@ -931,12 +929,10 @@ public class MainActivity extends AppCompatActivity {
 
         boolean needsNicknameSetup = false;
 
-        // Если пользователь авторизован, проверяем флаг
         if (!noAuth) {
             if (prefs.contains("is_nickname_confirmed")) {
                 needsNicknameSetup = !prefs.getBoolean("is_nickname_confirmed", true);
             } else {
-                // Если флаг еще не получен от сервера - не блокируем!
                 needsNicknameSetup = false; 
             }
         }
