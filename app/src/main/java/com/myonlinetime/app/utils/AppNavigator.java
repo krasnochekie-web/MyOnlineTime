@@ -16,6 +16,7 @@ import com.myonlinetime.app.ui.StatsHostFragment;
 import com.myonlinetime.app.ui.NotificationsHistoryFragment;
 import com.myonlinetime.app.ui.FollowsFragment;
 import com.myonlinetime.app.ui.NotificationsFragment;
+import com.myonlinetime.app.ui.ClearCacheFragment; // НОВЫЙ ИМПОРТ
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -106,7 +107,8 @@ public class AppNavigator {
         if (fragment instanceof OtherProfileFragment || 
             fragment instanceof NotificationsHistoryFragment || 
             fragment instanceof FollowsFragment ||
-            fragment instanceof NotificationsFragment) {
+            fragment instanceof NotificationsFragment ||
+            fragment instanceof ClearCacheFragment) { // ДОБАВЛЕНО ИСКЛЮЧЕНИЕ
             ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left, R.anim.slide_in_left, R.anim.slide_out_right);
         } else {
             // Все остальные экраны выезжают снизу
@@ -136,7 +138,8 @@ public class AppNavigator {
         if (topFragment instanceof OtherProfileFragment || 
             topFragment instanceof NotificationsHistoryFragment || 
             topFragment instanceof FollowsFragment ||
-            topFragment instanceof NotificationsFragment) {
+            topFragment instanceof NotificationsFragment ||
+            topFragment instanceof ClearCacheFragment) { // ДОБАВЛЕНО ИСКЛЮЧЕНИЕ
             ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
         } else {
             ft.setCustomAnimations(android.R.anim.fade_in, R.anim.slide_out_down);
