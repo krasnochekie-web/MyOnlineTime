@@ -260,7 +260,6 @@ public class MainActivity extends AppCompatActivity {
         refreshGoogleAndVpsToken(true);
     }
 
-    // === ИСПРАВЛЕНИЕ: Бронебойный парсер даты ===
     private void checkIfNewUserAndEnforce(String uid) {
         if (vpsToken == null) return;
         
@@ -1026,6 +1025,16 @@ public class MainActivity extends AppCompatActivity {
                             setupOverlay.bringToFront();
                             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                                 setupOverlay.setTranslationZ(50f);
+                            }
+                            
+                            // === ИСПРАВЛЕНИЕ: СИНХРОНИЗАЦИЯ ЧЕРНОВИКА ПРИ ПЕРЕХОДЕ МЕЖДУ ВКЛАДКАМИ ===
+                            EditText inputName = setupOverlay.findViewById(R.id.setup_nickname_input);
+                            if (inputName != null) {
+                                String draft = prefs.getString("draft_setup_nickname", null);
+                                if (draft != null && !draft.equals(inputName.getText().toString())) {
+                                    inputName.setText(draft);
+                                    inputName.setSelection(draft.length());
+                                }
                             }
                         }
                     } else {
