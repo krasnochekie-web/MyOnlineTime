@@ -38,6 +38,7 @@ import com.myonlinetime.app.R;
 import com.myonlinetime.app.utils.Utils;
 
 import java.io.File;
+import java.util.Locale;
 
 public class ClearCacheFragment extends Fragment {
 
@@ -138,7 +139,6 @@ public class ClearCacheFragment extends Fragment {
         long totalSize = sizeApp + sizeData + sizeCache + (isGuest ? 0 : sizeBg);
         double totalMb = totalSize / (1024.0 * 1024.0);
         
-        String unitMb = getString(R.string.unit_mb);
         textTotalSize.setText(String.format(getString(R.string.format_size_mb), totalMb, ""));
 
         float[] values = isGuest ? new float[]{sizeApp, sizeData, sizeCache} : new float[]{sizeApp, sizeData, sizeCache, sizeBg};
@@ -157,50 +157,26 @@ public class ClearCacheFragment extends Fragment {
         buildTotalItem(getString(R.string.category_total), totalSize);
     }
 
+    // === ИСПРАВЛЕНИЕ: Инфлейтим XML вместо хардкода UI в Java ===
     private void buildListItem(String name, long size, long total, int color) {
         if (size <= 0) return;
         
-        LinearLayout row = new LinearLayout(requireContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(40, 30, 40, 30);
+        View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_storage_row, listContainer, false);
         
-        // Красивая волна (ripple)
-        row.setBackgroundResource(R.drawable.bg_app_card);
-        row.setForeground(ContextCompat.getDrawable(requireContext(), androidx.appcompat.R.attr.selectableItemBackground));
-        row.setClickable(true);
-        row.setFocusable(true);
-
-        View marker = new View(requireContext());
-        LinearLayout.LayoutParams markerParams = new LinearLayout.LayoutParams(30, 30);
-        markerParams.setMargins(0, 0, 30, 0);
-        marker.setLayoutParams(markerParams);
+        View marker = row.findViewById(R.id.color_marker);
+        TextView txtName = row.findViewById(R.id.text_category_name);
+        TextView txtSize = row.findViewById(R.id.text_category_size);
         
         GradientDrawable markerDrawable = new GradientDrawable();
         markerDrawable.setShape(GradientDrawable.OVAL);
         markerDrawable.setColor(color);
         marker.setBackground(markerDrawable);
-
-        TextView txtName = new TextView(requireContext());
-        txtName.setTextColor(ContextCompat.getColor(requireContext(), R.color.textDynamic));
-        txtName.setTextSize(16f);
         
         int percent = (int) Math.round((double) size / total * 100);
         txtName.setText(String.format("%s %s", name, getString(R.string.format_percent, percent)));
         
-        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
-        txtName.setLayoutParams(nameParams);
-
-        TextView txtSize = new TextView(requireContext());
-        txtSize.setTextColor(ContextCompat.getColor(requireContext(), R.color.textGrayDynamic));
-        txtSize.setTextSize(14f);
-        
         double sizeMb = size / (1024.0 * 1024.0);
         txtSize.setText(getString(R.string.format_size_mb, sizeMb, getString(R.string.unit_mb)));
-
-        row.addView(marker);
-        row.addView(txtName);
-        row.addView(txtSize);
 
         // ИСТИННОЕ ОБЛАЧКО
         row.setOnClickListener(v -> {
@@ -212,29 +188,29 @@ public class ClearCacheFragment extends Fragment {
     }
 
     private void buildTotalItem(String name, long totalSize) {
-        LinearLayout row = new LinearLayout(requireContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(40, 40, 40, 40);
-
-        TextView txtName = new TextView(requireContext());
-        txtName.setTextColor(ContextCompat.getColor(requireContext(), R.color.textDynamic));
-        txtName.setTextSize(16f);
-        txtName.setTypeface(null, android.graphics.Typeface.BOLD);
-        txtName.setText(name);
+        View row = LayoutInflater.from(requireContext()).inflate(R.layout.item_storage_row, listContainer, false);
         
-        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
-        txtName.setLayoutParams(nameParams);
+        View marker = row.findViewById(R.id.color_marker);
+        TextView txtName = row.findViewById(R.id.text_category_name);
+        TextView txtSize = row.findViewById(R.id.text_category_size);
+        
+        marker.setVisibility(View.GONE);
+        
+        row.setClickable(false);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            row.setForeground(null);
+        }
+        row.setBackgroundColor(Color.TRANSPARENT);
 
-        TextView txtSize = new TextView(requireContext());
+        txtName.setText(name);
+        txtName.setTypeface(null, android.graphics.Typeface.BOLD);
+        
         txtSize.setTextColor(ContextCompat.getColor(requireContext(), R.color.textDynamic));
-        txtSize.setTextSize(16f);
         txtSize.setTypeface(null, android.graphics.Typeface.BOLD);
         
         double sizeMb = totalSize / (1024.0 * 1024.0);
         txtSize.setText(getString(R.string.format_size_mb, sizeMb, getString(R.string.unit_mb)));
 
-        row.addView(txtName);
-        row.addView(txtSize);
         listContainer.addView(row);
     }
 
