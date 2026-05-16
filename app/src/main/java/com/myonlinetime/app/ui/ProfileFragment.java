@@ -117,6 +117,9 @@ public class ProfileFragment extends Fragment {
         myBgImageView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         myBgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
         
+        // СТАВИМ ЩИТ: Заливаем фон цветом приложения, чтобы не было Франкенштейнов
+        myBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(requireContext(), R.color.bgDynamic)));
+
         final View originalView = inflater.inflate(R.layout.layout_profile, wrapper, false);
         profileContentView = originalView;
         
@@ -359,7 +362,6 @@ public class ProfileFragment extends Fragment {
         return wrapper; 
     }
 
-    // === ИСПРАВЛЕНА ЛОГИКА ОТОБРАЖЕНИЯ ФОНА (ПРОВЕРКА ТУМБЛЕРОВ) ===
     private void updateUiFromPrefs(MainActivity activity) {
         if (getView() == null || !isAdded()) return;
         TextView nameView = getView().findViewById(R.id.profile_name);
@@ -411,7 +413,8 @@ public class ProfileFragment extends Fragment {
             currentLoadedBg = newBgKey;
             
             if (!allowBg) {
-                myBgImageView.setImageDrawable(null);
+                // ФРАНКЕНШТЕЙН УНИЧТОЖЕН
+                myBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
             } else if (targetPath.equals(bgPath)) {
                 if (bgPath.toLowerCase().endsWith(".gif")) {
                     Glide.with(this).load(new File(bgPath))
@@ -424,7 +427,7 @@ public class ProfileFragment extends Fragment {
             } else if (remoteBg != null && remoteBg.startsWith("http")) {
                 Glide.with(this).load(remoteBg).dontAnimate().centerCrop().into(myBgImageView);
             } else {
-                myBgImageView.setImageDrawable(null);
+                myBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
             }
         }
     }
