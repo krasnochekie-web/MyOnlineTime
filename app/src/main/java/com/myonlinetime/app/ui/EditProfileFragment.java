@@ -249,13 +249,14 @@ public class EditProfileFragment extends Fragment {
              
             btnSave.setTag(true);
 
-            // Прячем клавиатуру
+            // Прячем клавиатуру принудительно
             InputMethodManager imm = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
             if (imm != null) {
                 imm.hideSoftInputFromWindow(inputName.getWindowToken(), 0);
             }
+            inputName.clearFocus();
+            inputAbout.clearFocus();
 
-            // ИСПРАВЛЕНИЕ ГОНКИ: Жестко фиксируем поколение ПЕРЕД любыми асинхронными запросами!
             final long myGeneration = ++currentUploadGeneration;
             final String capturedToken = activity.vpsToken;
             final String currentUid = acct.getId();
@@ -265,97 +266,105 @@ public class EditProfileFragment extends Fragment {
             final long myUploadTicket = System.currentTimeMillis();
             activity.prefs.edit().putLong("active_upload_ticket", myUploadTicket).apply();
 
-            Runnable applyOptimisticAndUpload = () -> {
-                 SharedPreferences.Editor editor = activity.prefs.edit();
-                 editor.putString("my_nickname", n);
-                 editor.putString("my_about", a);
+            // ИСТИННЫЙ ОПТИМИСТИЧНЫЙ UI: применяем всё локально СРАЗУ, не ждем сервер!
+            SharedPreferences.Editor editor = activity.prefs.edit();
+            editor.putString("my_nickname", n);
+            editor.putString("my_about", a);
 
-                 if (finalPhotoFile != null || finalBgFile != null) {
-                     File[] files = activity.getFilesDir().listFiles();
-                     if (files != null) {
-                         for (File f : files) {
-                             if (finalPhotoFile != null && f.getName().startsWith("avatar_" + currentUid)) f.delete();
-                             if (finalBgFile != null && f.getName().startsWith("my_bg_" + currentUid)) f.delete();
-                         }
-                     }
-                 }
-
-                 if (finalPhotoFile != null) {
-                     File pPath = new File(activity.getFilesDir(), "avatar_" + currentUid + "_" + System.currentTimeMillis() + ".png");
-                     try { copyFile(finalPhotoFile, pPath); } catch (Exception ignored) {}
-                     editor.putString("custom_avatar_path_" + currentUid, pPath.getAbsolutePath());
-                 }
-                 
-                 if (finalBgFile != null) {
-                     String ext = finalBgFile.getName().endsWith(".gif") ? ".gif" : ".jpg";
-                     File bPath = new File(activity.getFilesDir(), "my_bg_" + currentUid + "_" + System.currentTimeMillis() + ext);
-                     try { copyFile(finalBgFile, bPath); } catch (Exception ignored) {}
-                     editor.putString("custom_bg_path_" + currentUid, bPath.getAbsolutePath());
-                 }
-                 
-                 editor.apply();
-
-                 EditProfileFragment.isProfileUploading = true;
-                 EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
-
-                 if (finalPhotoFile != null) {
-                     activity.mMemoryCache.remove("avatar_" + currentUid);
-                     activity.updateAvatarInUI();
-                 }
-
-                 activity.clearPreviewBackground();
-                 activity.updateGlobalBackground(true);
-                 activity.navigator.closeSubScreen();
-                 LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
-
-                 Utils.backgroundExecutor.execute(() -> {
-                     File serverUploadPhoto = null;
-                     File serverUploadBg = null;
-
-                     try {
-                         if (myGeneration != currentUploadGeneration) return;
-
-                         if (finalPhotoFile != null && finalPhotoFile.exists()) {
-                             serverUploadPhoto = new File(activity.getCacheDir(), "server_upload_avatar_" + currentUid + (finalPhotoFile.getName().endsWith(".gif") ? ".gif" : ".png"));
-                             copyFile(finalPhotoFile, serverUploadPhoto);
-                         }
-                         if (finalBgFile != null && finalBgFile.exists()) {
-                             serverUploadBg = new File(activity.getCacheDir(), "server_upload_bg_" + currentUid + (finalBgFile.getName().endsWith(".gif") ? ".gif" : ".jpg"));
-                             copyFile(finalBgFile, serverUploadBg);
-                         }
-                     } catch (Exception e) { e.printStackTrace(); }
-
-                     executeFinalUpload(capturedToken, currentUid, n, a, serverUploadPhoto, serverUploadBg, myUploadTicket, myGeneration, activity);
-                 });
-            };
-
-            if (capturedToken != null && !n.equals(initialName)) {
-                 VpsApi.checkNickname(capturedToken, n, new VpsApi.Callback() {
-                     @Override public void onSuccess(String result) {
-                         // Проверка поколения: если юзер уже успел нажать кнопку с другим ником, этот запрос умрет
-                         if (myGeneration != currentUploadGeneration) return;
-                         activity.runOnUiThread(applyOptimisticAndUpload);
-                     }
-                     @Override public void onError(String error) {
-                         if (myGeneration != currentUploadGeneration) return;
-                         activity.runOnUiThread(() -> {
-                             btnSave.setTag(false);
-                             String displayError = activity.getString(R.string.err_server);
-                             try {
-                                 if (error.contains("{")) {
-                                     JSONObject errObj = new JSONObject(error.substring(error.indexOf("{")));
-                                     if (errObj.has("error")) displayError = errObj.getString("error");
-                                 } else { displayError = error; }
-                             } catch (Exception ignored) {}
-                             Toast.makeText(activity, displayError, Toast.LENGTH_LONG).show();
-                         });
-                     }
-                 });
-            } else if (capturedToken != null) {
-                 applyOptimisticAndUpload.run();
-            } else {
-                 btnSave.setTag(false);
+            if (finalPhotoFile != null || finalBgFile != null) {
+                File[] files = activity.getFilesDir().listFiles();
+                if (files != null) {
+                    for (File f : files) {
+                        if (finalPhotoFile != null && f.getName().startsWith("avatar_" + currentUid)) f.delete();
+                        if (finalBgFile != null && f.getName().startsWith("my_bg_" + currentUid)) f.delete();
+                    }
+                }
             }
+
+            if (finalPhotoFile != null) {
+                File pPath = new File(activity.getFilesDir(), "avatar_" + currentUid + "_" + System.currentTimeMillis() + ".png");
+                try { copyFile(finalPhotoFile, pPath); } catch (Exception ignored) {}
+                editor.putString("custom_avatar_path_" + currentUid, pPath.getAbsolutePath());
+            }
+             
+            if (finalBgFile != null) {
+                String ext = finalBgFile.getName().endsWith(".gif") ? ".gif" : ".jpg";
+                File bPath = new File(activity.getFilesDir(), "my_bg_" + currentUid + "_" + System.currentTimeMillis() + ext);
+                try { copyFile(finalBgFile, bPath); } catch (Exception ignored) {}
+                editor.putString("custom_bg_path_" + currentUid, bPath.getAbsolutePath());
+            }
+             
+            editor.apply();
+
+            EditProfileFragment.isProfileUploading = true;
+            EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
+
+            if (finalPhotoFile != null) {
+                activity.mMemoryCache.remove("avatar_" + currentUid);
+                activity.updateAvatarInUI();
+            }
+
+            activity.clearPreviewBackground();
+            activity.updateGlobalBackground(true);
+            
+            // МГНОВЕННОЕ ЗАКРЫТИЕ ЭКРАНА С АНИМАЦИЕЙ
+            activity.navigator.closeSubScreen();
+            LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
+
+            // Фоновая отправка на сервер с защитой
+            Utils.backgroundExecutor.execute(() -> {
+                File serverUploadPhoto = null;
+                File serverUploadBg = null;
+
+                try {
+                    if (myGeneration != currentUploadGeneration) return;
+
+                    if (finalPhotoFile != null && finalPhotoFile.exists()) {
+                        serverUploadPhoto = new File(activity.getCacheDir(), "server_upload_avatar_" + currentUid + (finalPhotoFile.getName().endsWith(".gif") ? ".gif" : ".png"));
+                        copyFile(finalPhotoFile, serverUploadPhoto);
+                    }
+                    if (finalBgFile != null && finalBgFile.exists()) {
+                        serverUploadBg = new File(activity.getCacheDir(), "server_upload_bg_" + currentUid + (finalBgFile.getName().endsWith(".gif") ? ".gif" : ".jpg"));
+                        copyFile(finalBgFile, serverUploadBg);
+                    }
+                } catch (Exception e) { e.printStackTrace(); }
+
+                final File isolatedPhoto = serverUploadPhoto;
+                final File isolatedBg = serverUploadBg;
+
+                if (capturedToken != null && !n.equals(initialName)) {
+                    VpsApi.checkNickname(capturedToken, n, new VpsApi.Callback() {
+                        @Override public void onSuccess(String result) {
+                            if (myGeneration != currentUploadGeneration) return;
+                            executeFinalUpload(capturedToken, currentUid, n, a, isolatedPhoto, isolatedBg, myUploadTicket, myGeneration, activity);
+                        }
+                        @Override public void onError(String error) {
+                            if (myGeneration != currentUploadGeneration) return;
+                            
+                            // ОТКАТ ТОЛЬКО НИКНЕЙМА (т.к. он занят), остальное оставляем
+                            activity.runOnUiThread(() -> {
+                                String displayError = activity.getString(R.string.err_server);
+                                try {
+                                    if (error.contains("{")) {
+                                        JSONObject errObj = new JSONObject(error.substring(error.indexOf("{")));
+                                        if (errObj.has("error")) displayError = errObj.getString("error");
+                                    } else { displayError = error; }
+                                } catch (Exception ignored) {}
+                                Toast.makeText(activity, displayError, Toast.LENGTH_LONG).show();
+                                
+                                if (activity.prefs.getString("my_nickname", "").equals(n)) {
+                                    activity.prefs.edit().putString("my_nickname", initialName).apply();
+                                    LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
+                                }
+                            });
+                            // Продолжаем грузить фон и описание с изначальным ником
+                            executeFinalUpload(capturedToken, currentUid, initialName, a, isolatedPhoto, isolatedBg, myUploadTicket, myGeneration, activity);
+                        }
+                    });
+                } else if (capturedToken != null) {
+                    executeFinalUpload(capturedToken, currentUid, n, a, isolatedPhoto, isolatedBg, myUploadTicket, myGeneration, activity);
+                }
+            });
         });
 
         return view;
@@ -365,8 +374,7 @@ public class EditProfileFragment extends Fragment {
         VpsApi.saveUserProfile(token, nickname, about, photo, bg, ticket, new VpsApi.Callback() {
             @Override 
             public void onSuccess(String result) {
-                long currentTicket = activity.prefs.getLong("active_upload_ticket", 0);
-                if (generation != currentUploadGeneration || currentTicket != ticket) {
+                if (generation != currentUploadGeneration) {
                     cleanupFiles(photo, bg);
                     return;
                 }
@@ -400,7 +408,9 @@ public class EditProfileFragment extends Fragment {
                         }
 
                         successEditor.apply();
-                        activity.prefs.edit().putLong("active_upload_ticket", 0).apply();
+                        // ИСПРАВЛЕНИЕ RACE CONDITION: Не сбрасываем билет в 0, а продлеваем защиту!
+                        activity.prefs.edit().putLong("active_upload_ticket", System.currentTimeMillis()).apply();
+                        
                         EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
                         if (generation == currentUploadGeneration) EditProfileFragment.isProfileUploading = false;
                         LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
@@ -411,10 +421,8 @@ public class EditProfileFragment extends Fragment {
             @Override public void onError(String error) {
                 if (generation == currentUploadGeneration) {
                     EditProfileFragment.isProfileUploading = false;
-                    long currentTicket = activity.prefs.getLong("active_upload_ticket", 0);
-                    if (currentTicket == ticket) {
-                        activity.prefs.edit().putLong("active_upload_ticket", 0).apply(); 
-                    }
+                    // Продлеваем защиту даже при ошибке, чтобы старый запрос не перетер данные
+                    activity.prefs.edit().putLong("active_upload_ticket", System.currentTimeMillis()).apply(); 
                 }
                 cleanupFiles(photo, bg);
             }
