@@ -208,8 +208,7 @@ public class NotificationsHistoryFragment extends Fragment {
                                 adapter.updateItems(items);
                             }
                             
-                            // Предзагрузка профилей из кэша
-                            preloadUserProfiles(items, activity);
+                            // Предзагрузка удалена для экономии трафика
 
                             if (finalHasUnread) {
                                 markAllAsRead(activity, array, cacheKey);
@@ -401,8 +400,7 @@ public class NotificationsHistoryFragment extends Fragment {
                             adapter.updateItems(items);
                         }
                         
-                        // === ПРЕДЗАГРУЗКА ПРОФИЛЕЙ ПОСЛЕ ЗАПРОСА ===
-                        preloadUserProfiles(items, activity);
+                        // Предзагрузка удалена
                         
                         if (finalHasUnread) {
                             markAllAsRead(activity, array, getCacheKey());
@@ -419,16 +417,6 @@ public class NotificationsHistoryFragment extends Fragment {
                 }, delayStopSpinner);
             }
         });
-    }
-
-    private void preloadUserProfiles(List<NotificationModels.NotificationItem> items, MainActivity activity) {
-        if (activity.vpsToken == null) return;
-        for (NotificationModels.NotificationItem item : items) {
-            if (item instanceof NotificationModels.FollowerNotification) {
-                String uid = ((NotificationModels.FollowerNotification) item).uid;
-                OtherProfileFragment.prefetchProfile(activity.vpsToken, uid);
-            }
-        }
     }
 
     private void showEmptyState() {
