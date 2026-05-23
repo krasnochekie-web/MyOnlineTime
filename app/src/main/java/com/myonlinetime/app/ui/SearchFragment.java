@@ -99,6 +99,7 @@ public class SearchFragment extends Fragment {
                 lastSearchQuery = s.toString();
                 if (searchRunnable != null) searchHandler.removeCallbacks(searchRunnable);
                 searchRunnable = () -> performSearch(s.toString(), activity);
+                // Откладываем поиск на 400мс, чтобы не спамить API при быстром вводе
                 searchHandler.postDelayed(searchRunnable, 400);
             }
             @Override public void afterTextChanged(Editable s) {
@@ -163,15 +164,9 @@ public class SearchFragment extends Fragment {
             @Override public void onFound(List<User> users) {
                 if (!isAdded()) return; 
                 if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+                
+                // Передаем результаты в адаптер. Всю предзагрузку профилей мы отсюда вырезали!
                 adapter.setUsers(users);
-
-                // === ПРЕДЗАГРУЗКА КНОПОК И ЦИФР В ФОНЕ ===
-                MainActivity activity = (MainActivity) getActivity();
-                if (activity != null && activity.vpsToken != null) {
-                    for (User u : users) {
-                        OtherProfileFragment.prefetchProfile(activity.vpsToken, u.uid);
-                    }
-                }
             }
         });
     }
