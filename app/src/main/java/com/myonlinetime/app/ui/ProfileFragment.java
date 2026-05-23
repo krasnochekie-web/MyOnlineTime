@@ -259,12 +259,28 @@ public class ProfileFragment extends Fragment {
             ));
         });
 
+        // === ИСПРАВЛЕНИЕ: ИСПОЛЬЗУЕМ АГРЕГИРОВАННЫЙ ЭНДПОИНТ ===
         fetchProfileDataRunnable = () -> {
-            VpsApi.getUser(activity, activity.vpsToken, myUid, new VpsApi.UserCallback() {
+            if (activity.vpsToken == null) return;
+            
+            VpsApi.getAggregatedProfile(activity, activity.vpsToken, myUid, new VpsApi.AggregatedProfileCallback() {
                 @Override
-                public void onLoaded(User user) {
+                public void onLoaded(User user, int followers, int following, boolean isFollowing) {
                     if (!isAdded()) return;
 
+                    // 1. Обновляем счетчики подписок (теперь это приходит сразу)
+                    if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(followers));
+                    if (txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
+                    
+                    // Кэшируем счетчики, чтобы не дергать API при возврате
+                    try {
+                        org.json.JSONObject countsObj = new org.json.JSONObject();
+                        countsObj.put("followers", followers);
+                        countsObj.put("following", following);
+                        OtherProfileFragment.prefetchCountsCache.put(myUid, countsObj.toString());
+                    } catch (Exception ignored) {}
+
+                    // 2. Обрабатываем данные профиля
                     long activeTicket = activity.prefs.getLong("active_upload_ticket", 0);
                     if (activeTicket != 0 && (System.currentTimeMillis() - activeTicket < 60000)) {
                         return; 
@@ -357,7 +373,19 @@ public class ProfileFragment extends Fragment {
         });
 
         updateUiFromPrefs(activity);
-        refreshCounts(activity);
+        
+        // Пытаемся быстро подгрузить счетчики из кэша
+        String cachedCounts = OtherProfileFragment.prefetchCountsCache.get(myUid);
+        if (cachedCounts != null) {
+            try {
+                org.json.JSONObject json = new org.json.JSONObject(cachedCounts);
+                if (json.has("followers")) txtFollowersCount.setText(String.valueOf(json.getInt("followers")));
+                if (json.has("following")) txtFollowingCount.setText(String.valueOf(json.getInt("following")));
+            } catch (Exception ignored) {}
+        }
+        
+        // Запускаем агрегированный запрос
+        if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
 
         return wrapper; 
     }
@@ -413,7 +441,6 @@ public class ProfileFragment extends Fragment {
             currentLoadedBg = newBgKey;
             
             if (!allowBg) {
-                // ФРАНКЕНШТЕЙН УНИЧТОЖЕН
                 myBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
             } else if (targetPath.equals(bgPath)) {
                 if (bgPath.toLowerCase().endsWith(".gif")) {
@@ -430,77 +457,6 @@ public class ProfileFragment extends Fragment {
                 myBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
             }
         }
-    }
-
-    private void refreshCounts(MainActivity activity) {
-        String cachedCounts = OtherProfileFragment.prefetchCountsCache.get(myUid);
-        if (cachedCounts != null) {
-            try {
-                org.json.JSONObject json = new org.json.JSONObject(cachedCounts);
-                if (json.has("followers") && !json.isNull("followers")) {
-                    int followers = json.optInt("followers", -1);
-                    if (followers >= 0 && txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(followers));
-                }
-                if (json.has("following") && !json.isNull("following")) {
-                    int following = json.optInt("following", -1);
-                    if (following >= 0 && txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
-                }
-            } catch (Exception ignored) {}
-            
-            if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
-            return;
-        }
-
-        if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
-            executeCountsApi(activity, activity.vpsToken);
-            if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
-        } else {
-            GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
-            if (acct != null && activity.mGoogleSignInClient != null) {
-                activity.mGoogleSignInClient.silentSignIn().addOnSuccessListener(freshAccount -> {
-                    VpsApi.authenticateWithGoogle(activity, freshAccount.getIdToken(), new VpsApi.LoginCallback() {
-                        @Override public void onSuccess(String token) {
-                            activity.vpsToken = token;
-                            executeCountsApi(activity, token);
-                            if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
-                        }
-                        @Override public void onError(String e) {}
-                    });
-                }).addOnFailureListener(e -> {
-                    VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
-                        @Override public void onSuccess(String token) {
-                            activity.vpsToken = token;
-                            executeCountsApi(activity, token);
-                            if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
-                        }
-                        @Override public void onError(String ex) {}
-                    });
-                });
-            }
-        }
-    }
-
-    private void executeCountsApi(MainActivity activity, String token) {
-        VpsApi.getCounts(token, myUid, new VpsApi.Callback() {
-            @Override public void onSuccess(String result) {
-                uiHandler.post(() -> {
-                    if (!isAdded()) return; 
-                    try {
-                        org.json.JSONObject json = new org.json.JSONObject(result);
-                        if (json.has("followers") && !json.isNull("followers")) {
-                            int followers = json.optInt("followers", -1);
-                            if (followers >= 0 && txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(followers));
-                        }
-                        if (json.has("following") && !json.isNull("following")) {
-                            int following = json.optInt("following", -1);
-                            if (following >= 0 && txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
-                        }
-                        OtherProfileFragment.prefetchCountsCache.put(myUid, result);
-                    } catch (Exception e) {}
-                });
-            }
-            @Override public void onError(String error) {}
-        });
     }
 
     private void requestLoadMyStats(boolean showSpinner) {
@@ -568,7 +524,7 @@ public class ProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!isHidden()) {
                 updateUiFromPrefs(activity);
-                refreshCounts(activity);
+                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
             }
         }
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
@@ -595,7 +551,7 @@ public class ProfileFragment extends Fragment {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.headerManager.resetHeader();
                 updateUiFromPrefs(activity);
-                refreshCounts(activity);
+                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
             }
         }
     }
