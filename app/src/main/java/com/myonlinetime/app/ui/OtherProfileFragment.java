@@ -67,21 +67,23 @@ public class OtherProfileFragment extends Fragment {
     public static void prefetchProfile(String vpsToken, String uid) {
         if (vpsToken == null || uid == null || uid.isEmpty()) return;
         
-        if (prefetchUserCache.get(uid) == null) {
-            VpsApi.getUser(null, vpsToken, uid, new VpsApi.UserCallback() {
-                @Override public void onLoaded(User user) { if (user != null) prefetchUserCache.put(uid, user); }
+        // Если чего-то нет в кэше, делаем один агрегированный запрос
+        if (prefetchUserCache.get(uid) == null || prefetchCountsCache.get(uid) == null || prefetchFollowCache.get(uid) == null) {
+            VpsApi.getAggregatedProfile(null, vpsToken, uid, new VpsApi.AggregatedProfileCallback() {
+                @Override
+                public void onLoaded(User user, int followers, int following, boolean isFollowing) {
+                    if (user != null) {
+                        prefetchUserCache.put(uid, user);
+                        try {
+                            org.json.JSONObject countsObj = new org.json.JSONObject();
+                            countsObj.put("followers", followers);
+                            countsObj.put("following", following);
+                            prefetchCountsCache.put(uid, countsObj.toString());
+                        } catch (Exception ignored) {}
+                        prefetchFollowCache.put(uid, isFollowing);
+                    }
+                }
                 @Override public void onError(String error) {}
-            });
-        }
-        if (prefetchCountsCache.get(uid) == null) {
-            VpsApi.getCounts(vpsToken, uid, new VpsApi.Callback() {
-                @Override public void onSuccess(String result) { prefetchCountsCache.put(uid, result); }
-                @Override public void onError(String error) {}
-            });
-        }
-        if (prefetchFollowCache.get(uid) == null) {
-            VpsApi.checkIsFollowing(vpsToken, uid, new VpsApi.BooleanCallback() {
-                @Override public void onResult(boolean result) { prefetchFollowCache.put(uid, result); }
             });
         }
     }
@@ -258,11 +260,10 @@ public class OtherProfileFragment extends Fragment {
             updateBackgroundFromPrefs(activity, cachedUser.background); 
         }
 
+        // Пытаемся быстро подгрузить счетчики из кэша
         String cachedCounts = prefetchCountsCache.get(targetUid);
         if (cachedCounts != null) {
             applyCountsJson(cachedCounts);
-        } else {
-            refreshCounts(activity); 
         }
 
         Boolean cachedFollow = prefetchFollowCache.get(targetUid);
@@ -270,16 +271,6 @@ public class OtherProfileFragment extends Fragment {
             btnFollow.setTag(cachedFollow);
             updateFollowButton(btnFollow, cachedFollow);
             btnFollow.setVisibility(View.VISIBLE);
-        } else if (activity.vpsToken != null) {
-            VpsApi.checkIsFollowing(activity.vpsToken, targetUid, new VpsApi.BooleanCallback() {
-                @Override public void onResult(final boolean isFollowing) {
-                    if (!isAdded()) return;
-                    prefetchFollowCache.put(targetUid, isFollowing);
-                    btnFollow.setTag(isFollowing);
-                    updateFollowButton(btnFollow, isFollowing);
-                    btnFollow.setVisibility(View.VISIBLE);
-                }
-            });
         }
 
         btnExpand.setOnClickListener(v -> {
@@ -363,6 +354,7 @@ public class OtherProfileFragment extends Fragment {
              }
         });
 
+        // === ИСПРАВЛЕНИЕ: ИСПОЛЬЗУЕМ АГРЕГИРОВАННЫЙ ЭНДПОИНТ ===
         Runnable dataLoader = new Runnable() {
             @Override
             public void run() {
@@ -375,10 +367,30 @@ public class OtherProfileFragment extends Fragment {
                     return;
                 }
 
-                VpsApi.getUser(act, act.vpsToken, targetUid, new VpsApi.UserCallback() {
+                VpsApi.getAggregatedProfile(act, act.vpsToken, targetUid, new VpsApi.AggregatedProfileCallback() {
                     @Override
-                    public void onLoaded(User user) {
+                    public void onLoaded(User user, int followers, int following, boolean isFollowing) {
                         if (!isAdded()) return;
+                        
+                        // 1. Обновляем счетчики и подписки
+                        TextView txtFollowersCount = getView() != null ? getView().findViewById(R.id.txt_followers_count) : null;
+                        TextView txtFollowingCount = getView() != null ? getView().findViewById(R.id.txt_following_count) : null;
+                        if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(followers));
+                        if (txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
+                        
+                        try {
+                            org.json.JSONObject countsObj = new org.json.JSONObject();
+                            countsObj.put("followers", followers);
+                            countsObj.put("following", following);
+                            prefetchCountsCache.put(targetUid, countsObj.toString());
+                        } catch (Exception ignored) {}
+
+                        prefetchFollowCache.put(targetUid, isFollowing);
+                        btnFollow.setTag(isFollowing);
+                        updateFollowButton(btnFollow, isFollowing);
+                        btnFollow.setVisibility(View.VISIBLE);
+
+                        // 2. Обрабатываем данные профиля
                         if (user != null) {
                             prefetchUserCache.put(targetUid, user); 
                             nameView.setText(user.nickname != null ? user.nickname : act.getString(R.string.no_name));
@@ -433,7 +445,6 @@ public class OtherProfileFragment extends Fragment {
         if (allowBg) {
             Glide.with(activity).load(bgUrl).centerCrop().into(bgImageView);
         } else {
-            // ФРАНКЕНШТЕЙН УНИЧТОЖЕН: Глухой цвет приложения вместо прозрачности!
             bgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
         }
     }
@@ -462,20 +473,7 @@ public class OtherProfileFragment extends Fragment {
         }
     }
 
-    private void refreshCounts(MainActivity activity) {
-        if (activity.vpsToken == null) return;
-        VpsApi.getCounts(activity.vpsToken, targetUid, new VpsApi.Callback() {
-            @Override public void onSuccess(String result) {
-                uiHandler.post(() -> {
-                    if (!isAdded()) return; 
-                    prefetchCountsCache.put(targetUid, result);
-                    applyCountsJson(result);
-                });
-            }
-            @Override public void onError(String error) {}
-        });
-    }
-
+    // Упрощенный метод загрузки закэшированных цифр без сетевого запроса
     private void applyCountsJson(String jsonStr) {
         try {
             org.json.JSONObject json = new org.json.JSONObject(jsonStr);
@@ -508,7 +506,6 @@ public class OtherProfileFragment extends Fragment {
         super.onResume();
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null && !isHidden()) {
-            refreshCounts(activity);
             User cachedUser = prefetchUserCache.get(targetUid);
             if (cachedUser != null) updateBackgroundFromPrefs(activity, cachedUser.background);
         }
@@ -531,7 +528,6 @@ public class OtherProfileFragment extends Fragment {
         if (!hidden) {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
-            refreshCounts(activity);
             
             User cachedUser = prefetchUserCache.get(targetUid);
             if (cachedUser != null) updateBackgroundFromPrefs(activity, cachedUser.background);
