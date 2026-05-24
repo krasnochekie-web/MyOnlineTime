@@ -54,8 +54,7 @@ public class FollowsListFragment extends Fragment {
         final MainActivity activity = (MainActivity) getActivity();
         GoogleSignInAccount acct = activity != null ? GoogleSignIn.getLastSignedInAccount(activity) : null;
         final String myUid = acct != null ? acct.getId() : "";
-
-        // Адаптер со слушателем и передачей 5 параметров
+// Адаптер со слушателем и передачей ВСЕХ параметров
         adapter = new UserListAdapter(activity, clickedUser -> {
             if (activity != null && activity.navigator != null) {
                 if (clickedUser.uid != null && clickedUser.uid.equals(myUid)) {
@@ -64,17 +63,21 @@ public class FollowsListFragment extends Fragment {
                     String currentTitle = listType.equals("followers") ? 
                             getString(R.string.followers) : getString(R.string.following);
                             
+                    // === ИСПРАВЛЕНИЕ: ПЕРЕДАЕМ "ТОЛСТЫЕ" ДАННЫЕ ===
                     activity.navigator.openSubScreen(OtherProfileFragment.newInstance(
                             clickedUser.uid, 
                             currentTitle,
                             clickedUser.nickname,
                             clickedUser.about,
-                            clickedUser.photo
+                            clickedUser.photo,
+                            clickedUser.background,    // <-- Передаем фон
+                            clickedUser.followers,     // <-- Передаем подписчиков
+                            clickedUser.following,     // <-- Передаем подписки
+                            clickedUser.isFollowing    // <-- Передаем статус "подписан ли я"
                     ));
                 }
             }
-        });
-        
+        });        
         recyclerView.setAdapter(adapter);
 
         loadData();
