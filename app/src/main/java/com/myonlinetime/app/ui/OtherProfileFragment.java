@@ -252,7 +252,7 @@ public class OtherProfileFragment extends Fragment {
         prefetchBg = getArguments() != null ? getArguments().getString("PREFETCH_BG", "") : "";
         prefetchFollowers = getArguments() != null ? getArguments().getInt("PREFETCH_FOLLOWERS", 0) : 0;
         prefetchFollowing = getArguments() != null ? getArguments().getInt("PREFETCH_FOLLOWING", 0) : 0;
-        prefetchIsFollowing = getArguments() != null ? getArguments().getBoolean("PREFETCH_IS_FOLLOWING", false);
+        prefetchIsFollowing = getArguments() != null ? getArguments().getBoolean("PREFETCH_IS_FOLLOWING", false) : false;
 
         // Проверяем кэш на всякий случай
         User cachedUser = prefetchUserCache.get(targetUid);
@@ -436,7 +436,7 @@ public class OtherProfileFragment extends Fragment {
 
                             if (user.photo != null && user.photo.length() > 5) handleMediaLoading(act, user.photo);
                             
-                            // Рисуем топ приложений (то, ради чего и нужен был запрос)
+                            // Это то, ради чего мы делаем этот запрос - приложения!
                             renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, user.resolvedNames, appsContainerLocal, act, weekTimeText, aboutView, btnExpand, btnCollapse);
 
                             updateBackgroundFromPrefs(act, user.background); 
