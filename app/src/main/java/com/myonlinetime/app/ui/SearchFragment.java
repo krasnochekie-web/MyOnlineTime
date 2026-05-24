@@ -63,6 +63,7 @@ public class SearchFragment extends Fragment {
         GoogleSignInAccount acct = activity != null ? GoogleSignIn.getLastSignedInAccount(activity) : null;
         final String myUid = acct != null ? acct.getId() : "";
 
+        // === ИСПРАВЛЕНИЕ: ПЕРЕДАЕМ ВЕСЬ БАГАЖ (ТОЛСТЫЙ СПИСОК) ===
         adapter = new UserListAdapter(activity, clickedUser -> {
             if (activity != null && activity.navigator != null) {
                 if (clickedUser.uid != null && clickedUser.uid.equals(myUid)) {
@@ -73,7 +74,11 @@ public class SearchFragment extends Fragment {
                             activity.getString(R.string.title_search),
                             clickedUser.nickname,
                             clickedUser.about,
-                            clickedUser.photo
+                            clickedUser.photo,
+                            clickedUser.background,    // <-- Передаем фон
+                            clickedUser.followers,     // <-- Передаем подписчиков
+                            clickedUser.following,     // <-- Передаем подписки
+                            clickedUser.isFollowing    // <-- Передаем статус "подписан ли я"
                     ));
                 }
             }
