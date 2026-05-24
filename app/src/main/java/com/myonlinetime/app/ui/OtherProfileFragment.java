@@ -377,7 +377,7 @@ public class OtherProfileFragment extends Fragment {
              }
         });
 
-        // === ТИХИЙ ФОНОВЫЙ ЗАПРОС ДЛЯ ТОПА ПРИЛОЖЕНИЙ ===
+        // === ТИХИЙ ФОНОВЫЙ ЗАПРОС (LAZY SYNC БЕЗ АНИМАЦИИ) ===
         Runnable dataLoader = new Runnable() {
             @Override
             public void run() {
@@ -395,9 +395,19 @@ public class OtherProfileFragment extends Fragment {
                     public void onLoaded(User user, int followers, int following, boolean isFollowing) {
                         if (!isAdded()) return;
                         
-                        // 1. Тихо обновляем счетчики и подписки (если они изменились за секунду)
-                        if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(followers));
-                        if (txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
+                        // 1. Тихо обновляем счетчики и подписки без анимаций
+                        if (txtFollowersCount != null) {
+                            String newFollowers = String.valueOf(followers);
+                            if (!txtFollowersCount.getText().toString().equals(newFollowers)) {
+                                txtFollowersCount.setText(newFollowers);
+                            }
+                        }
+                        if (txtFollowingCount != null) {
+                            String newFollowing = String.valueOf(following);
+                            if (!txtFollowingCount.getText().toString().equals(newFollowing)) {
+                                txtFollowingCount.setText(newFollowing);
+                            }
+                        }
                         
                         try {
                             org.json.JSONObject countsObj = new org.json.JSONObject();
@@ -426,7 +436,7 @@ public class OtherProfileFragment extends Fragment {
 
                             if (user.photo != null && user.photo.length() > 5) handleMediaLoading(act, user.photo);
                             
-                            // Это то, ради чего мы делаем этот запрос - приложения!
+                            // Рисуем топ приложений (то, ради чего и нужен был запрос)
                             renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, user.resolvedNames, appsContainerLocal, act, weekTimeText, aboutView, btnExpand, btnCollapse);
 
                             updateBackgroundFromPrefs(act, user.background); 
@@ -493,25 +503,6 @@ public class OtherProfileFragment extends Fragment {
             if (btnExpand != null) btnExpand.setVisibility(View.GONE);
             if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
         }
-    }
-
-    // Этот метод больше не нужен для инициализации, но я оставил его на всякий случай
-    private void applyCountsJson(String jsonStr) {
-        try {
-            org.json.JSONObject json = new org.json.JSONObject(jsonStr);
-            if (getView() != null) {
-                TextView txtFollowersCount = getView().findViewById(R.id.txt_followers_count);
-                TextView txtFollowingCount = getView().findViewById(R.id.txt_following_count);
-                if (json.has("followers") && !json.isNull("followers")) {
-                    int followers = json.optInt("followers", -1);
-                    if (followers >= 0 && txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(followers));
-                }
-                if (json.has("following") && !json.isNull("following")) {
-                    int following = json.optInt("following", -1);
-                    if (following >= 0 && txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
-                }
-            }
-        } catch (Exception e) {}
     }
 
     private void handleMediaLoading(MainActivity activity, String photoUrl) {
