@@ -10,6 +10,11 @@ public class User {
     // ИСПРАВЛЕНИЕ: Сервер отправляет ключ "uid", а не "id"
     @SerializedName("uid")
     public String uid;
+    // Добавь эти поля в класс User, если их там нет:
+public int followers = 0;
+public int following = 0;
+public boolean isFollowing = false;
+public String background;
 
     @SerializedName("nickname")
     public String nickname;
