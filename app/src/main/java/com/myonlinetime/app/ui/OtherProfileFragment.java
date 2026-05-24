@@ -64,6 +64,12 @@ public class OtherProfileFragment extends Fragment {
     public static final android.util.LruCache<String, String> prefetchCountsCache = new android.util.LruCache<>(15);
     public static final android.util.LruCache<String, Boolean> prefetchFollowCache = new android.util.LruCache<>(15);
 
+    // === НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ МГНОВЕННОЙ ОТРИСОВКИ ===
+    private String prefetchBg = "";
+    private int prefetchFollowers = 0;
+    private int prefetchFollowing = 0;
+    private boolean prefetchIsFollowing = false;
+
     public static void prefetchProfile(String vpsToken, String uid) {
         if (vpsToken == null || uid == null || uid.isEmpty()) return;
         
@@ -97,7 +103,8 @@ public class OtherProfileFragment extends Fragment {
         boolean isDeleted;
     }
 
-    public static OtherProfileFragment newInstance(String targetUid, String backTitle, String nickname, String about, String photo) {
+    // === ИСПРАВЛЕНИЕ: ПРИНИМАЕМ "ТОЛСТЫЕ" ДАННЫЕ ===
+    public static OtherProfileFragment newInstance(String targetUid, String backTitle, String nickname, String about, String photo, String background, int followers, int following, boolean isFollowing) {
         OtherProfileFragment fragment = new OtherProfileFragment();
         Bundle args = new Bundle();
         args.putString("TARGET_UID", targetUid);
@@ -105,8 +112,17 @@ public class OtherProfileFragment extends Fragment {
         args.putString("PREFETCH_NICKNAME", nickname != null ? nickname : "");
         args.putString("PREFETCH_ABOUT", about != null ? about : "");
         args.putString("PREFETCH_PHOTO", photo != null ? photo : "");
+        args.putString("PREFETCH_BG", background != null ? background : "");
+        args.putInt("PREFETCH_FOLLOWERS", followers);
+        args.putInt("PREFETCH_FOLLOWING", following);
+        args.putBoolean("PREFETCH_IS_FOLLOWING", isFollowing);
         fragment.setArguments(args);
         return fragment;
+    }
+
+    // Для совместимости со старыми вызовами (например, из списка подписчиков)
+    public static OtherProfileFragment newInstance(String targetUid, String backTitle, String nickname, String about, String photo) {
+        return newInstance(targetUid, backTitle, nickname, about, photo, "", 0, 0, false);
     }
 
     public OtherProfileFragment() {}
@@ -229,17 +245,26 @@ public class OtherProfileFragment extends Fragment {
             btnCollapse.setVisibility(View.GONE);
         }
 
+        // === ИСПРАВЛЕНИЕ: ЧИТАЕМ ВСЕ "ТОЛСТЫЕ" ДАННЫЕ ===
         String argName = getArguments() != null ? getArguments().getString("PREFETCH_NICKNAME", "") : "";
         String argAbout = getArguments() != null ? getArguments().getString("PREFETCH_ABOUT", "") : "";
         String argPhoto = getArguments() != null ? getArguments().getString("PREFETCH_PHOTO", "") : "";
+        prefetchBg = getArguments() != null ? getArguments().getString("PREFETCH_BG", "") : "";
+        prefetchFollowers = getArguments() != null ? getArguments().getInt("PREFETCH_FOLLOWERS", 0) : 0;
+        prefetchFollowing = getArguments() != null ? getArguments().getInt("PREFETCH_FOLLOWING", 0) : 0;
+        prefetchIsFollowing = getArguments() != null ? getArguments().getBoolean("PREFETCH_IS_FOLLOWING", false);
 
+        // Проверяем кэш на всякий случай
         User cachedUser = prefetchUserCache.get(targetUid);
         if (cachedUser != null) {
             if (cachedUser.nickname != null && !cachedUser.nickname.isEmpty()) argName = cachedUser.nickname;
             if (cachedUser.about != null) argAbout = cachedUser.about;
             if (cachedUser.photo != null && !cachedUser.photo.isEmpty()) argPhoto = cachedUser.photo;
+            if (cachedUser.background != null) prefetchBg = cachedUser.background;
         }
 
+        // === МГНОВЕННАЯ ОТРИСОВКА ИНТЕРФЕЙСА ===
+        
         if (!argName.isEmpty()) nameView.setText(argName);
         else nameView.setText(activity.getString(R.string.loading));
 
@@ -252,25 +277,25 @@ public class OtherProfileFragment extends Fragment {
         }
         
         if (!argPhoto.isEmpty()) handleMediaLoading(activity, argPhoto);
+        
+        // 1. Мгновенно рисуем фон (без ожидания API)
+        if (!prefetchBg.isEmpty()) updateBackgroundFromPrefs(activity, prefetchBg);
+
+        // 2. Мгновенно ставим кнопку Подписаться в нужное положение
+        btnFollow.setTag(prefetchIsFollowing);
+        updateFollowButton(btnFollow, prefetchIsFollowing);
+        btnFollow.setVisibility(View.VISIBLE);
+        
+        // 3. Мгновенно ставим цифры подписчиков
+        TextView txtFollowersCount = originalView.findViewById(R.id.txt_followers_count);
+        TextView txtFollowingCount = originalView.findViewById(R.id.txt_following_count);
+        if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(prefetchFollowers));
+        if (txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(prefetchFollowing));
 
         applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
         if (cachedUser != null) {
             renderOtherUserStats(cachedUser.topApps, cachedUser.totalTime, cachedUser.hiddenApps, cachedUser.appDescriptions, cachedUser.resolvedNames, appsContainerLocal, activity, weekTimeText, aboutView, btnExpand, btnCollapse);
-            updateBackgroundFromPrefs(activity, cachedUser.background); 
-        }
-
-        // Пытаемся быстро подгрузить счетчики из кэша
-        String cachedCounts = prefetchCountsCache.get(targetUid);
-        if (cachedCounts != null) {
-            applyCountsJson(cachedCounts);
-        }
-
-        Boolean cachedFollow = prefetchFollowCache.get(targetUid);
-        if (cachedFollow != null) {
-            btnFollow.setTag(cachedFollow);
-            updateFollowButton(btnFollow, cachedFollow);
-            btnFollow.setVisibility(View.VISIBLE);
         }
 
         btnExpand.setOnClickListener(v -> {
@@ -308,12 +333,11 @@ public class OtherProfileFragment extends Fragment {
              prefetchFollowCache.put(targetUid, nextStatus); 
              
              try {
-                 TextView fCount = getView().findViewById(R.id.txt_followers_count);
-                 if (fCount != null) {
-                     int count = Integer.parseInt(fCount.getText().toString());
+                 if (txtFollowersCount != null) {
+                     int count = Integer.parseInt(txtFollowersCount.getText().toString());
                      count = nextStatus ? count + 1 : count - 1;
                      if (count < 0) count = 0;
-                     fCount.setText(String.valueOf(count));
+                     txtFollowersCount.setText(String.valueOf(count));
                  }
              } catch (Exception e) {}
              
@@ -338,12 +362,11 @@ public class OtherProfileFragment extends Fragment {
                                  updateFollowButton(btnFollow, currentStatus);
                                  prefetchFollowCache.put(targetUid, currentStatus);
                                  try {
-                                     TextView fCount = getView().findViewById(R.id.txt_followers_count);
-                                     if (fCount != null) {
-                                         int c = Integer.parseInt(fCount.getText().toString());
+                                     if (txtFollowersCount != null) {
+                                         int c = Integer.parseInt(txtFollowersCount.getText().toString());
                                          c = currentStatus ? c + 1 : c - 1;
                                          if (c < 0) c = 0;
-                                         fCount.setText(String.valueOf(c));
+                                         txtFollowersCount.setText(String.valueOf(c));
                                      }
                                  } catch(Exception e){}
                                  Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
@@ -354,7 +377,7 @@ public class OtherProfileFragment extends Fragment {
              }
         });
 
-        // === ИСПРАВЛЕНИЕ: ИСПОЛЬЗУЕМ АГРЕГИРОВАННЫЙ ЭНДПОИНТ ===
+        // === ТИХИЙ ФОНОВЫЙ ЗАПРОС ДЛЯ ТОПА ПРИЛОЖЕНИЙ ===
         Runnable dataLoader = new Runnable() {
             @Override
             public void run() {
@@ -372,9 +395,7 @@ public class OtherProfileFragment extends Fragment {
                     public void onLoaded(User user, int followers, int following, boolean isFollowing) {
                         if (!isAdded()) return;
                         
-                        // 1. Обновляем счетчики и подписки
-                        TextView txtFollowersCount = getView() != null ? getView().findViewById(R.id.txt_followers_count) : null;
-                        TextView txtFollowingCount = getView() != null ? getView().findViewById(R.id.txt_following_count) : null;
+                        // 1. Тихо обновляем счетчики и подписки (если они изменились за секунду)
                         if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(followers));
                         if (txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
                         
@@ -388,9 +409,8 @@ public class OtherProfileFragment extends Fragment {
                         prefetchFollowCache.put(targetUid, isFollowing);
                         btnFollow.setTag(isFollowing);
                         updateFollowButton(btnFollow, isFollowing);
-                        btnFollow.setVisibility(View.VISIBLE);
 
-                        // 2. Обрабатываем данные профиля
+                        // 2. Обрабатываем данные профиля и рисуем топ приложений
                         if (user != null) {
                             prefetchUserCache.put(targetUid, user); 
                             nameView.setText(user.nickname != null ? user.nickname : act.getString(R.string.no_name));
@@ -405,6 +425,8 @@ public class OtherProfileFragment extends Fragment {
                             applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
                             if (user.photo != null && user.photo.length() > 5) handleMediaLoading(act, user.photo);
+                            
+                            // Это то, ради чего мы делаем этот запрос - приложения!
                             renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, user.resolvedNames, appsContainerLocal, act, weekTimeText, aboutView, btnExpand, btnCollapse);
 
                             updateBackgroundFromPrefs(act, user.background); 
@@ -473,7 +495,7 @@ public class OtherProfileFragment extends Fragment {
         }
     }
 
-    // Упрощенный метод загрузки закэшированных цифр без сетевого запроса
+    // Этот метод больше не нужен для инициализации, но я оставил его на всякий случай
     private void applyCountsJson(String jsonStr) {
         try {
             org.json.JSONObject json = new org.json.JSONObject(jsonStr);
