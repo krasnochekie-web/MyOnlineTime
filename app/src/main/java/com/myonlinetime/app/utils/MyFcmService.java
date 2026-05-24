@@ -15,6 +15,7 @@ import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
+import com.myonlinetime.app.ui.OtherProfileFragment;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -44,41 +45,48 @@ public class MyFcmService extends FirebaseMessagingService {
 
         String type = data.get("type");
         
-        if ("follower".equals(type)) {
-            if (!prefs.getBoolean("notif_followers_enabled", true)) return;
-
+        com.google.android.gms.auth.api.signin.GoogleSignInAccount account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(this);
+        String currentUid = account != null ? account.getId() : "guest";
+        
+        if ("follower".equals(type) || "unfollower".equals(type)) {
             String nickname = data.get("nickname");
             String followerUid = data.get("uid");
             String photo = data.get("photo");
             
-            com.google.android.gms.auth.api.signin.GoogleSignInAccount account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(this);
-            String currentUid = account != null ? account.getId() : "guest";
-            
             // === ЯДЕРНАЯ ЗАЩИТА ОТ СМЕШИВАНИЯ ТВИНКОВ ===
-            String ownerUid = data.get("owner_uid"); // Если сервер присылает, кому пуш
+            String ownerUid = data.get("owner_uid"); 
             
             if (ownerUid != null && !ownerUid.isEmpty()) {
                 if (!ownerUid.equals(currentUid)) {
-                    // Пуш пришел на этот телефон, но для твоего ВТОРОГО аккаунта!
-                    // Тихо сохраняем в его историю и убиваем процесс. Никаких бейджей и уведомлений на основе!
-                    saveToLocalHistory(type, followerUid, nickname, photo, ownerUid, true);
+                    // Пуш для твинка. Если это follower, сохраняем в его историю.
+                    if ("follower".equals(type)) {
+                        saveToLocalHistory(type, followerUid, nickname, photo, ownerUid, true);
+                    }
                     return; 
                 }
             } else if (currentUid.equals(followerUid)) {
-                // Если сервер не прислал owner_uid, спасает логика: 
-                // ТЫ не можешь быть подписчиком в СВОЕМ собственном уведомлении. Убиваем!
                 return;
             }
 
-            // 1. Показываем уведомление в шторке
-            sendFollowerPush(nickname, followerUid);
+            // === ОБРАБОТКА ПОДПИСКИ (С уведомлением) ===
+            if ("follower".equals(type)) {
+                if (prefs.getBoolean("notif_followers_enabled", true)) {
+                    sendFollowerPush(nickname, followerUid);
+                }
+                saveToLocalHistory(type, followerUid, nickname, photo, currentUid, false);
+                
+                Intent updateIntent = new Intent("UPDATE_BADGE_BROADCAST");
+                LocalBroadcastManager.getInstance(this).sendBroadcast(updateIntent);
+            }
             
-            // 2. Сохраняем в историю текущего аккаунта (СИНХРОННО)
-            saveToLocalHistory(type, followerUid, nickname, photo, currentUid, false);
+            // === ОБЩАЯ ОБРАБОТКА (И для follower, и для unfollower) ===
+            // 1. Инвалидируем кэш счетчиков для текущего пользователя
+            OtherProfileFragment.prefetchCountsCache.remove(currentUid);
             
-            // 3. БРОНЕБОЙНЫЙ ВНУТРЕННИЙ БРОДКАСТ ДЛЯ МГНОВЕННОГО ОБНОВЛЕНИЯ UI
-            Intent updateIntent = new Intent("UPDATE_BADGE_BROADCAST");
-            LocalBroadcastManager.getInstance(this).sendBroadcast(updateIntent);
+            // 2. БРОНЕБОЙНЫЙ ВНУТРЕННИЙ БРОДКАСТ ДЛЯ МГНОВЕННОГО ОБНОВЛЕНИЯ UI
+            // Этот сигнал поймает ProfileFragment (свой профиль) и плавно обновит цифру
+            Intent profileIntent = new Intent("ACTION_PROFILE_UPDATED");
+            LocalBroadcastManager.getInstance(this).sendBroadcast(profileIntent);
 
         } else if ("time".equals(type) || "record".equals(type)) {
             if (!prefs.getBoolean("notif_records_enabled", true)) return;
@@ -112,8 +120,6 @@ public class MyFcmService extends FirebaseMessagingService {
             prefs.edit().putString(cacheKey, newArray.toString()).commit();
             
             if (isSilentForTwink) {
-                // Если мы сохранили пуш для твинка, мы ДОЛЖНЫ обновить бейдж, 
-                // если вдруг прямо сейчас переключились на твинка!
                 Intent updateIntent = new Intent("UPDATE_BADGE_BROADCAST");
                 LocalBroadcastManager.getInstance(this).sendBroadcast(updateIntent);
             }
