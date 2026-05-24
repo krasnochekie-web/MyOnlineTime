@@ -117,7 +117,6 @@ public class ProfileFragment extends Fragment {
         myBgImageView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         myBgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
         
-        // СТАВИМ ЩИТ: Заливаем фон цветом приложения, чтобы не было Франкенштейнов
         myBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(requireContext(), R.color.bgDynamic)));
 
         final View originalView = inflater.inflate(R.layout.layout_profile, wrapper, false);
@@ -259,7 +258,18 @@ public class ProfileFragment extends Fragment {
             ));
         });
 
-        // === ИСПРАВЛЕНИЕ: ИСПОЛЬЗУЕМ АГРЕГИРОВАННЫЙ ЭНДПОИНТ ===
+        // МГНОВЕННАЯ ОТРИСОВКА ИЗ КЭША
+        String cachedCounts = OtherProfileFragment.prefetchCountsCache.get(myUid);
+        if (cachedCounts != null) {
+            try {
+                org.json.JSONObject json = new org.json.JSONObject(cachedCounts);
+                if (json.has("followers") && txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(json.getInt("followers")));
+                if (json.has("following") && txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(json.getInt("following")));
+            } catch (Exception ignored) {}
+        }
+        updateUiFromPrefs(activity);
+
+        // === ТИХИЙ ФОНОВЫЙ ЗАПРОС ===
         fetchProfileDataRunnable = () -> {
             if (activity.vpsToken == null) return;
             
@@ -268,11 +278,20 @@ public class ProfileFragment extends Fragment {
                 public void onLoaded(User user, int followers, int following, boolean isFollowing) {
                     if (!isAdded()) return;
 
-                    // 1. Обновляем счетчики подписок (теперь это приходит сразу)
-                    if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(followers));
-                    if (txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(following));
+                    // 1. Обновляем счетчики подписок в фоне без анимаций
+                    if (txtFollowersCount != null) {
+                        String newFollowers = String.valueOf(followers);
+                        if (!txtFollowersCount.getText().toString().equals(newFollowers)) {
+                            txtFollowersCount.setText(newFollowers);
+                        }
+                    }
+                    if (txtFollowingCount != null) {
+                        String newFollowing = String.valueOf(following);
+                        if (!txtFollowingCount.getText().toString().equals(newFollowing)) {
+                            txtFollowingCount.setText(newFollowing);
+                        }
+                    }
                     
-                    // Кэшируем счетчики, чтобы не дергать API при возврате
                     try {
                         org.json.JSONObject countsObj = new org.json.JSONObject();
                         countsObj.put("followers", followers);
@@ -372,18 +391,6 @@ public class ProfileFragment extends Fragment {
             if (isAdded()) requestLoadMyStats(true); 
         });
 
-        updateUiFromPrefs(activity);
-        
-        // Пытаемся быстро подгрузить счетчики из кэша
-        String cachedCounts = OtherProfileFragment.prefetchCountsCache.get(myUid);
-        if (cachedCounts != null) {
-            try {
-                org.json.JSONObject json = new org.json.JSONObject(cachedCounts);
-                if (json.has("followers")) txtFollowersCount.setText(String.valueOf(json.getInt("followers")));
-                if (json.has("following")) txtFollowingCount.setText(String.valueOf(json.getInt("following")));
-            } catch (Exception ignored) {}
-        }
-        
         // Запускаем агрегированный запрос
         if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
 
