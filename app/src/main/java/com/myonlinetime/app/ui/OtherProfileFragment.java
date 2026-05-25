@@ -42,6 +42,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 
 public class OtherProfileFragment extends Fragment {
 
@@ -64,7 +65,64 @@ public class OtherProfileFragment extends Fragment {
     public static final android.util.LruCache<String, String> prefetchCountsCache = new android.util.LruCache<>(50);
     public static final android.util.LruCache<String, Boolean> prefetchFollowCache = new android.util.LruCache<>(50);
 
-    // === НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ МГНОВЕННОЙ ОТРИСОВКИ ===
+    // === НОВЫЙ КЭШ ДЛЯ ФОНОВ (ЛИМИТ 20 МБ ОПЕРАТИВНОЙ ПАМЯТИ) ===
+    public static final android.util.LruCache<String, byte[]> prefetchBgBytesCache = new android.util.LruCache<String, byte[]>(20 * 1024 * 1024) {
+        @Override
+        protected int sizeOf(String key, byte[] value) {
+            return value.length; // Считаем размер кэша в байтах
+        }
+    };
+
+    // === УМНЫЙ ПРЕДЗАГРУЗЧИК ФОНОВ (ЛИМИТ 1 МБ НА ФАЙЛ) ===
+    public static void preloadBackgrounds(List<User> users) {
+        if (users == null || users.isEmpty()) return;
+        
+        Utils.backgroundExecutor.execute(() -> {
+            for (User u : users) {
+                if (u.background == null || !u.background.startsWith("http")) continue;
+                if (prefetchBgBytesCache.get(u.background) != null) continue; // Уже в кэше
+                
+                try {
+                    java.net.URL url = new java.net.URL(u.background);
+                    java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                    conn.setConnectTimeout(2000);
+                    conn.setReadTimeout(2000);
+                    conn.setRequestMethod("GET");
+                    
+                    // Если сервер сразу сказал, что файл огромный — отменяем
+                    int contentLength = conn.getContentLength();
+                    if (contentLength > 1024 * 1024) {
+                        conn.disconnect();
+                        continue;
+                    }
+
+                    java.io.InputStream is = conn.getInputStream();
+                    java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+                    int nRead;
+                    byte[] data = new byte[16384];
+                    int totalRead = 0;
+                    boolean exceeded = false;
+                    
+                    // Читаем по кусочкам и жестко обрываем, если перевалили за 1 МБ
+                    while ((nRead = is.read(data, 0, data.length)) != -1) {
+                        buffer.write(data, 0, nRead);
+                        totalRead += nRead;
+                        if (totalRead > 1024 * 1024) {
+                            exceeded = true;
+                            break;
+                        }
+                    }
+                    is.close();
+                    conn.disconnect();
+                    
+                    if (!exceeded && totalRead > 0) {
+                        prefetchBgBytesCache.put(u.background, buffer.toByteArray());
+                    }
+                } catch (Exception ignored) {}
+            }
+        });
+    }
+
     private String prefetchBg = "";
     private int prefetchFollowers = 0;
     private int prefetchFollowing = 0;
@@ -73,7 +131,6 @@ public class OtherProfileFragment extends Fragment {
     public static void prefetchProfile(String vpsToken, String uid) {
         if (vpsToken == null || uid == null || uid.isEmpty()) return;
         
-        // Если чего-то нет в кэше, делаем один агрегированный запрос
         if (prefetchUserCache.get(uid) == null || prefetchCountsCache.get(uid) == null || prefetchFollowCache.get(uid) == null) {
             VpsApi.getAggregatedProfile(null, vpsToken, uid, new VpsApi.AggregatedProfileCallback() {
                 @Override
@@ -103,7 +160,6 @@ public class OtherProfileFragment extends Fragment {
         boolean isDeleted;
     }
 
-    // === ИСПРАВЛЕНИЕ: ПРИНИМАЕМ "ТОЛСТЫЕ" ДАННЫЕ ===
     public static OtherProfileFragment newInstance(String targetUid, String backTitle, String nickname, String about, String photo, String background, int followers, int following, boolean isFollowing) {
         OtherProfileFragment fragment = new OtherProfileFragment();
         Bundle args = new Bundle();
@@ -120,7 +176,6 @@ public class OtherProfileFragment extends Fragment {
         return fragment;
     }
 
-    // Для совместимости со старыми вызовами (например, из списка подписчиков)
     public static OtherProfileFragment newInstance(String targetUid, String backTitle, String nickname, String about, String photo) {
         return newInstance(targetUid, backTitle, nickname, about, photo, "", 0, 0, false);
     }
@@ -132,7 +187,6 @@ public class OtherProfileFragment extends Fragment {
         fragmentCreationTime = System.currentTimeMillis(); 
         
         final MainActivity activity = (MainActivity) getActivity();
-        
         final View originalView = inflater.inflate(R.layout.layout_profile, container, false);
         if (activity == null) return originalView;
 
@@ -143,8 +197,6 @@ public class OtherProfileFragment extends Fragment {
         bgImageView = new ImageView(activity);
         bgImageView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         bgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        
-        // СТАВИМ ЩИТ: Сразу заливаем фон цветом приложения, чтобы чужие фоны не просвечивали снизу
         bgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
 
         wrapper.addView(bgImageView);
@@ -245,17 +297,14 @@ public class OtherProfileFragment extends Fragment {
             btnCollapse.setVisibility(View.GONE);
         }
 
-        // === ИСПРАВЛЕНИЕ: ЧИТАЕМ ВСЕ "ТОЛСТЫЕ" ДАННЫЕ ===
         String argName = getArguments() != null ? getArguments().getString("PREFETCH_NICKNAME", "") : "";
         String argAbout = getArguments() != null ? getArguments().getString("PREFETCH_ABOUT", "") : "";
         String argPhoto = getArguments() != null ? getArguments().getString("PREFETCH_PHOTO", "") : "";
         prefetchBg = getArguments() != null ? getArguments().getString("PREFETCH_BG", "") : "";
         prefetchFollowers = getArguments() != null ? getArguments().getInt("PREFETCH_FOLLOWERS", 0) : 0;
         prefetchFollowing = getArguments() != null ? getArguments().getInt("PREFETCH_FOLLOWING", 0) : 0;
-        // ИСПРАВЛЕНА СИНТАКСИЧЕСКАЯ ОШИБКА:
         prefetchIsFollowing = getArguments() != null ? getArguments().getBoolean("PREFETCH_IS_FOLLOWING", false) : false;
 
-        // Проверяем кэш на всякий случай
         User cachedUser = prefetchUserCache.get(targetUid);
         if (cachedUser != null) {
             if (cachedUser.nickname != null && !cachedUser.nickname.isEmpty()) argName = cachedUser.nickname;
@@ -264,8 +313,6 @@ public class OtherProfileFragment extends Fragment {
             if (cachedUser.background != null) prefetchBg = cachedUser.background;
         }
 
-        // === МГНОВЕННАЯ ОТРИСОВКА ИНТЕРФЕЙСА ===
-        
         if (!argName.isEmpty()) nameView.setText(argName);
         else nameView.setText(activity.getString(R.string.loading));
 
@@ -279,15 +326,12 @@ public class OtherProfileFragment extends Fragment {
         
         if (!argPhoto.isEmpty()) handleMediaLoading(activity, argPhoto);
         
-        // 1. Мгновенно рисуем фон (без ожидания API)
         if (!prefetchBg.isEmpty()) updateBackgroundFromPrefs(activity, prefetchBg);
 
-        // 2. Мгновенно ставим кнопку Подписаться в нужное положение
         btnFollow.setTag(prefetchIsFollowing);
         updateFollowButton(btnFollow, prefetchIsFollowing);
         btnFollow.setVisibility(View.VISIBLE);
         
-        // 3. Мгновенно ставим цифры подписчиков
         TextView txtFollowersCount = originalView.findViewById(R.id.txt_followers_count);
         TextView txtFollowingCount = originalView.findViewById(R.id.txt_following_count);
         if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(prefetchFollowers));
@@ -378,7 +422,6 @@ public class OtherProfileFragment extends Fragment {
              }
         });
 
-        // === ТИХИЙ ФОНОВЫЙ ЗАПРОС (LAZY SYNC БЕЗ АНИМАЦИИ С УМНОЙ ПОДМЕНОЙ) ===
         Runnable dataLoader = new Runnable() {
             @Override
             public void run() {
@@ -396,7 +439,6 @@ public class OtherProfileFragment extends Fragment {
                     public void onLoaded(User user, int followers, int following, boolean isFollowing) {
                         if (!isAdded()) return;
                         
-                        // 1. Тихо обновляем счетчики и подписки (без перескоков)
                         if (txtFollowersCount != null) {
                             String newFollowers = String.valueOf(followers);
                             if (!txtFollowersCount.getText().toString().equals(newFollowers)) {
@@ -421,11 +463,9 @@ public class OtherProfileFragment extends Fragment {
                         btnFollow.setTag(isFollowing);
                         updateFollowButton(btnFollow, isFollowing);
 
-                        // 2. Обрабатываем данные профиля и рисуем топ приложений
                         if (user != null) {
                             prefetchUserCache.put(targetUid, user); 
                             
-                            // Умное обновление текста профиля без мерцания
                             if (user.nickname != null && !nameView.getText().toString().equals(user.nickname)) {
                                 nameView.setText(user.nickname);
                             }
@@ -442,12 +482,12 @@ public class OtherProfileFragment extends Fragment {
                             }
                             
                             applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
-
                             if (user.photo != null && user.photo.length() > 5) handleMediaLoading(act, user.photo);
                             
-                            // Это то, ради чего мы делаем этот запрос - приложения!
+                            // ИСПРАВЛЕНИЕ: гарантируем, что если у пользователя нет приложений, topApps не null
+                            if (user.topApps == null) user.topApps = new HashMap<>();
+                            
                             renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, user.resolvedNames, appsContainerLocal, act, weekTimeText, aboutView, btnExpand, btnCollapse);
-
                             updateBackgroundFromPrefs(act, user.background); 
                         } else {
                             nameView.setText(act.getString(R.string.new_user));
@@ -484,7 +524,14 @@ public class OtherProfileFragment extends Fragment {
         }
 
         if (allowBg) {
-            Glide.with(activity).load(bgUrl).centerCrop().into(bgImageView);
+            // === ИСПРАВЛЕНИЕ: МГНОВЕННАЯ ОТРИСОВКА ИЗ КЭША ПРЕДЗАГРУЗЧИКА ===
+            byte[] cachedBytes = prefetchBgBytesCache.get(bgUrl);
+            if (cachedBytes != null) {
+                // Если фон успел скачаться, рисуем его БЕЗ АНИМАЦИИ (чтобы выезжал монолитно вместе с экраном)
+                Glide.with(activity).load(cachedBytes).centerCrop().dontAnimate().into(bgImageView);
+            } else {
+                Glide.with(activity).load(bgUrl).centerCrop().into(bgImageView);
+            }
         } else {
             bgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
         }
@@ -565,9 +612,14 @@ public class OtherProfileFragment extends Fragment {
     }
 
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, Map<String, String> resolvedNames, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
+        // === ИСПРАВЛЕНИЕ: Ждем завершения фонового запроса, крутим спиннер ===
+        if (topApps == null) {
+            return; 
+        }
+
         final long myGen = ++renderGeneration;
 
-        if (topApps == null || topApps.isEmpty()) {
+        if (topApps.isEmpty()) {
             uiHandler.post(() -> {
                 if (myGen != renderGeneration || !isAdded()) return;
                 
