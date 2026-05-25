@@ -16,6 +16,8 @@ import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
@@ -152,9 +154,45 @@ public class NotificationsAdapter extends RecyclerView.Adapter<RecyclerView.View
             updateFollowButtonUI(btnFollow, item.isFollowing, activity);
 
             followerUserCard.setOnClickListener(v -> {
-                if (activity != null) {
+                if (activity != null && activity.navigator != null) {
+                    String bg = "";
+                    int followers = 0;
+                    int following = 0;
+                    boolean currentFollowStatus = item.isFollowing; // Начинаем с базы из уведомления
+
+                    // 1. Ищем фон в кэше юзеров
+                    com.myonlinetime.app.models.User cachedUser = com.myonlinetime.app.ui.OtherProfileFragment.prefetchUserCache.get(item.uid);
+                    if (cachedUser != null) {
+                        bg = cachedUser.background != null ? cachedUser.background : "";
+                    }
+
+                    // 2. Ищем актуальные счетчики в кэше
+                    String cachedCounts = com.myonlinetime.app.ui.OtherProfileFragment.prefetchCountsCache.get(item.uid);
+                    if (cachedCounts != null) {
+                        try {
+                            org.json.JSONObject countsObj = new org.json.JSONObject(cachedCounts);
+                            followers = countsObj.optInt("followers", 0);
+                            following = countsObj.optInt("following", 0);
+                        } catch (Exception ignored) {}
+                    }
+
+                    // 3. Ищем самый свежий статус подписки
+                    Boolean cachedFollowStatus = com.myonlinetime.app.ui.OtherProfileFragment.prefetchFollowCache.get(item.uid);
+                    if (cachedFollowStatus != null) {
+                        currentFollowStatus = cachedFollowStatus;
+                    }
+
+                    // 4. Открываем профиль "Толстым" объектом
                     activity.navigator.openSubScreen(OtherProfileFragment.newInstance(
-                            item.uid, activity.getString(R.string.title_notifications), item.nickname, "", item.photo
+                            item.uid, 
+                            activity.getString(R.string.title_notifications), 
+                            item.nickname, 
+                            "", // About не присылается в пуше
+                            item.photo,
+                            bg,
+                            followers,
+                            following,
+                            currentFollowStatus
                     ));
                 }
             });
@@ -187,17 +225,21 @@ public class NotificationsAdapter extends RecyclerView.Adapter<RecyclerView.View
             });
         }
 
-        private void updateStatusInPrefs(String uid, boolean isFollowing, MainActivity activity) {
+        private void updateStatusInPrefs(String targetUid, boolean isFollowing, MainActivity activity) {
             SharedPreferences prefs = activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
+            GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
+            String currentUid = account != null ? account.getId() : "guest";
+            String cacheKey = "notif_history_array_" + currentUid;
+
             try {
-                JSONArray array = new JSONArray(prefs.getString("notif_history_array", "[]"));
+                JSONArray array = new JSONArray(prefs.getString(cacheKey, "[]"));
                 for (int i = 0; i < array.length(); i++) {
                     JSONObject obj = array.getJSONObject(i);
-                    if ("follower".equals(obj.optString("type")) && uid.equals(obj.optString("uid"))) {
+                    if ("follower".equals(obj.optString("type")) && targetUid.equals(obj.optString("uid"))) {
                         obj.put("isFollowing", isFollowing);
                     }
                 }
-                prefs.edit().putString("notif_history_array", array.toString()).apply();
+                prefs.edit().putString(cacheKey, array.toString()).apply();
             } catch (Exception e) {}
         }
 
