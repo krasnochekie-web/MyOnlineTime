@@ -175,6 +175,9 @@ public class SearchFragment extends Fragment {
 
                 // === МАГИЯ КЭША: ПРЕДЗАГРУЗКА БЕЗ СЕТЕВЫХ ЗАПРОСОВ ===
                 if (users != null) {
+                    // Запускаем тихую загрузку легких фонов
+                    OtherProfileFragment.preloadBackgrounds(users);
+                    
                     for (User u : users) {
                         OtherProfileFragment.prefetchUserCache.put(u.uid, u);
                         try {
@@ -200,4 +203,5 @@ public class SearchFragment extends Fragment {
             }, 400);
         }
     }
-}
+    }
+                                        
