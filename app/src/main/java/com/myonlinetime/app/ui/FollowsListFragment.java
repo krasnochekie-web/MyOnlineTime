@@ -136,6 +136,10 @@ public class FollowsListFragment extends Fragment {
                     // === МАГИЯ КЭША: ПРЕДЗАГРУЗКА БЕЗ СЕТЕВЫХ ЗАПРОСОВ ===
                     // Мы не дергаем сервер! Мы просто берем "толстые" данные, 
                     // которые УЖЕ пришли в списке, и кладем их в оперативную память.
+                    
+                    // Запускаем тихую загрузку легких фонов
+                    OtherProfileFragment.preloadBackgrounds(users);
+
                     for (User u : users) {
                         // 1. Кладем самого юзера (с фоном и данными)
                         OtherProfileFragment.prefetchUserCache.put(u.uid, u);
@@ -157,4 +161,5 @@ public class FollowsListFragment extends Fragment {
     }
 
     // НИКАКИХ onResume И updateHeader ЗДЕСЬ БОЛЬШЕ НЕТ. РАБОТАЕМ СТРОГО ВНУТРИ VIEWPAGER2.
-}
+                                }
+                                
