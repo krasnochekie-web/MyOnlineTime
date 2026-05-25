@@ -6,6 +6,7 @@ import androidx.appcompat.app.AppCompatDelegate;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 
+import com.myonlinetime.app.models.User;
 import com.myonlinetime.app.utils.StatsHelper;
 import com.myonlinetime.app.utils.SmartHeaderManager;
 import android.app.AppOpsManager;
@@ -97,11 +98,19 @@ public class MainActivity extends AppCompatActivity {
             public void onReceive(Context context, Intent intent) {
                 if ("UPDATE_BADGE_BROADCAST".equals(intent.getAction())) {
                     updateNotificationBadge();
+                    // ТИХОЕ ОБНОВЛЕНИЕ ЛИЧНЫХ СЧЕТЧИКОВ ПРИ ПУШЕ
+                    syncMyProfileSilently();
                 }
             }
         };
-        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(this)
-            .registerReceiver(badgeReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"));
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(this)
+                .registerReceiver(badgeReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"));
+        } else {
+            androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(this)
+                .registerReceiver(badgeReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"));
+        }
 
         getSupportFragmentManager().registerFragmentLifecycleCallbacks(new FragmentManager.FragmentLifecycleCallbacks() {
             @Override
@@ -260,6 +269,31 @@ public class MainActivity extends AppCompatActivity {
         refreshGoogleAndVpsToken(true);
     }
 
+    // === ТИХАЯ ФОНОВАЯ СИНХРОНИЗАЦИЯ ЛИЧНОГО ПРОФИЛЯ ===
+    public void syncMyProfileSilently() {
+        if (vpsToken == null || vpsToken.isEmpty()) return;
+        
+        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+        if (account == null) return;
+
+        VpsApi.getAggregatedProfile(this, vpsToken, account.getId(), new VpsApi.AggregatedProfileCallback() {
+            @Override
+            public void onLoaded(User user, int followers, int following, boolean isFollowing) {
+                // Сохраняем сверенные с сервером цифры на жесткий диск
+                prefs.edit()
+                     .putInt("my_followers_count", followers)
+                     .putInt("my_following_count", following)
+                     .apply();
+                     
+                if (user != null) {
+                    if (user.nickname != null) prefs.edit().putString("my_nickname", user.nickname).apply();
+                    if (user.about != null) prefs.edit().putString("my_about", user.about).apply();
+                }
+            }
+            @Override public void onError(String e) {}
+        });
+    }
+
     private void checkIfNewUserAndEnforce(String uid) {
         if (vpsToken == null) return;
         
@@ -299,7 +333,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
                 
-                prefs.edit().putBoolean("is_nickname_confirmed", isConfirmed).apply();
+                prefs.edit().getBoolean("is_nickname_confirmed", isConfirmed).apply();
                 runOnUiThread(() -> enforceLoginOverlays());
             }
             @Override public void onError(String error) {
@@ -316,7 +350,10 @@ public class MainActivity extends AppCompatActivity {
             if (isStartup) {
                 loadUserAvatarToBottomNav();
                 GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
-                if (acct != null) checkIfNewUserAndEnforce(acct.getId());
+                if (acct != null) {
+                    checkIfNewUserAndEnforce(acct.getId());
+                    syncMyProfileSilently(); // Запуск тихой синхронизации при старте
+                }
                 else enforceLoginOverlays();
             }
             return; 
@@ -334,6 +371,7 @@ public class MainActivity extends AppCompatActivity {
                         public void onSuccess(String ourServerToken) {
                             vpsToken = ourServerToken;
                             StatsHelper.syncUserProfile(MainActivity.this);
+                            syncMyProfileSilently(); // Запуск тихой синхронизации
                             
                             checkIfNewUserAndEnforce(account.getId());
 
@@ -622,7 +660,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // === ЖЕЛЕЗОБЕТОННАЯ ЛОГИКА ТУМБЛЕРОВ ===
     public void updateGlobalBackground(boolean show) {
         if (!show) {
             if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
@@ -633,7 +670,6 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences appPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
         boolean isGlobalEnabled = appPrefs.getBoolean("bg_global_enabled", true);
         
-        // 1. Проверяем главный рубильник
         if (!isGlobalEnabled) {
             if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
             if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
@@ -653,7 +689,6 @@ public class MainActivity extends AppCompatActivity {
         
         String targetPath = resolveMyBackground();
 
-        // 2. Чей это фон? (Если вкладка 4 и загружен чужой бейс64 — чужой, иначе 100% наш)
         boolean isOthersBackground = (currentTab == 4 && currentBgBase64 != null && !currentBgBase64.isEmpty() && !currentBgBase64.equals("null"));
         boolean isMyProfile = !isOthersBackground; 
         
@@ -673,7 +708,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // 3. Если настройки запрещают показ - рубим
         if (targetPath == null || targetPath.isEmpty()) {
             currentBgPath = null; 
             if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
@@ -689,7 +723,6 @@ public class MainActivity extends AppCompatActivity {
         currentBgPath = targetPath;
         if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
         
-        // 4. Отрисовываем фон, если он прошел все проверки
         if (globalImageView != null) {
             globalImageView.setVisibility(View.VISIBLE);
             Glide.with(this).load(targetPath).centerCrop().into(globalImageView);
@@ -1099,6 +1132,7 @@ public class MainActivity extends AppCompatActivity {
                     public void onSuccess(String ourServerToken) {
                         vpsToken = ourServerToken;
                         StatsHelper.syncUserProfile(MainActivity.this);
+                        syncMyProfileSilently(); // Запуск тихой синхронизации
                         
                         checkIfNewUserAndEnforce(acct.getId());
 
@@ -1123,7 +1157,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // === ИСПРАВЛЕНО: Теперь при каждом переключении вкладок фон принудительно пересчитывается ===
     private void updateNavState(int index) {
         currentTab = index;
         
@@ -1141,7 +1174,6 @@ public class MainActivity extends AppCompatActivity {
         iconUsage.setSelected(index == 3);
         iconSettings.setSelected(index == 5); 
         
-        // Жестко требуем перерисовку фона под новую вкладку с учетом настроек
         updateGlobalBackground(true); 
 
         container.post(this::enforceLoginOverlays);
