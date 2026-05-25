@@ -18,6 +18,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.os.Bundle;
+import android.os.Build;
 import com.google.firebase.messaging.FirebaseMessaging;
 import android.os.Looper;
 import android.util.LruCache;
@@ -333,7 +334,8 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
                 
-                prefs.edit().getBoolean("is_nickname_confirmed", isConfirmed).apply();
+                // ИСПРАВЛЕНО: putBoolean
+                prefs.edit().putBoolean("is_nickname_confirmed", isConfirmed).apply();
                 runOnUiThread(() -> enforceLoginOverlays());
             }
             @Override public void onError(String error) {
