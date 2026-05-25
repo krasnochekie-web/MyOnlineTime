@@ -60,9 +60,9 @@ public class OtherProfileFragment extends Fragment {
     
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
-    public static final android.util.LruCache<String, User> prefetchUserCache = new android.util.LruCache<>(15);
-    public static final android.util.LruCache<String, String> prefetchCountsCache = new android.util.LruCache<>(15);
-    public static final android.util.LruCache<String, Boolean> prefetchFollowCache = new android.util.LruCache<>(15);
+    public static final android.util.LruCache<String, User> prefetchUserCache = new android.util.LruCache<>(50);
+    public static final android.util.LruCache<String, String> prefetchCountsCache = new android.util.LruCache<>(50);
+    public static final android.util.LruCache<String, Boolean> prefetchFollowCache = new android.util.LruCache<>(50);
 
     // === НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ МГНОВЕННОЙ ОТРИСОВКИ ===
     private String prefetchBg = "";
@@ -252,6 +252,7 @@ public class OtherProfileFragment extends Fragment {
         prefetchBg = getArguments() != null ? getArguments().getString("PREFETCH_BG", "") : "";
         prefetchFollowers = getArguments() != null ? getArguments().getInt("PREFETCH_FOLLOWERS", 0) : 0;
         prefetchFollowing = getArguments() != null ? getArguments().getInt("PREFETCH_FOLLOWING", 0) : 0;
+        // ИСПРАВЛЕНА СИНТАКСИЧЕСКАЯ ОШИБКА:
         prefetchIsFollowing = getArguments() != null ? getArguments().getBoolean("PREFETCH_IS_FOLLOWING", false) : false;
 
         // Проверяем кэш на всякий случай
@@ -377,7 +378,7 @@ public class OtherProfileFragment extends Fragment {
              }
         });
 
-        // === ТИХИЙ ФОНОВЫЙ ЗАПРОС (LAZY SYNC БЕЗ АНИМАЦИИ) ===
+        // === ТИХИЙ ФОНОВЫЙ ЗАПРОС (LAZY SYNC БЕЗ АНИМАЦИИ С УМНОЙ ПОДМЕНОЙ) ===
         Runnable dataLoader = new Runnable() {
             @Override
             public void run() {
@@ -395,7 +396,7 @@ public class OtherProfileFragment extends Fragment {
                     public void onLoaded(User user, int followers, int following, boolean isFollowing) {
                         if (!isAdded()) return;
                         
-                        // 1. Тихо обновляем счетчики и подписки без анимаций
+                        // 1. Тихо обновляем счетчики и подписки (без перескоков)
                         if (txtFollowersCount != null) {
                             String newFollowers = String.valueOf(followers);
                             if (!txtFollowersCount.getText().toString().equals(newFollowers)) {
@@ -423,13 +424,21 @@ public class OtherProfileFragment extends Fragment {
                         // 2. Обрабатываем данные профиля и рисуем топ приложений
                         if (user != null) {
                             prefetchUserCache.put(targetUid, user); 
-                            nameView.setText(user.nickname != null ? user.nickname : act.getString(R.string.no_name));
                             
-                            aboutView.setText(user.about != null ? user.about : "");
-                            if (user.about == null || user.about.trim().isEmpty()) {
-                                aboutView.setVisibility(View.GONE);
-                            } else {
-                                aboutView.setVisibility(View.VISIBLE);
+                            // Умное обновление текста профиля без мерцания
+                            if (user.nickname != null && !nameView.getText().toString().equals(user.nickname)) {
+                                nameView.setText(user.nickname);
+                            }
+                            
+                            if (user.about != null) {
+                                if (!aboutView.getText().toString().equals(user.about)) {
+                                    aboutView.setText(user.about);
+                                }
+                                if (user.about.trim().isEmpty()) {
+                                    aboutView.setVisibility(View.GONE);
+                                } else {
+                                    aboutView.setVisibility(View.VISIBLE);
+                                }
                             }
                             
                             applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
