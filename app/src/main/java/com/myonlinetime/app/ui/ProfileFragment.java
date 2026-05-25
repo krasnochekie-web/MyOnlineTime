@@ -258,15 +258,11 @@ public class ProfileFragment extends Fragment {
             ));
         });
 
-        // МГНОВЕННАЯ ОТРИСОВКА ИЗ КЭША
-        String cachedCounts = OtherProfileFragment.prefetchCountsCache.get(myUid);
-        if (cachedCounts != null) {
-            try {
-                org.json.JSONObject json = new org.json.JSONObject(cachedCounts);
-                if (json.has("followers") && txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(json.getInt("followers")));
-                if (json.has("following") && txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(json.getInt("following")));
-            } catch (Exception ignored) {}
-        }
+        // === МГНОВЕННАЯ ОТРИСОВКА ИЗ ЖЕСТКОГО КЭША (БЕЗ ЗАДЕРЖЕК ПРИ СТАРТЕ) ===
+        int savedFollowers = activity.prefs.getInt("my_followers_count", 0);
+        int savedFollowing = activity.prefs.getInt("my_following_count", 0);
+        if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(savedFollowers));
+        if (txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(savedFollowing));
         updateUiFromPrefs(activity);
 
         // === ТИХИЙ ФОНОВЫЙ ЗАПРОС ===
@@ -278,7 +274,7 @@ public class ProfileFragment extends Fragment {
                 public void onLoaded(User user, int followers, int following, boolean isFollowing) {
                     if (!isAdded()) return;
 
-                    // 1. Обновляем счетчики подписок в фоне без анимаций
+                    // 1. Тихо обновляем счетчики подписок в фоне без анимаций
                     if (txtFollowersCount != null) {
                         String newFollowers = String.valueOf(followers);
                         if (!txtFollowersCount.getText().toString().equals(newFollowers)) {
@@ -292,12 +288,11 @@ public class ProfileFragment extends Fragment {
                         }
                     }
                     
-                    try {
-                        org.json.JSONObject countsObj = new org.json.JSONObject();
-                        countsObj.put("followers", followers);
-                        countsObj.put("following", following);
-                        OtherProfileFragment.prefetchCountsCache.put(myUid, countsObj.toString());
-                    } catch (Exception ignored) {}
+                    // СОХРАНЯЕМ В ЖЕСТКИЙ КЭШ ДЛЯ СЛЕДУЮЩЕГО СТАРТА ПРИЛОЖЕНИЯ
+                    activity.prefs.edit()
+                            .putInt("my_followers_count", followers)
+                            .putInt("my_following_count", following)
+                            .apply();
 
                     // 2. Обрабатываем данные профиля
                     long activeTicket = activity.prefs.getLong("active_upload_ticket", 0);
