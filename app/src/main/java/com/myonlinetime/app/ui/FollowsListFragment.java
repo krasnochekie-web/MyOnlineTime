@@ -54,7 +54,8 @@ public class FollowsListFragment extends Fragment {
         final MainActivity activity = (MainActivity) getActivity();
         GoogleSignInAccount acct = activity != null ? GoogleSignIn.getLastSignedInAccount(activity) : null;
         final String myUid = acct != null ? acct.getId() : "";
-// Адаптер со слушателем и передачей ВСЕХ параметров
+
+        // Адаптер со слушателем и передачей ВСЕХ параметров
         adapter = new UserListAdapter(activity, clickedUser -> {
             if (activity != null && activity.navigator != null) {
                 if (clickedUser.uid != null && clickedUser.uid.equals(myUid)) {
@@ -63,7 +64,7 @@ public class FollowsListFragment extends Fragment {
                     String currentTitle = listType.equals("followers") ? 
                             getString(R.string.followers) : getString(R.string.following);
                             
-                    // === ИСПРАВЛЕНИЕ: ПЕРЕДАЕМ "ТОЛСТЫЕ" ДАННЫЕ ===
+                    // === ПЕРЕДАЕМ "ТОЛСТЫЕ" ДАННЫЕ ===
                     activity.navigator.openSubScreen(OtherProfileFragment.newInstance(
                             clickedUser.uid, 
                             currentTitle,
@@ -124,6 +125,7 @@ public class FollowsListFragment extends Fragment {
             @Override public void onFound(List<User> users) {
                 if (!isAdded()) return;
                 if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+                
                 if (users == null || users.isEmpty()) {
                     statusText.setVisibility(View.VISIBLE);
                     statusText.setText(getString(R.string.empty_list));
@@ -131,12 +133,23 @@ public class FollowsListFragment extends Fragment {
                     statusText.setVisibility(View.GONE);
                     adapter.setUsers(users);
                     
-                    // === ФОНОВАЯ ПРЕДЗАГРУЗКА КНОПОК И ЦИФР ПРОФИЛЕЙ ===
-                    MainActivity activity = (MainActivity) getActivity();
-                    if (activity != null && activity.vpsToken != null) {
-                        for (User u : users) {
-                            OtherProfileFragment.prefetchProfile(activity.vpsToken, u.uid);
-                        }
+                    // === МАГИЯ КЭША: ПРЕДЗАГРУЗКА БЕЗ СЕТЕВЫХ ЗАПРОСОВ ===
+                    // Мы не дергаем сервер! Мы просто берем "толстые" данные, 
+                    // которые УЖЕ пришли в списке, и кладем их в оперативную память.
+                    for (User u : users) {
+                        // 1. Кладем самого юзера (с фоном и данными)
+                        OtherProfileFragment.prefetchUserCache.put(u.uid, u);
+                        
+                        // 2. Кладем счетчики
+                        try {
+                            org.json.JSONObject countsObj = new org.json.JSONObject();
+                            countsObj.put("followers", u.followers);
+                            countsObj.put("following", u.following);
+                            OtherProfileFragment.prefetchCountsCache.put(u.uid, countsObj.toString());
+                        } catch (Exception ignored) {}
+                        
+                        // 3. Кладем статус подписки
+                        OtherProfileFragment.prefetchFollowCache.put(u.uid, u.isFollowing);
                     }
                 }
             }
