@@ -170,8 +170,22 @@ public class SearchFragment extends Fragment {
                 if (!isAdded()) return; 
                 if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
                 
-                // Передаем результаты в адаптер. Всю предзагрузку профилей мы отсюда вырезали!
+                // Передаем результаты в адаптер
                 adapter.setUsers(users);
+
+                // === МАГИЯ КЭША: ПРЕДЗАГРУЗКА БЕЗ СЕТЕВЫХ ЗАПРОСОВ ===
+                if (users != null) {
+                    for (User u : users) {
+                        OtherProfileFragment.prefetchUserCache.put(u.uid, u);
+                        try {
+                            org.json.JSONObject countsObj = new org.json.JSONObject();
+                            countsObj.put("followers", u.followers);
+                            countsObj.put("following", u.following);
+                            OtherProfileFragment.prefetchCountsCache.put(u.uid, countsObj.toString());
+                        } catch (Exception ignored) {}
+                        OtherProfileFragment.prefetchFollowCache.put(u.uid, u.isFollowing);
+                    }
+                }
             }
         });
     }
