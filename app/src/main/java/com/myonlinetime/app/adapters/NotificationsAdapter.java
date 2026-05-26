@@ -22,6 +22,7 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 import com.myonlinetime.app.models.NotificationModels;
+import com.myonlinetime.app.models.User;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -156,14 +157,16 @@ public class NotificationsAdapter extends RecyclerView.Adapter<RecyclerView.View
             followerUserCard.setOnClickListener(v -> {
                 if (activity != null && activity.navigator != null) {
                     String bg = "";
+                    String about = "";
                     int followers = 0;
                     int following = 0;
-                    boolean currentFollowStatus = item.isFollowing; // Начинаем с базы из уведомления
+                    boolean currentFollowStatus = item.isFollowing; 
 
-                    // 1. Ищем фон в кэше юзеров
+                    // 1. Ищем фон и ОПИСАНИЕ в кэше юзеров
                     com.myonlinetime.app.models.User cachedUser = com.myonlinetime.app.ui.OtherProfileFragment.prefetchUserCache.get(item.uid);
                     if (cachedUser != null) {
                         bg = cachedUser.background != null ? cachedUser.background : "";
+                        about = cachedUser.about != null ? cachedUser.about : "";
                     }
 
                     // 2. Ищем актуальные счетчики в кэше
@@ -187,7 +190,7 @@ public class NotificationsAdapter extends RecyclerView.Adapter<RecyclerView.View
                             item.uid, 
                             activity.getString(R.string.title_notifications), 
                             item.nickname, 
-                            "", // About не присылается в пуше
+                            about, // <-- ПЕРЕДАЕМ ОПИСАНИЕ ИЗ КЭША!
                             item.photo,
                             bg,
                             followers,
