@@ -40,25 +40,31 @@ import com.myonlinetime.app.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Set;
 
 public class OtherProfileFragment extends Fragment {
 
+    // Дефолтный лимит размера фона при предзагрузке (1 МБ) — используется,
+    // если вызывается старая перегрузка preloadBackgrounds(List<User>).
+    private static final long DEFAULT_PRELOAD_BG_BYTES = 1024L * 1024L;
+
     private ImageView avatarView;
-    private ImageView bgImageView; 
+    private ImageView bgImageView;
     private String targetUid = "";
     private String backTitle = "";
 
     private float lastTouchX = 0;
     private float lastTouchY = 0;
-    
+
     private long renderGeneration = 0;
     private long fragmentCreationTime = 0;
-    
+
     private ProgressBar listSpinner;
-    
+
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
     public static final android.util.LruCache<String, User> prefetchUserCache = new android.util.LruCache<>(50);
@@ -72,49 +78,76 @@ public class OtherProfileFragment extends Fragment {
         }
     };
 
+    /**
+     * Совместимая перегрузка со старым кодом — лимит фона по умолчанию 1 МБ.
+     */
     public static void preloadBackgrounds(List<User> users) {
+        preloadBackgrounds(users, DEFAULT_PRELOAD_BG_BYTES);
+    }
+
+    /**
+     * Предзагрузка фоновых картинок пользователей в in-memory кэш {@link #prefetchBgBytesCache}.
+     * - Не качает фон тяжелее {@code maxBytes} (проверяется и по Content-Length, и по факту).
+     * - Не качает повторно один и тот же URL (даже если он встречается у нескольких юзеров).
+     * - Полностью в фоне, не блокирует UI.
+     */
+    public static void preloadBackgrounds(List<User> users, long maxBytes) {
         if (users == null || users.isEmpty()) return;
-        
+        final long limit = maxBytes > 0 ? maxBytes : DEFAULT_PRELOAD_BG_BYTES;
+
         Utils.backgroundExecutor.execute(() -> {
+            // Отсекаем дубликаты URL'ов внутри одной пачки, чтобы не плодить сетевые запросы.
+            Set<String> seenUrls = new HashSet<>();
+
             for (User u : users) {
+                if (u == null) continue;
                 if (u.background == null || !u.background.startsWith("http")) continue;
+                if (!seenUrls.add(u.background)) continue;
                 if (prefetchBgBytesCache.get(u.background) != null) continue;
-                
+
+                java.net.HttpURLConnection conn = null;
+                java.io.InputStream is = null;
                 try {
                     java.net.URL url = new java.net.URL(u.background);
-                    java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                    conn = (java.net.HttpURLConnection) url.openConnection();
                     conn.setConnectTimeout(2000);
                     conn.setReadTimeout(2000);
                     conn.setRequestMethod("GET");
-                    
+
+                    // Если сервер честно отдал Content-Length и он больше лимита — даже не качаем тело.
                     int contentLength = conn.getContentLength();
-                    if (contentLength > 1024 * 1024) {
-                        conn.disconnect();
+                    if (contentLength > 0 && contentLength > limit) {
                         continue;
                     }
 
-                    java.io.InputStream is = conn.getInputStream();
+                    is = conn.getInputStream();
                     java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
                     int nRead;
                     byte[] data = new byte[16384];
-                    int totalRead = 0;
+                    long totalRead = 0;
                     boolean exceeded = false;
-                    
+
                     while ((nRead = is.read(data, 0, data.length)) != -1) {
                         buffer.write(data, 0, nRead);
                         totalRead += nRead;
-                        if (totalRead > 1024 * 1024) {
+                        if (totalRead > limit) {
                             exceeded = true;
                             break;
                         }
                     }
-                    is.close();
-                    conn.disconnect();
-                    
+
                     if (!exceeded && totalRead > 0) {
                         prefetchBgBytesCache.put(u.background, buffer.toByteArray());
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                } finally {
+                    if (is != null) {
+                        try { is.close(); } catch (Exception ignored) {}
+                    }
+                    if (conn != null) {
+                        try { conn.disconnect(); } catch (Exception ignored) {}
+                    }
+                }
             }
         });
     }
@@ -123,13 +156,13 @@ public class OtherProfileFragment extends Fragment {
     private int prefetchFollowers = 0;
     private int prefetchFollowing = 0;
     private boolean prefetchIsFollowing = false;
-    
+
     // ПРЕДОХРАНИТЕЛЬ ОТ СВЕТОМУЗЫКИ
     private String currentDisplayedBg = null;
 
     public static void prefetchProfile(String vpsToken, String uid) {
         if (vpsToken == null || uid == null || uid.isEmpty()) return;
-        
+
         if (prefetchUserCache.get(uid) == null || prefetchCountsCache.get(uid) == null || prefetchFollowCache.get(uid) == null) {
             VpsApi.getAggregatedProfile(null, vpsToken, uid, new VpsApi.AggregatedProfileCallback() {
                 @Override
@@ -183,8 +216,8 @@ public class OtherProfileFragment extends Fragment {
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        fragmentCreationTime = System.currentTimeMillis(); 
-        
+        fragmentCreationTime = System.currentTimeMillis();
+
         final MainActivity activity = (MainActivity) getActivity();
         final View originalView = inflater.inflate(R.layout.layout_profile, container, false);
         if (activity == null) return originalView;
@@ -210,48 +243,48 @@ public class OtherProfileFragment extends Fragment {
         final TextView nameView = originalView.findViewById(R.id.profile_name);
         final TextView aboutView = originalView.findViewById(R.id.profile_about);
         avatarView = originalView.findViewById(R.id.profile_avatar);
-        
+
         final View btnEdit = originalView.findViewById(R.id.btn_edit_profile);
         final Button btnFollow = originalView.findViewById(R.id.btn_follow);
-        
+
         final TextView weekTimeText = originalView.findViewById(R.id.profile_week_time);
         View followersClick = originalView.findViewById(R.id.container_followers);
         View followingClick = originalView.findViewById(R.id.container_following);
 
         TextView tabTopApps = originalView.findViewById(R.id.tab_top_apps);
         if (tabTopApps != null) {
-            tabTopApps.setVisibility(View.VISIBLE); 
-            tabTopApps.setSelected(true); 
+            tabTopApps.setVisibility(View.VISIBLE);
+            tabTopApps.setSelected(true);
         }
-        
+
         final ImageView btnExpand = originalView.findViewById(R.id.btn_expand_apps);
         final ImageView btnCollapse = originalView.findViewById(R.id.btn_collapse_apps);
         final LinearLayout appsContainerLocal = originalView.findViewById(R.id.profile_apps_container);
-        
+
         final View appsCardParent = (View) appsContainerLocal.getParent();
 
         ViewGroup grandParent = (ViewGroup) appsCardParent.getParent();
         int cardIndex = grandParent.indexOfChild(appsCardParent);
         grandParent.removeView(appsCardParent);
-        
+
         FrameLayout listWrapper = new FrameLayout(activity);
         listWrapper.setLayoutParams(appsCardParent.getLayoutParams());
         appsCardParent.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         listWrapper.addView(appsCardParent);
-        
+
         listSpinner = new ProgressBar(activity);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             listSpinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(activity, R.color.grapefruit)));
         }
         FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(
-                (int)(50 * getResources().getDisplayMetrics().density), 
+                (int)(50 * getResources().getDisplayMetrics().density),
                 (int)(50 * getResources().getDisplayMetrics().density)
         );
         sp.gravity = Gravity.CENTER_HORIZONTAL | Gravity.TOP;
-        sp.topMargin = (int)(20 * getResources().getDisplayMetrics().density); 
+        sp.topMargin = (int)(20 * getResources().getDisplayMetrics().density);
         listSpinner.setLayoutParams(sp);
-        listSpinner.setVisibility(View.VISIBLE); 
-        
+        listSpinner.setVisibility(View.VISIBLE);
+
         listWrapper.addView(listSpinner);
         grandParent.addView(listWrapper, cardIndex);
 
@@ -262,7 +295,7 @@ public class OtherProfileFragment extends Fragment {
             public void onChildViewAdded(View parent, View child) { updateEmptyState(); }
             @Override
             public void onChildViewRemoved(View parent, View child) { updateEmptyState(); }
-            
+
             private void updateEmptyState() {
                 uiHandler.post(() -> {
                     if (!isAdded() || getView() == null) return;
@@ -276,21 +309,21 @@ public class OtherProfileFragment extends Fragment {
                         btnExpand.setVisibility(View.GONE);
                         btnCollapse.setVisibility(View.GONE);
                     }
-                    
+
                     if (hasApps && listSpinner != null) {
                         listSpinner.setVisibility(View.GONE);
                     }
                 });
             }
         });
-        
+
         boolean initiallyHasApps = appsContainerLocal.getChildCount() > 0;
         if (appsCardParent != null) {
             appsCardParent.setVisibility(initiallyHasApps ? View.VISIBLE : View.GONE);
         } else {
             appsContainerLocal.setVisibility(initiallyHasApps ? View.VISIBLE : View.GONE);
         }
-        
+
         if (!initiallyHasApps) {
             btnExpand.setVisibility(View.GONE);
             btnCollapse.setVisibility(View.GONE);
@@ -311,7 +344,7 @@ public class OtherProfileFragment extends Fragment {
             if (cachedUser.photo != null && !cachedUser.photo.isEmpty()) argPhoto = cachedUser.photo;
             if (cachedUser.background != null) prefetchBg = cachedUser.background;
         }
-        
+
         if (!argName.isEmpty()) nameView.setText(argName);
         else nameView.setText(activity.getString(R.string.loading));
 
@@ -320,17 +353,17 @@ public class OtherProfileFragment extends Fragment {
             aboutView.setVisibility(View.VISIBLE);
         } else {
             aboutView.setText("");
-            aboutView.setVisibility(View.GONE); 
+            aboutView.setVisibility(View.GONE);
         }
-        
+
         if (!argPhoto.isEmpty()) handleMediaLoading(activity, argPhoto);
-        
+
         if (!prefetchBg.isEmpty()) updateBackgroundFromPrefs(activity, prefetchBg);
 
         btnFollow.setTag(prefetchIsFollowing);
         updateFollowButton(btnFollow, prefetchIsFollowing);
         btnFollow.setVisibility(View.VISIBLE);
-        
+
         TextView txtFollowersCount = originalView.findViewById(R.id.txt_followers_count);
         TextView txtFollowingCount = originalView.findViewById(R.id.txt_following_count);
         if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(prefetchFollowers));
@@ -362,63 +395,63 @@ public class OtherProfileFragment extends Fragment {
                 lastTouchX = event.getX();
                 lastTouchY = event.getY();
             }
-            return false; 
+            return false;
         });
 
         btnFollow.setOnClickListener(v -> {
-             if (btnFollow.getTag() == null || !btnFollow.isEnabled()) return;
-             btnFollow.setEnabled(false); 
-             
-             boolean currentStatus = (boolean) btnFollow.getTag();
-             boolean nextStatus = !currentStatus;
-             
-             btnFollow.setTag(nextStatus); 
-             updateFollowButton(btnFollow, nextStatus);
-             prefetchFollowCache.put(targetUid, nextStatus); 
-             
-             try {
-                 if (txtFollowersCount != null) {
-                     int count = Integer.parseInt(txtFollowersCount.getText().toString());
-                     count = nextStatus ? count + 1 : count - 1;
-                     if (count < 0) count = 0;
-                     txtFollowersCount.setText(String.valueOf(count));
-                 }
-             } catch (Exception e) {}
-             
-             if (activity.vpsToken != null) {
-                 VpsApi.setFollow(activity.vpsToken, targetUid, nextStatus, new VpsApi.Callback() {
-                     @Override public void onSuccess(String s) { 
-                         uiHandler.post(() -> { 
-                             if (isAdded() && btnFollow != null) btnFollow.setEnabled(true); 
-                             
-                             GoogleSignInAccount myAcc = GoogleSignIn.getLastSignedInAccount(activity);
-                             if (myAcc != null) {
-                                 prefetchCountsCache.remove(myAcc.getId());
-                                 activity.sendBroadcast(new Intent("ACTION_PROFILE_UPDATED").setPackage(activity.getPackageName()));
-                             }
-                         });
-                     }
-                     @Override public void onError(String err) {
-                         uiHandler.post(() -> {
-                             if (isAdded()) {
-                                 btnFollow.setEnabled(true);
-                                 btnFollow.setTag(currentStatus);
-                                 updateFollowButton(btnFollow, currentStatus);
-                                 prefetchFollowCache.put(targetUid, currentStatus);
-                                 try {
-                                     if (txtFollowersCount != null) {
-                                         int c = Integer.parseInt(txtFollowersCount.getText().toString());
-                                         c = currentStatus ? c + 1 : c - 1;
-                                         if (c < 0) c = 0;
-                                         txtFollowersCount.setText(String.valueOf(c));
-                                     }
-                                 } catch(Exception e){}
-                                 Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
-                             }
-                         });
-                     }
-                 });
-             }
+            if (btnFollow.getTag() == null || !btnFollow.isEnabled()) return;
+            btnFollow.setEnabled(false);
+
+            boolean currentStatus = (boolean) btnFollow.getTag();
+            boolean nextStatus = !currentStatus;
+
+            btnFollow.setTag(nextStatus);
+            updateFollowButton(btnFollow, nextStatus);
+            prefetchFollowCache.put(targetUid, nextStatus);
+
+            try {
+                if (txtFollowersCount != null) {
+                    int count = Integer.parseInt(txtFollowersCount.getText().toString());
+                    count = nextStatus ? count + 1 : count - 1;
+                    if (count < 0) count = 0;
+                    txtFollowersCount.setText(String.valueOf(count));
+                }
+            } catch (Exception e) {}
+
+            if (activity.vpsToken != null) {
+                VpsApi.setFollow(activity.vpsToken, targetUid, nextStatus, new VpsApi.Callback() {
+                    @Override public void onSuccess(String s) {
+                        uiHandler.post(() -> {
+                            if (isAdded() && btnFollow != null) btnFollow.setEnabled(true);
+
+                            GoogleSignInAccount myAcc = GoogleSignIn.getLastSignedInAccount(activity);
+                            if (myAcc != null) {
+                                prefetchCountsCache.remove(myAcc.getId());
+                                activity.sendBroadcast(new Intent("ACTION_PROFILE_UPDATED").setPackage(activity.getPackageName()));
+                            }
+                        });
+                    }
+                    @Override public void onError(String err) {
+                        uiHandler.post(() -> {
+                            if (isAdded()) {
+                                btnFollow.setEnabled(true);
+                                btnFollow.setTag(currentStatus);
+                                updateFollowButton(btnFollow, currentStatus);
+                                prefetchFollowCache.put(targetUid, currentStatus);
+                                try {
+                                    if (txtFollowersCount != null) {
+                                        int c = Integer.parseInt(txtFollowersCount.getText().toString());
+                                        c = currentStatus ? c + 1 : c - 1;
+                                        if (c < 0) c = 0;
+                                        txtFollowersCount.setText(String.valueOf(c));
+                                    }
+                                } catch(Exception e){}
+                                Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
+                            }
+                        });
+                    }
+                });
+            }
         });
 
         Runnable dataLoader = new Runnable() {
@@ -429,7 +462,7 @@ public class OtherProfileFragment extends Fragment {
                 if (act == null) return;
 
                 if (act.vpsToken == null) {
-                    uiHandler.postDelayed(this, 500); 
+                    uiHandler.postDelayed(this, 500);
                     return;
                 }
 
@@ -437,7 +470,7 @@ public class OtherProfileFragment extends Fragment {
                     @Override
                     public void onLoaded(User user, int followers, int following, boolean isFollowing) {
                         if (!isAdded()) return;
-                        
+
                         if (txtFollowersCount != null) {
                             String newFollowers = String.valueOf(followers);
                             if (!txtFollowersCount.getText().toString().equals(newFollowers)) {
@@ -450,7 +483,7 @@ public class OtherProfileFragment extends Fragment {
                                 txtFollowingCount.setText(newFollowing);
                             }
                         }
-                        
+
                         try {
                             org.json.JSONObject countsObj = new org.json.JSONObject();
                             countsObj.put("followers", followers);
@@ -463,12 +496,12 @@ public class OtherProfileFragment extends Fragment {
                         updateFollowButton(btnFollow, isFollowing);
 
                         if (user != null) {
-                            prefetchUserCache.put(targetUid, user); 
-                            
+                            prefetchUserCache.put(targetUid, user);
+
                             if (user.nickname != null && !nameView.getText().toString().equals(user.nickname)) {
                                 nameView.setText(user.nickname);
                             }
-                            
+
                             if (user.about != null) {
                                 if (!aboutView.getText().toString().equals(user.about)) {
                                     aboutView.setText(user.about);
@@ -479,14 +512,14 @@ public class OtherProfileFragment extends Fragment {
                                     aboutView.setVisibility(View.VISIBLE);
                                 }
                             }
-                            
+
                             applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
                             if (user.photo != null && user.photo.length() > 5) handleMediaLoading(act, user.photo);
-                            
+
                             if (user.topApps == null) user.topApps = new HashMap<>();
-                            
+
                             renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, user.resolvedNames, appsContainerLocal, act, weekTimeText, aboutView, btnExpand, btnCollapse);
-                            updateBackgroundFromPrefs(act, user.background); 
+                            updateBackgroundFromPrefs(act, user.background);
                         } else {
                             nameView.setText(act.getString(R.string.new_user));
                             if (listSpinner != null) listSpinner.setVisibility(View.GONE);
@@ -498,30 +531,30 @@ public class OtherProfileFragment extends Fragment {
                 });
             }
         };
-        
-        uiHandler.postDelayed(dataLoader, 200); 
 
-        return wrapper; 
+        uiHandler.postDelayed(dataLoader, 200);
+
+        return wrapper;
     }
 
     private void updateBackgroundFromPrefs(MainActivity activity, String bgUrl) {
         if (bgImageView == null || !isAdded()) return;
-        
+
         if (bgUrl == null) bgUrl = "";
         if (bgUrl.equals(currentDisplayedBg)) return; // ИЗБАВЛЯЕМСЯ ОТ МЕРЦАНИЯ!
-        
+
         SharedPreferences appPrefs = activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
         boolean isGlobalEnabled = appPrefs.getBoolean("bg_global_enabled", true);
         boolean isOthersEnabled = appPrefs.getBoolean("bg_others_profile_enabled", true);
         boolean isOthersImages = appPrefs.getBoolean("bg_others_images_enabled", true);
         boolean isOthersGifs = appPrefs.getBoolean("bg_others_gifs_enabled", true);
-        
+
         boolean allowBg = true;
         if (!isGlobalEnabled || !isOthersEnabled || bgUrl.length() < 5) allowBg = false;
         else {
-             boolean isGif = bgUrl.toLowerCase().endsWith(".gif");
-             if (isGif && !isOthersGifs) allowBg = false;
-             if (!isGif && !isOthersImages) allowBg = false;
+            boolean isGif = bgUrl.toLowerCase().endsWith(".gif");
+            if (isGif && !isOthersGifs) allowBg = false;
+            if (!isGif && !isOthersImages) allowBg = false;
         }
 
         if (allowBg) {
@@ -542,23 +575,23 @@ public class OtherProfileFragment extends Fragment {
 
     private void applyCollapseSafely(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
         boolean isAboutEmpty = aboutView == null || aboutView.getText().toString().trim().isEmpty();
-        
+
         if (isAboutEmpty && aboutView != null) {
             aboutView.setVisibility(View.GONE);
         }
 
         StatsHelper.applyCollapseLogic(aboutView, container, btnExpand, btnCollapse);
-        
+
         if (isAboutEmpty && aboutView != null) {
             aboutView.setVisibility(View.GONE);
-            aboutView.clearAnimation(); 
+            aboutView.clearAnimation();
         }
 
         if (container != null && container.getChildCount() == 0) {
             View parent = (View) container.getParent();
             if (parent != null) parent.setVisibility(View.GONE);
             else container.setVisibility(View.GONE);
-            
+
             if (btnExpand != null) btnExpand.setVisibility(View.GONE);
             if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
         }
@@ -581,7 +614,7 @@ public class OtherProfileFragment extends Fragment {
             User cachedUser = prefetchUserCache.get(targetUid);
             if (cachedUser != null) updateBackgroundFromPrefs(activity, cachedUser.background);
         }
-        
+
         if (getView() != null) {
             TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
             if (tabTopApps != null) {
@@ -596,14 +629,14 @@ public class OtherProfileFragment extends Fragment {
         super.onHiddenChanged(hidden);
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null) return;
-        
+
         if (!hidden) {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
-            
+
             User cachedUser = prefetchUserCache.get(targetUid);
             if (cachedUser != null) updateBackgroundFromPrefs(activity, cachedUser.background);
-            
+
             if (getView() != null) {
                 TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
                 if (tabTopApps != null) {
@@ -616,7 +649,7 @@ public class OtherProfileFragment extends Fragment {
 
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, Map<String, String> resolvedNames, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
         if (topApps == null) {
-            return; 
+            return;
         }
 
         final long myGen = ++renderGeneration;
@@ -624,9 +657,9 @@ public class OtherProfileFragment extends Fragment {
         if (topApps.isEmpty()) {
             uiHandler.post(() -> {
                 if (myGen != renderGeneration || !isAdded()) return;
-                
+
                 if (listSpinner != null) listSpinner.setVisibility(View.GONE);
-                
+
                 if (container != null) {
                     container.removeAllViews();
                     View parent = (View) container.getParent();
@@ -635,7 +668,7 @@ public class OtherProfileFragment extends Fragment {
                 }
                 if (btnExpand != null) btnExpand.setVisibility(View.GONE);
                 if (btnCollapse != null) btnCollapse.setVisibility(View.GONE);
-                
+
                 long minutes = serverTotalTime / 1000 / 60;
                 long hours = minutes / 60;
                 long mins = minutes % 60;
@@ -665,7 +698,7 @@ public class OtherProfileFragment extends Fragment {
 
                     AppUiData data = new AppUiData();
                     data.pkgName = pkgName;
-                    
+
                     long appTime = 0;
                     Object val = entry.getValue();
                     if (val instanceof Number) {
@@ -674,9 +707,9 @@ public class OtherProfileFragment extends Fragment {
                         try { appTime = (long) Double.parseDouble(String.valueOf(val)); } catch (Exception e) {}
                     }
                     data.time = appTime;
-                    
+
                     if (appDescriptions != null) data.description = appDescriptions.get(pkgName);
-                    
+
                     data.isDeleted = (appTime == 0);
 
                     ApplicationInfo appInfo = null;
@@ -692,7 +725,7 @@ public class OtherProfileFragment extends Fragment {
                     } else if (resolvedNames != null && resolvedNames.containsKey(pkgName)) {
                         data.appName = resolvedNames.get(pkgName);
                     } else {
-                        data.appName = formatDeletedAppName(pkgName); 
+                        data.appName = formatDeletedAppName(pkgName);
                     }
 
                     if (appInfo != null) {
@@ -702,20 +735,20 @@ public class OtherProfileFragment extends Fragment {
                     preloadedData.add(data);
                     totalVisibleTime[0] += data.time;
                 }
-                
+
                 Collections.sort(preloadedData, new Comparator<AppUiData>() {
                     @Override
                     public int compare(AppUiData o1, AppUiData o2) { return Long.compare(o2.time, o1.time); }
                 });
-                
+
                 if (preloadedData.size() > 10) {
                     preloadedData.subList(10, preloadedData.size()).clear();
                 }
-                
+
             } catch (Exception e) { e.printStackTrace(); }
 
             long elapsed = System.currentTimeMillis() - fragmentCreationTime;
-            long delay = Math.max(0, 350 - elapsed); 
+            long delay = Math.max(0, 350 - elapsed);
 
             uiHandler.postDelayed(() -> {
                 if (!isAdded() || myGen != renderGeneration) return;
@@ -739,10 +772,10 @@ public class OtherProfileFragment extends Fragment {
                         if (parent != null) parent.setVisibility(View.VISIBLE);
                         else container.setVisibility(View.VISIBLE);
                     }
-                    
+
                     for (AppUiData data : preloadedData) {
                         View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, container, false);
-                        
+
                         ImageView iconView = view.findViewById(R.id.app_icon);
                         TextView nameView = view.findViewById(R.id.app_name);
                         TextView timeView = view.findViewById(R.id.app_time);
@@ -760,20 +793,20 @@ public class OtherProfileFragment extends Fragment {
                         }
 
                         nameView.setText(data.appName);
-                        
+
                         if (data.icon != null) {
                             iconView.setImageDrawable(data.icon);
                         } else {
                             String iconUrl = "https://api.krasnocraft.ru/icons/" + data.pkgName + ".png";
                             Glide.with(activity)
-                                 .load(iconUrl)
-                                 .placeholder(android.R.drawable.sym_def_app_icon)
-                                 .error(android.R.drawable.sym_def_app_icon)
-                                 .into(iconView);
+                                    .load(iconUrl)
+                                    .placeholder(android.R.drawable.sym_def_app_icon)
+                                    .error(android.R.drawable.sym_def_app_icon)
+                                    .into(iconView);
                         }
-                        
+
                         timeView.setText(Utils.formatTime(activity, data.time));
-                        
+
                         if (iconDeleted != null) {
                             if (data.isDeleted) {
                                 iconDeleted.setVisibility(View.VISIBLE);
@@ -795,21 +828,21 @@ public class OtherProfileFragment extends Fragment {
 
                 if (weekTimeText != null) {
                     weekTimeText.setText(hours > 0 ? activity.getString(R.string.format_hours_mins, hours, mins) : activity.getString(R.string.format_mins, mins));
-                    weekTimeText.setOnClickListener(null); 
+                    weekTimeText.setOnClickListener(null);
                 }
-                
+
                 if (listSpinner != null) {
                     listSpinner.setVisibility(View.GONE);
                 }
-            }, delay); 
+            }, delay);
         });
     }
 
     private String formatDeletedAppName(String pkg) {
         try {
             String[] parts = pkg.split("\\.");
-            String name = parts[parts.length - 1]; 
-            return name.substring(0, 1).toUpperCase() + name.substring(1); 
+            String name = parts[parts.length - 1];
+            return name.substring(0, 1).toUpperCase() + name.substring(1);
         } catch (Exception e) { return pkg; }
     }
 
@@ -824,7 +857,7 @@ public class OtherProfileFragment extends Fragment {
                 bg.setHotspot(lastTouchX, lastTouchY);
             }
             btnFollow.setBackground(bg);
-            
+
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
                 android.graphics.drawable.Drawable fg = androidx.core.content.ContextCompat.getDrawable(ctx, R.drawable.ripple_button_gray);
                 if (fg != null) {
@@ -841,7 +874,7 @@ public class OtherProfileFragment extends Fragment {
                 bg.setHotspot(lastTouchX, lastTouchY);
             }
             btnFollow.setBackground(bg);
-            
+
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
                 android.graphics.drawable.Drawable fg = androidx.core.content.ContextCompat.getDrawable(ctx, R.drawable.ripple_button_grapefruit);
                 if (fg != null) {
