@@ -32,6 +32,7 @@ import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.VpsApi;
 import com.myonlinetime.app.models.NotificationModels;
+import com.myonlinetime.app.models.User;
 import com.myonlinetime.app.utils.Utils;
 
 import org.json.JSONArray;
@@ -207,8 +208,6 @@ public class NotificationsHistoryFragment extends Fragment {
                             } else {
                                 adapter.updateItems(items);
                             }
-                            
-                            // Предзагрузка удалена для экономии трафика
 
                             if (finalHasUnread) {
                                 markAllAsRead(activity, array, cacheKey);
@@ -231,8 +230,6 @@ public class NotificationsHistoryFragment extends Fragment {
         boolean hasCache = !cachedJson.equals("[]") && cachedJson.length() > 5;
         
         if (hasCache) {
-            // ИСПРАВЛЕНИЕ: Не скрываем спиннер здесь! Он скроется сам в parseAndDisplayAsync, 
-            // когда пройдет задержка анимации. Иначе будет черный экран на 400мс.
             if (!isSwipeRefresh) {
                 parseAndDisplayAsync(cachedJson, activity, 0, false); 
             }
@@ -339,6 +336,7 @@ public class NotificationsHistoryFragment extends Fragment {
             try {
                 JSONArray array = new JSONArray(jsonResult);
                 List<NotificationModels.NotificationItem> items = new ArrayList<>();
+                List<User> usersToCache = new ArrayList<>();
                 boolean hasUnread = false;
 
                 for (int i = 0; i < array.length(); i++) {
@@ -361,12 +359,26 @@ public class NotificationsHistoryFragment extends Fragment {
                                 obj.optString("photo"),
                                 obj.optBoolean("isFollowing", false)
                         ));
+
+                        User u = new User();
+                        u.uid = obj.optString("uid");
+                        u.nickname = obj.optString("nickname");
+                        u.photo = obj.optString("photo");
+                        u.isFollowing = obj.optBoolean("isFollowing", false);
+                        usersToCache.add(u);
                     }
+                }
+
+                // Инъекция в кэш для предзагрузки профилей и фонов
+                OtherProfileFragment.preloadBackgrounds(usersToCache);
+                for (User u : usersToCache) {
+                    OtherProfileFragment.prefetchUserCache.put(u.uid, u);
+                    OtherProfileFragment.prefetchFollowCache.put(u.uid, u.isFollowing);
                 }
                 
                 final boolean finalHasUnread = hasUnread;
 
-                // ИСПРАВЛЕНИЕ: Ждем завершения анимации, если она еще не закончилась
+                // Ждем завершения анимации, если она еще не закончилась
                 long baseDelay = delayStopSpinner;
                 if (isTransitioning) {
                     baseDelay = Math.max(baseDelay, 400); // Принудительно откладываем рендер
@@ -400,8 +412,6 @@ public class NotificationsHistoryFragment extends Fragment {
                             adapter.updateItems(items);
                         }
                         
-                        // Предзагрузка удалена
-                        
                         if (finalHasUnread) {
                             markAllAsRead(activity, array, getCacheKey());
                         }
@@ -421,7 +431,6 @@ public class NotificationsHistoryFragment extends Fragment {
 
     private void showEmptyState() {
         if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-        // Не скрываем recycler, чтобы тянучка не ломалась!
         if (adapter != null) adapter.updateItems(new ArrayList<>());
         emptyText.setVisibility(View.VISIBLE);
     }
@@ -516,7 +525,6 @@ public class NotificationsHistoryFragment extends Fragment {
         if (!hidden) {
             setupHeader(); 
             
-            // ИСПРАВЛЕНИЕ: Защита от рывков при возврате на экран
             isTransitioning = true;
             uiHandler.postDelayed(() -> isTransitioning = false, 400);
             
