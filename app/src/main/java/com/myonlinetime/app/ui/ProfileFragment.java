@@ -437,10 +437,11 @@ public class ProfileFragment extends Fragment {
             if (!allowBg) {
                 myBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
             } else {
-                // ИСПРАВЛЕНИЕ: Асинхронная загрузка фона, чтобы не фризить UI при тяжелых картинках
+                // ИСПРАВЛЕНИЕ: Создаем final переменную для безопасного использования внутри лямбды
+                final String finalTargetPath = targetPath;
                 Utils.backgroundExecutor.execute(() -> {
                     try {
-                        final File bgFile = new File(targetPath);
+                        final File bgFile = new File(finalTargetPath);
                         if (bgFile.exists()) {
                             uiHandler.post(() -> {
                                 if (!isAdded() || myBgImageView == null) return;
