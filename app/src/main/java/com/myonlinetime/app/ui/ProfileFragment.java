@@ -258,14 +258,12 @@ public class ProfileFragment extends Fragment {
             ));
         });
 
-        // === МГНОВЕННАЯ ОТРИСОВКА ИЗ ЖЕСТКОГО КЭША (БЕЗ ЗАДЕРЖЕК ПРИ СТАРТЕ) ===
         int savedFollowers = activity.prefs.getInt("my_followers_count", 0);
         int savedFollowing = activity.prefs.getInt("my_following_count", 0);
         if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(savedFollowers));
         if (txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(savedFollowing));
         updateUiFromPrefs(activity);
 
-        // === ТИХИЙ ФОНОВЫЙ ЗАПРОС ===
         fetchProfileDataRunnable = () -> {
             if (activity.vpsToken == null) return;
             
@@ -274,7 +272,6 @@ public class ProfileFragment extends Fragment {
                 public void onLoaded(User user, int followers, int following, boolean isFollowing) {
                     if (!isAdded()) return;
 
-                    // 1. Тихо обновляем счетчики подписок в фоне без анимаций
                     if (txtFollowersCount != null) {
                         String newFollowers = String.valueOf(followers);
                         if (!txtFollowersCount.getText().toString().equals(newFollowers)) {
@@ -288,13 +285,11 @@ public class ProfileFragment extends Fragment {
                         }
                     }
                     
-                    // СОХРАНЯЕМ В ЖЕСТКИЙ КЭШ ДЛЯ СЛЕДУЮЩЕГО СТАРТА ПРИЛОЖЕНИЯ
                     activity.prefs.edit()
                             .putInt("my_followers_count", followers)
                             .putInt("my_following_count", following)
                             .apply();
 
-                    // 2. Обрабатываем данные профиля
                     long activeTicket = activity.prefs.getLong("active_upload_ticket", 0);
                     if (activeTicket != 0 && (System.currentTimeMillis() - activeTicket < 60000)) {
                         return; 
@@ -386,7 +381,6 @@ public class ProfileFragment extends Fragment {
             if (isAdded()) requestLoadMyStats(true); 
         });
 
-        // Запускаем агрегированный запрос
         if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
 
         return wrapper; 
@@ -407,7 +401,6 @@ public class ProfileFragment extends Fragment {
         String b64 = activity.prefs.getString("my_photo_base64", null);
         handleMediaLoading(activity, b64, true, myUid);
 
-        // Читаем тумблеры из настроек
         SharedPreferences appPrefs = activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
         boolean isGlobalEnabled = appPrefs.getBoolean("bg_global_enabled", true);
         boolean isMyProfileEnabled = appPrefs.getBoolean("bg_my_profile_enabled", true);
@@ -421,7 +414,6 @@ public class ProfileFragment extends Fragment {
         if (bgPath != null && new File(bgPath).exists()) targetPath = bgPath;
         else if (remoteBg != null && remoteBg.startsWith("http")) targetPath = remoteBg;
 
-        // Проверяем разрешен ли фон
         boolean allowBg = true;
         if (!isGlobalEnabled || !isMyProfileEnabled || targetPath == null) allowBg = false;
         else {
@@ -444,19 +436,34 @@ public class ProfileFragment extends Fragment {
             
             if (!allowBg) {
                 myBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
-            } else if (targetPath.equals(bgPath)) {
-                if (bgPath.toLowerCase().endsWith(".gif")) {
-                    Glide.with(this).load(new File(bgPath))
-                         .diskCacheStrategy(DiskCacheStrategy.NONE)
-                         .signature(new ObjectKey(new File(bgPath).lastModified()))
-                         .centerCrop().into(myBgImageView);
-                } else {
-                    myBgImageView.setImageURI(android.net.Uri.fromFile(new File(bgPath)));
-                }
-            } else if (remoteBg != null && remoteBg.startsWith("http")) {
-                Glide.with(this).load(remoteBg).dontAnimate().centerCrop().into(myBgImageView);
             } else {
-                myBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
+                // ИСПРАВЛЕНИЕ: Асинхронная загрузка фона, чтобы не фризить UI при тяжелых картинках
+                Utils.backgroundExecutor.execute(() -> {
+                    try {
+                        final File bgFile = new File(targetPath);
+                        if (bgFile.exists()) {
+                            uiHandler.post(() -> {
+                                if (!isAdded() || myBgImageView == null) return;
+                                if (bgFile.getName().toLowerCase().endsWith(".gif")) {
+                                    Glide.with(this).load(bgFile)
+                                         .diskCacheStrategy(DiskCacheStrategy.NONE)
+                                         .signature(new ObjectKey(bgFile.lastModified()))
+                                         .centerCrop().into(myBgImageView);
+                                } else {
+                                    Glide.with(this).load(bgFile)
+                                         .diskCacheStrategy(DiskCacheStrategy.NONE)
+                                         .signature(new ObjectKey(bgFile.lastModified()))
+                                         .centerCrop().into(myBgImageView);
+                                }
+                            });
+                        } else if (remoteBg != null && remoteBg.startsWith("http")) {
+                            uiHandler.post(() -> {
+                                if (!isAdded() || myBgImageView == null) return;
+                                Glide.with(this).load(remoteBg).dontAnimate().centerCrop().into(myBgImageView);
+                            });
+                        }
+                    } catch (Exception e) {}
+                });
             }
         }
     }
