@@ -208,7 +208,7 @@ public class NotificationsHistoryFragment extends Fragment {
                             } else {
                                 adapter.updateItems(items);
                             }
-
+                            
                             if (finalHasUnread) {
                                 markAllAsRead(activity, array, cacheKey);
                             }
@@ -230,6 +230,8 @@ public class NotificationsHistoryFragment extends Fragment {
         boolean hasCache = !cachedJson.equals("[]") && cachedJson.length() > 5;
         
         if (hasCache) {
+            // ИСПРАВЛЕНИЕ: Не скрываем спиннер здесь! Он скроется сам в parseAndDisplayAsync, 
+            // когда пройдет задержка анимации. Иначе будет черный экран на 400мс.
             if (!isSwipeRefresh) {
                 parseAndDisplayAsync(cachedJson, activity, 0, false); 
             }
@@ -359,7 +361,7 @@ public class NotificationsHistoryFragment extends Fragment {
                                 obj.optString("photo"),
                                 obj.optBoolean("isFollowing", false)
                         ));
-
+                        
                         User u = new User();
                         u.uid = obj.optString("uid");
                         u.nickname = obj.optString("nickname");
@@ -368,7 +370,7 @@ public class NotificationsHistoryFragment extends Fragment {
                         usersToCache.add(u);
                     }
                 }
-
+                
                 // Инъекция в кэш для предзагрузки профилей и фонов
                 OtherProfileFragment.preloadBackgrounds(usersToCache);
                 for (User u : usersToCache) {
@@ -378,7 +380,7 @@ public class NotificationsHistoryFragment extends Fragment {
                 
                 final boolean finalHasUnread = hasUnread;
 
-                // Ждем завершения анимации, если она еще не закончилась
+                // ИСПРАВЛЕНИЕ: Ждем завершения анимации, если она еще не закончилась
                 long baseDelay = delayStopSpinner;
                 if (isTransitioning) {
                     baseDelay = Math.max(baseDelay, 400); // Принудительно откладываем рендер
@@ -525,6 +527,7 @@ public class NotificationsHistoryFragment extends Fragment {
         if (!hidden) {
             setupHeader(); 
             
+            // ИСПРАВЛЕНИЕ: Защита от рывков при возврате на экран
             isTransitioning = true;
             uiHandler.postDelayed(() -> isTransitioning = false, 400);
             
