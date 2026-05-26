@@ -65,22 +65,20 @@ public class OtherProfileFragment extends Fragment {
     public static final android.util.LruCache<String, String> prefetchCountsCache = new android.util.LruCache<>(50);
     public static final android.util.LruCache<String, Boolean> prefetchFollowCache = new android.util.LruCache<>(50);
 
-    // === НОВЫЙ КЭШ ДЛЯ ФОНОВ (ЛИМИТ 20 МБ ОПЕРАТИВНОЙ ПАМЯТИ) ===
     public static final android.util.LruCache<String, byte[]> prefetchBgBytesCache = new android.util.LruCache<String, byte[]>(20 * 1024 * 1024) {
         @Override
         protected int sizeOf(String key, byte[] value) {
-            return value.length; // Считаем размер кэша в байтах
+            return value.length;
         }
     };
 
-    // === УМНЫЙ ПРЕДЗАГРУЗЧИК ФОНОВ (ЛИМИТ 1 МБ НА ФАЙЛ) ===
     public static void preloadBackgrounds(List<User> users) {
         if (users == null || users.isEmpty()) return;
         
         Utils.backgroundExecutor.execute(() -> {
             for (User u : users) {
                 if (u.background == null || !u.background.startsWith("http")) continue;
-                if (prefetchBgBytesCache.get(u.background) != null) continue; // Уже в кэше
+                if (prefetchBgBytesCache.get(u.background) != null) continue;
                 
                 try {
                     java.net.URL url = new java.net.URL(u.background);
@@ -89,7 +87,6 @@ public class OtherProfileFragment extends Fragment {
                     conn.setReadTimeout(2000);
                     conn.setRequestMethod("GET");
                     
-                    // Если сервер сразу сказал, что файл огромный — отменяем
                     int contentLength = conn.getContentLength();
                     if (contentLength > 1024 * 1024) {
                         conn.disconnect();
@@ -103,7 +100,6 @@ public class OtherProfileFragment extends Fragment {
                     int totalRead = 0;
                     boolean exceeded = false;
                     
-                    // Читаем по кусочкам и жестко обрываем, если перевалили за 1 МБ
                     while ((nRead = is.read(data, 0, data.length)) != -1) {
                         buffer.write(data, 0, nRead);
                         totalRead += nRead;
@@ -127,6 +123,9 @@ public class OtherProfileFragment extends Fragment {
     private int prefetchFollowers = 0;
     private int prefetchFollowing = 0;
     private boolean prefetchIsFollowing = false;
+    
+    // ПРЕДОХРАНИТЕЛЬ ОТ СВЕТОМУЗЫКИ
+    private String currentDisplayedBg = null;
 
     public static void prefetchProfile(String vpsToken, String uid) {
         if (vpsToken == null || uid == null || uid.isEmpty()) return;
@@ -312,7 +311,7 @@ public class OtherProfileFragment extends Fragment {
             if (cachedUser.photo != null && !cachedUser.photo.isEmpty()) argPhoto = cachedUser.photo;
             if (cachedUser.background != null) prefetchBg = cachedUser.background;
         }
-
+        
         if (!argName.isEmpty()) nameView.setText(argName);
         else nameView.setText(activity.getString(R.string.loading));
 
@@ -484,7 +483,6 @@ public class OtherProfileFragment extends Fragment {
                             applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
                             if (user.photo != null && user.photo.length() > 5) handleMediaLoading(act, user.photo);
                             
-                            // ИСПРАВЛЕНИЕ: гарантируем, что если у пользователя нет приложений, topApps не null
                             if (user.topApps == null) user.topApps = new HashMap<>();
                             
                             renderOtherUserStats(user.topApps, user.totalTime, user.hiddenApps, user.appDescriptions, user.resolvedNames, appsContainerLocal, act, weekTimeText, aboutView, btnExpand, btnCollapse);
@@ -509,6 +507,9 @@ public class OtherProfileFragment extends Fragment {
     private void updateBackgroundFromPrefs(MainActivity activity, String bgUrl) {
         if (bgImageView == null || !isAdded()) return;
         
+        if (bgUrl == null) bgUrl = "";
+        if (bgUrl.equals(currentDisplayedBg)) return; // ИЗБАВЛЯЕМСЯ ОТ МЕРЦАНИЯ!
+        
         SharedPreferences appPrefs = activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
         boolean isGlobalEnabled = appPrefs.getBoolean("bg_global_enabled", true);
         boolean isOthersEnabled = appPrefs.getBoolean("bg_others_profile_enabled", true);
@@ -516,7 +517,7 @@ public class OtherProfileFragment extends Fragment {
         boolean isOthersGifs = appPrefs.getBoolean("bg_others_gifs_enabled", true);
         
         boolean allowBg = true;
-        if (!isGlobalEnabled || !isOthersEnabled || bgUrl == null || bgUrl.length() < 5) allowBg = false;
+        if (!isGlobalEnabled || !isOthersEnabled || bgUrl.length() < 5) allowBg = false;
         else {
              boolean isGif = bgUrl.toLowerCase().endsWith(".gif");
              if (isGif && !isOthersGifs) allowBg = false;
@@ -524,16 +525,18 @@ public class OtherProfileFragment extends Fragment {
         }
 
         if (allowBg) {
-            // === ИСПРАВЛЕНИЕ: МГНОВЕННАЯ ОТРИСОВКА ИЗ КЭША ПРЕДЗАГРУЗЧИКА ===
+            currentDisplayedBg = bgUrl;
             byte[] cachedBytes = prefetchBgBytesCache.get(bgUrl);
             if (cachedBytes != null) {
-                // Если фон успел скачаться, рисуем его БЕЗ АНИМАЦИИ (чтобы выезжал монолитно вместе с экраном)
                 Glide.with(activity).load(cachedBytes).centerCrop().dontAnimate().into(bgImageView);
             } else {
                 Glide.with(activity).load(bgUrl).centerCrop().into(bgImageView);
             }
         } else {
-            bgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
+            if (!"disabled".equals(currentDisplayedBg)) {
+                currentDisplayedBg = "disabled";
+                bgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
+            }
         }
     }
 
@@ -612,7 +615,6 @@ public class OtherProfileFragment extends Fragment {
     }
 
     private void renderOtherUserStats(Map<String, Long> topApps, long serverTotalTime, List<String> hiddenAppsList, Map<String, String> appDescriptions, Map<String, String> resolvedNames, LinearLayout container, MainActivity activity, TextView weekTimeText, TextView aboutView, ImageView btnExpand, ImageView btnCollapse) {
-        // === ИСПРАВЛЕНИЕ: Ждем завершения фонового запроса, крутим спиннер ===
         if (topApps == null) {
             return; 
         }
