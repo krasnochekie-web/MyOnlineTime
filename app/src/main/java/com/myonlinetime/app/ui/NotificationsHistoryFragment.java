@@ -40,25 +40,38 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class NotificationsHistoryFragment extends Fragment {
 
     private static final String PREFS_NAME = "AppPrefs";
 
+    // Лимит размера фона профиля для предзагрузки (1 МБ).
+    // Если фон тяжелее — пропускаем предзагрузку (он догрузится уже внутри OtherProfileFragment).
+    public static final long MAX_PRELOAD_BG_BYTES = 1024L * 1024L;
+
+    // Глобальный список UID-ов, по которым предзагрузка уже была инициирована в этом процессе.
+    // Нужен, чтобы не плодить дубликаты сетевых запросов: если пользователь уже встречался
+    // в ленте уведомлений в этой сессии — повторно за его профилем и фоном не ходим.
+    private static final Set<String> prefetchedUids =
+            Collections.newSetFromMap(new ConcurrentHashMap<>());
+
     private Runnable hideBgRunnable;
     private RecyclerView recycler;
-    private SwipeRefreshLayout swipeRefresh; 
+    private SwipeRefreshLayout swipeRefresh;
     private TextView emptyText;
     private ProgressBar loadingSpinner;
     private NotificationsAdapter adapter;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private boolean isReceiverRegistered = false;
-    
+
     // Флаг для предотвращения рывков во время анимации
     private boolean isTransitioning = false;
 
-    // Срабатывает, когда кэш поменялся 
+    // Срабатывает, когда кэш поменялся
     private final SharedPreferences.OnSharedPreferenceChangeListener prefsListener = (sharedPrefs, key) -> {
         if (key != null && key.equals(getCacheKey())) {
             uiHandler.post(() -> {
@@ -79,7 +92,7 @@ public class NotificationsHistoryFragment extends Fragment {
                 uiHandler.post(() -> {
                     if (isAdded() && !isHidden()) {
                         // Тихо запрашиваем сервер для свежих статусов подписки (isFollowing)
-                        loadHistory(false, 0); 
+                        loadHistory(false, 0);
                         MainActivity activity = (MainActivity) getActivity();
                         if (activity != null) activity.updateNotificationBadge();
                     }
@@ -116,7 +129,7 @@ public class NotificationsHistoryFragment extends Fragment {
         recycler = view.findViewById(R.id.recycler_notifications);
         emptyText = view.findViewById(R.id.empty_notif_text);
         loadingSpinner = view.findViewById(R.id.loading_spinner);
-        
+
         recycler.setLayoutManager(new LinearLayoutManager(getContext()));
         recycler.setHasFixedSize(true);
         recycler.setItemViewCacheSize(20);
@@ -125,18 +138,18 @@ public class NotificationsHistoryFragment extends Fragment {
 
         swipeRefresh = new SwipeRefreshLayout(requireContext());
         ViewGroup.LayoutParams recyclerOriginalParams = recycler.getLayoutParams();
-        swipeRefresh.setLayoutParams(recyclerOriginalParams); 
-        swipeRefresh.setColorSchemeColors(ContextCompat.getColor(requireContext(), R.color.grapefruit)); 
-        
+        swipeRefresh.setLayoutParams(recyclerOriginalParams);
+        swipeRefresh.setColorSchemeColors(ContextCompat.getColor(requireContext(), R.color.grapefruit));
+
         // === Сдвигаем тянучку из-под шапки вниз ===
-        int startOffset = (int) (70 * getResources().getDisplayMetrics().density); 
-        int endOffset = (int) (110 * getResources().getDisplayMetrics().density); 
+        int startOffset = (int) (70 * getResources().getDisplayMetrics().density);
+        int endOffset = (int) (110 * getResources().getDisplayMetrics().density);
         swipeRefresh.setProgressViewOffset(false, startOffset, endOffset);
 
         ViewGroup parent = (ViewGroup) recycler.getParent();
         int index = parent.indexOfChild(recycler);
         parent.removeView(recycler);
-        
+
         recycler.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         swipeRefresh.addView(recycler);
         parent.addView(swipeRefresh, index);
@@ -148,11 +161,80 @@ public class NotificationsHistoryFragment extends Fragment {
         // ИСПРАВЛЕНИЕ: Защита от рывков при первом открытии
         isTransitioning = true;
         uiHandler.postDelayed(() -> isTransitioning = false, 400); // 400 мс - время анимации
-        
+
         if (loadingSpinner != null) loadingSpinner.setVisibility(View.VISIBLE);
+
+        // === РАННИЙ ПРЕФЕТЧ ИЗ КЭША ===
+        // Запускаем предзагрузку профилей и фонов СРАЗУ из кэша,
+        // не дожидаясь ни ответа сервера, ни рендера ленты. Это даёт максимум
+        // времени, чтобы к моменту тапа по карточке профиль уже лежал в памяти.
+        prefetchFromCacheJsonAsync();
+
         loadHistory(false, 0);
 
         return view;
+    }
+
+    /**
+     * Достаёт follower-объекты из кэшированного JSON-а в фоне и запускает префетч.
+     * Делается до первого рендера, чтобы выиграть время.
+     */
+    private void prefetchFromCacheJsonAsync() {
+        if (getContext() == null) return;
+        final String cacheKey = getCacheKey();
+        SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        final String cachedJson = prefs.getString(cacheKey, "[]");
+        if (cachedJson == null || cachedJson.length() <= 5 || cachedJson.equals("[]")) return;
+
+        Utils.backgroundExecutor.execute(() -> {
+            try {
+                JSONArray array = new JSONArray(cachedJson);
+                List<User> usersToCache = new ArrayList<>();
+                for (int i = 0; i < array.length(); i++) {
+                    JSONObject obj = array.getJSONObject(i);
+                    if (!"follower".equals(obj.optString("type", "time"))) continue;
+                    User u = new User();
+                    u.uid = obj.optString("uid");
+                    u.nickname = obj.optString("nickname");
+                    u.photo = obj.optString("photo");
+                    u.isFollowing = obj.optBoolean("isFollowing", false);
+                    if (u.uid != null && !u.uid.isEmpty()) usersToCache.add(u);
+                }
+                prefetchProfiles(usersToCache);
+            } catch (Exception ignored) {}
+        });
+    }
+
+    /**
+     * Готовит профили чужих юзеров заранее, без дублирующих сетевых запросов.
+     * - In-memory часть (описание/ник/фото/isFollowing) кладётся для всех — это бесплатно.
+     * - Фоны грузим только для тех UID, по которым ещё не ходили в этой сессии,
+     *   и только при размере <= MAX_PRELOAD_BG_BYTES (1 МБ).
+     */
+    private void prefetchProfiles(List<User> users) {
+        if (users == null || users.isEmpty()) return;
+
+        // 1) Мгновенный in-memory кэш — описание/ник/фото/статус подписки.
+        for (User u : users) {
+            if (u == null || u.uid == null || u.uid.isEmpty()) continue;
+            OtherProfileFragment.prefetchUserCache.put(u.uid, u);
+            OtherProfileFragment.prefetchFollowCache.put(u.uid, u.isFollowing);
+        }
+
+        // 2) Фон и тяжёлые данные — только по новым UID-ам.
+        List<User> fresh = new ArrayList<>();
+        Set<String> seenInThisCall = new HashSet<>();
+        for (User u : users) {
+            if (u == null || u.uid == null || u.uid.isEmpty()) continue;
+            if (!seenInThisCall.add(u.uid)) continue;        // дубли внутри одного списка
+            if (!prefetchedUids.add(u.uid)) continue;        // уже префетчили в этой сессии
+            fresh.add(u);
+        }
+        if (fresh.isEmpty()) return;
+
+        // Один запрос на пользователя максимум за сессию.
+        // Лимит размера фона передаём явно — тяжёлые обложки на холодную не качаем.
+        OtherProfileFragment.preloadBackgrounds(fresh, MAX_PRELOAD_BG_BYTES);
     }
 
     private void loadFromCacheOnly() {
@@ -160,16 +242,17 @@ public class NotificationsHistoryFragment extends Fragment {
 
         MainActivity activity = (MainActivity) getActivity();
         if (activity == null || !isAdded()) return;
-        
+
         String cacheKey = getCacheKey();
         SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String cachedJson = prefs.getString(cacheKey, "[]");
-        
+
         if (!cachedJson.equals("[]") && cachedJson.length() > 5) {
             Utils.backgroundExecutor.execute(() -> {
                 try {
                     JSONArray array = new JSONArray(cachedJson);
                     List<NotificationModels.NotificationItem> items = new ArrayList<>();
+                    List<User> usersToCache = new ArrayList<>();
                     boolean hasUnread = false;
 
                     for (int i = 0; i < array.length(); i++) {
@@ -186,8 +269,18 @@ public class NotificationsHistoryFragment extends Fragment {
                                     obj.optLong("timestamp"), obj.optString("uid"), obj.optString("nickname"),
                                     obj.optString("photo"), obj.optBoolean("isFollowing", false)
                             ));
+
+                            User u = new User();
+                            u.uid = obj.optString("uid");
+                            u.nickname = obj.optString("nickname");
+                            u.photo = obj.optString("photo");
+                            u.isFollowing = obj.optBoolean("isFollowing", false);
+                            usersToCache.add(u);
                         }
                     }
+
+                    // Префетч по свежему кэшу — чтобы карточки от пушей тоже открывались мгновенно.
+                    prefetchProfiles(usersToCache);
 
                     final boolean finalHasUnread = hasUnread;
 
@@ -201,14 +294,14 @@ public class NotificationsHistoryFragment extends Fragment {
                             recycler.setVisibility(View.VISIBLE);
                             emptyText.setVisibility(View.GONE);
                             if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-                            
+
                             if (adapter == null) {
                                 adapter = new NotificationsAdapter(items, activity);
                                 recycler.setAdapter(adapter);
                             } else {
                                 adapter.updateItems(items);
                             }
-                            
+
                             if (finalHasUnread) {
                                 markAllAsRead(activity, array, cacheKey);
                             }
@@ -226,14 +319,14 @@ public class NotificationsHistoryFragment extends Fragment {
         String cacheKey = getCacheKey();
         SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String cachedJson = prefs.getString(cacheKey, "[]");
-        
+
         boolean hasCache = !cachedJson.equals("[]") && cachedJson.length() > 5;
-        
+
         if (hasCache) {
-            // ИСПРАВЛЕНИЕ: Не скрываем спиннер здесь! Он скроется сам в parseAndDisplayAsync, 
+            // ИСПРАВЛЕНИЕ: Не скрываем спиннер здесь! Он скроется сам в parseAndDisplayAsync,
             // когда пройдет задержка анимации. Иначе будет черный экран на 400мс.
             if (!isSwipeRefresh) {
-                parseAndDisplayAsync(cachedJson, activity, 0, false); 
+                parseAndDisplayAsync(cachedJson, activity, 0, false);
             }
         } else {
             recycler.setVisibility(View.GONE);
@@ -245,10 +338,10 @@ public class NotificationsHistoryFragment extends Fragment {
 
         if (activity.vpsToken == null) {
             if (!hasCache) showEmptyState();
-            uiHandler.postDelayed(() -> { 
-                if (swipeRefresh != null) swipeRefresh.setRefreshing(false); 
-            }, 2000); 
-            return; 
+            uiHandler.postDelayed(() -> {
+                if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
+            }, 2000);
+            return;
         }
 
         VpsApi.getNotificationsHistory(activity.vpsToken, new VpsApi.Callback() {
@@ -259,9 +352,9 @@ public class NotificationsHistoryFragment extends Fragment {
                         JSONArray serverArray = new JSONArray(result);
                         JSONArray localArray = new JSONArray(prefs.getString(cacheKey, "[]"));
                         JSONArray mergedArray = new JSONArray();
-                        
+
                         for (int i = 0; i < serverArray.length(); i++) mergedArray.put(serverArray.getJSONObject(i));
-                        
+
                         for (int i = 0; i < localArray.length(); i++) {
                             JSONObject localObj = localArray.getJSONObject(i);
                             if ("time".equals(localObj.optString("type"))) {
@@ -271,42 +364,42 @@ public class NotificationsHistoryFragment extends Fragment {
                                         found = true; break;
                                     }
                                 }
-                                if (!found) mergedArray.put(localObj); 
+                                if (!found) mergedArray.put(localObj);
                             }
                         }
-                        
+
                         List<JSONObject> list = new ArrayList<>();
                         for (int i = 0; i < mergedArray.length(); i++) list.add(mergedArray.getJSONObject(i));
                         Collections.sort(list, (a, b) -> Long.compare(b.optLong("timestamp"), a.optLong("timestamp")));
-                        
+
                         JSONArray finalArray = new JSONArray();
                         for (JSONObject obj : list) finalArray.put(obj);
-                        
+
                         String finalJson = finalArray.toString();
-                        
+
                         prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
                         prefs.edit().putString(cacheKey, finalJson).commit();
                         prefs.registerOnSharedPreferenceChangeListener(prefsListener);
-                        
+
                         long delayBeforeStop = 0;
                         if (isSwipeRefresh) {
                             long elapsed = System.currentTimeMillis() - swipeStartTime;
                             delayBeforeStop = Math.max(0, 2000 - elapsed);
                         }
-                        
+
                         parseAndDisplayAsync(finalJson, activity, delayBeforeStop, isSwipeRefresh);
 
                     } catch (Exception e) {
                         prefs.unregisterOnSharedPreferenceChangeListener(prefsListener);
                         prefs.edit().putString(cacheKey, result).commit();
                         prefs.registerOnSharedPreferenceChangeListener(prefsListener);
-                        
+
                         long delayBeforeStop = 0;
                         if (isSwipeRefresh) {
                             long elapsed = System.currentTimeMillis() - swipeStartTime;
                             delayBeforeStop = Math.max(0, 2000 - elapsed);
                         }
-                        
+
                         parseAndDisplayAsync(result, activity, delayBeforeStop, isSwipeRefresh);
                     }
                 });
@@ -319,7 +412,7 @@ public class NotificationsHistoryFragment extends Fragment {
                     long elapsed = System.currentTimeMillis() - swipeStartTime;
                     delayBeforeStop = Math.max(0, 2000 - elapsed);
                 }
-                
+
                 uiHandler.postDelayed(() -> {
                     if (!isAdded()) return;
                     if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
@@ -344,7 +437,7 @@ public class NotificationsHistoryFragment extends Fragment {
                 for (int i = 0; i < array.length(); i++) {
                     JSONObject obj = array.getJSONObject(i);
                     String type = obj.optString("type", "time");
-                    
+
                     if (!obj.optBoolean("isRead", false)) hasUnread = true;
 
                     if ("time".equals(type)) {
@@ -361,7 +454,7 @@ public class NotificationsHistoryFragment extends Fragment {
                                 obj.optString("photo"),
                                 obj.optBoolean("isFollowing", false)
                         ));
-                        
+
                         User u = new User();
                         u.uid = obj.optString("uid");
                         u.nickname = obj.optString("nickname");
@@ -370,14 +463,10 @@ public class NotificationsHistoryFragment extends Fragment {
                         usersToCache.add(u);
                     }
                 }
-                
-                // Инъекция в кэш для предзагрузки профилей и фонов
-                OtherProfileFragment.preloadBackgrounds(usersToCache);
-                for (User u : usersToCache) {
-                    OtherProfileFragment.prefetchUserCache.put(u.uid, u);
-                    OtherProfileFragment.prefetchFollowCache.put(u.uid, u.isFollowing);
-                }
-                
+
+                // Инъекция в кэш + предзагрузка фонов <= 1 МБ, без дублирующих запросов.
+                prefetchProfiles(usersToCache);
+
                 final boolean finalHasUnread = hasUnread;
 
                 // ИСПРАВЛЕНИЕ: Ждем завершения анимации, если она еще не закончилась
@@ -406,14 +495,14 @@ public class NotificationsHistoryFragment extends Fragment {
                     } else {
                         recycler.setVisibility(View.VISIBLE);
                         emptyText.setVisibility(View.GONE);
-                        
+
                         if (adapter == null) {
                             adapter = new NotificationsAdapter(items, activity);
                             recycler.setAdapter(adapter);
                         } else {
                             adapter.updateItems(items);
                         }
-                        
+
                         if (finalHasUnread) {
                             markAllAsRead(activity, array, getCacheKey());
                         }
@@ -421,7 +510,7 @@ public class NotificationsHistoryFragment extends Fragment {
                 }, finalDelay);
 
             } catch (Exception e) {
-                uiHandler.postDelayed(() -> { 
+                uiHandler.postDelayed(() -> {
                     if (isAdded()) {
                         if (swipeRefresh != null) swipeRefresh.setRefreshing(false);
                         showEmptyState();
@@ -466,28 +555,28 @@ public class NotificationsHistoryFragment extends Fragment {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerTitle.setText(getString(R.string.title_notifications));
             activity.headerBackBtn.setVisibility(View.VISIBLE);
-            activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow); 
+            activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow);
 
             ImageView bellBtn = activity.findViewById(R.id.header_bell_btn);
             if (bellBtn != null) bellBtn.setVisibility(View.GONE);
 
             View bellContainer = activity.findViewById(R.id.header_bell_container);
             if (bellContainer != null) bellContainer.setVisibility(View.GONE);
-            
+
             activity.updateNotificationBadge();
         }
     }
 
     private void registerReceivers() {
         if (isReceiverRegistered || getContext() == null) return;
-        
+
         try {
             requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .registerOnSharedPreferenceChangeListener(prefsListener);
+                    .registerOnSharedPreferenceChangeListener(prefsListener);
 
             LocalBroadcastManager.getInstance(requireContext())
-                .registerReceiver(pushReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"));
-            
+                    .registerReceiver(pushReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"));
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 requireContext().registerReceiver(pushReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"), Context.RECEIVER_EXPORTED);
             } else {
@@ -499,15 +588,15 @@ public class NotificationsHistoryFragment extends Fragment {
 
     private void unregisterReceivers() {
         if (!isReceiverRegistered || getContext() == null) return;
-        
+
         try {
             requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .unregisterOnSharedPreferenceChangeListener(prefsListener);
+                    .unregisterOnSharedPreferenceChangeListener(prefsListener);
         } catch (Exception e) {}
-            
+
         try { LocalBroadcastManager.getInstance(requireContext()).unregisterReceiver(pushReceiver); } catch (Exception e) {}
         try { requireContext().unregisterReceiver(pushReceiver); } catch (Exception e) {}
-        
+
         isReceiverRegistered = false;
     }
 
@@ -515,7 +604,7 @@ public class NotificationsHistoryFragment extends Fragment {
     public void onDestroyView() {
         super.onDestroyView();
         MainActivity activity = (MainActivity) getActivity();
-        if (activity != null) activity.headerManager.resetHeader(); 
+        if (activity != null) activity.headerManager.resetHeader();
     }
 
     @Override
@@ -525,17 +614,22 @@ public class NotificationsHistoryFragment extends Fragment {
         if (activity == null) return;
 
         if (!hidden) {
-            setupHeader(); 
-            
+            setupHeader();
+
             // ИСПРАВЛЕНИЕ: Защита от рывков при возврате на экран
             isTransitioning = true;
             uiHandler.postDelayed(() -> isTransitioning = false, 400);
-            
+
             if (loadingSpinner != null && recycler.getVisibility() != View.VISIBLE) {
                 loadingSpinner.setVisibility(View.VISIBLE);
             }
-            loadHistory(false, 0); 
-            
+
+            // Ранний префетч из кэша при возврате на экран — пока ждём ответ сервера,
+            // профили уже едут в фоне.
+            prefetchFromCacheJsonAsync();
+
+            loadHistory(false, 0);
+
             if (hideBgRunnable == null) {
                 hideBgRunnable = () -> {
                     if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
@@ -560,7 +654,7 @@ public class NotificationsHistoryFragment extends Fragment {
             }
             if (getView() != null) getView().postDelayed(hideBgRunnable, 300);
             else activity.updateGlobalBackground(false);
-            
+
             activity.updateNotificationBadge();
         }
     }
