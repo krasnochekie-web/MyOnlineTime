@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
@@ -176,6 +178,14 @@ public class OtherProfileFragment extends Fragment {
                             prefetchCountsCache.put(uid, countsObj.toString());
                         } catch (Exception ignored) {}
                         prefetchFollowCache.put(uid, isFollowing);
+
+                        // Догружаем байты фона в кэш — чтобы при тапе фон ставился синхронно.
+                        if (user.background != null && user.background.startsWith("http")
+                                && prefetchBgBytesCache.get(user.background) == null) {
+                            List<User> one = new ArrayList<>();
+                            one.add(user);
+                            preloadBackgrounds(one, DEFAULT_PRELOAD_BG_BYTES);
+                        }
                     }
                 }
                 @Override public void onError(String error) {}
@@ -214,6 +224,21 @@ public class OtherProfileFragment extends Fragment {
 
     public OtherProfileFragment() {}
 
+    /**
+     * Вынесенная проверка из updateBackgroundFromPrefs — нужна, чтобы решить
+     * можно ли вообще ставить фон ДО добавления bgImageView в иерархию.
+     */
+    private boolean bgAllowedByPrefs(Context ctx, String bgUrl) {
+        if (bgUrl == null || bgUrl.length() < 5) return false;
+        SharedPreferences p = ctx.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
+        if (!p.getBoolean("bg_global_enabled", true)) return false;
+        if (!p.getBoolean("bg_others_profile_enabled", true)) return false;
+        boolean isGif = bgUrl.toLowerCase().endsWith(".gif");
+        if (isGif && !p.getBoolean("bg_others_gifs_enabled", true)) return false;
+        if (!isGif && !p.getBoolean("bg_others_images_enabled", true)) return false;
+        return true;
+    }
+
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         fragmentCreationTime = System.currentTimeMillis();
@@ -226,16 +251,60 @@ public class OtherProfileFragment extends Fragment {
         wrapper.setLayoutParams(originalView.getLayoutParams() != null ? originalView.getLayoutParams() : new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         originalView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
+        // === ЧИТАЕМ всё для первого кадра ДО создания/добавления bgImageView ===
+        targetUid = getArguments() != null ? getArguments().getString("TARGET_UID", "") : "";
+        backTitle = getArguments() != null ? getArguments().getString("BACK_TITLE", activity.getString(R.string.title_search)) : activity.getString(R.string.title_search);
+
+        String argName  = getArguments() != null ? getArguments().getString("PREFETCH_NICKNAME", "") : "";
+        String argAbout = getArguments() != null ? getArguments().getString("PREFETCH_ABOUT", "") : "";
+        String argPhoto = getArguments() != null ? getArguments().getString("PREFETCH_PHOTO", "") : "";
+        prefetchBg          = getArguments() != null ? getArguments().getString("PREFETCH_BG", "") : "";
+        prefetchFollowers   = getArguments() != null ? getArguments().getInt("PREFETCH_FOLLOWERS", 0) : 0;
+        prefetchFollowing   = getArguments() != null ? getArguments().getInt("PREFETCH_FOLLOWING", 0) : 0;
+        prefetchIsFollowing = getArguments() != null ? getArguments().getBoolean("PREFETCH_IS_FOLLOWING", false) : false;
+
+        User cachedUser = prefetchUserCache.get(targetUid);
+        // Считаем юзера "полным" только если у него реально есть about и background-поля.
+        // Огрызки из NotificationsHistoryFragment имеют about == null и background == null.
+        final boolean cachedUserIsFull = cachedUser != null
+                && cachedUser.about != null
+                && cachedUser.background != null;
+
+        if (cachedUser != null) {
+            if (cachedUser.nickname   != null && !cachedUser.nickname.isEmpty()) argName  = cachedUser.nickname;
+            if (cachedUser.about      != null)                                   argAbout = cachedUser.about;
+            if (cachedUser.photo      != null && !cachedUser.photo.isEmpty())    argPhoto = cachedUser.photo;
+            if (cachedUser.background != null)                                   prefetchBg = cachedUser.background;
+        }
+        Boolean cachedFollow = prefetchFollowCache.get(targetUid);
+        if (cachedFollow != null) prefetchIsFollowing = cachedFollow;
+
+        // === Создаём bgImageView и СРАЗУ ставим финальную картинку, если она уже в байт-кэше ===
         bgImageView = new ImageView(activity);
         bgImageView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         bgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        bgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
+
+        boolean bgSetSync = false;
+        if (prefetchBg != null && !prefetchBg.isEmpty() && bgAllowedByPrefs(activity, prefetchBg)) {
+            byte[] cachedBytes = prefetchBgBytesCache.get(prefetchBg);
+            if (cachedBytes != null) {
+                try {
+                    Bitmap bmp = BitmapFactory.decodeByteArray(cachedBytes, 0, cachedBytes.length);
+                    if (bmp != null) {
+                        bgImageView.setImageBitmap(bmp);
+                        currentDisplayedBg = prefetchBg;
+                        bgSetSync = true;
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+        if (!bgSetSync) {
+            // Заглушка только если реально нечего поставить синхронно.
+            bgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
+        }
 
         wrapper.addView(bgImageView);
         wrapper.addView(originalView);
-
-        targetUid = getArguments() != null ? getArguments().getString("TARGET_UID", "") : "";
-        backTitle = getArguments() != null ? getArguments().getString("BACK_TITLE", activity.getString(R.string.title_search)) : activity.getString(R.string.title_search);
 
         activity.mainHeader.setVisibility(View.VISIBLE);
         activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
@@ -329,25 +398,12 @@ public class OtherProfileFragment extends Fragment {
             btnCollapse.setVisibility(View.GONE);
         }
 
-        String argName = getArguments() != null ? getArguments().getString("PREFETCH_NICKNAME", "") : "";
-        String argAbout = getArguments() != null ? getArguments().getString("PREFETCH_ABOUT", "") : "";
-        String argPhoto = getArguments() != null ? getArguments().getString("PREFETCH_PHOTO", "") : "";
-        prefetchBg = getArguments() != null ? getArguments().getString("PREFETCH_BG", "") : "";
-        prefetchFollowers = getArguments() != null ? getArguments().getInt("PREFETCH_FOLLOWERS", 0) : 0;
-        prefetchFollowing = getArguments() != null ? getArguments().getInt("PREFETCH_FOLLOWING", 0) : 0;
-        prefetchIsFollowing = getArguments() != null ? getArguments().getBoolean("PREFETCH_IS_FOLLOWING", false) : false;
-
-        User cachedUser = prefetchUserCache.get(targetUid);
-        if (cachedUser != null) {
-            if (cachedUser.nickname != null && !cachedUser.nickname.isEmpty()) argName = cachedUser.nickname;
-            if (cachedUser.about != null) argAbout = cachedUser.about;
-            if (cachedUser.photo != null && !cachedUser.photo.isEmpty()) argPhoto = cachedUser.photo;
-            if (cachedUser.background != null) prefetchBg = cachedUser.background;
-        }
-
         if (!argName.isEmpty()) nameView.setText(argName);
         else nameView.setText(activity.getString(R.string.loading));
 
+        // === Описание: настраиваем ОДИН раз. Если кэш полный — это финальное состояние.
+        // Если кэш неполный (огрызок из уведомлений) — держим GONE,
+        // dataLoader проставит финальное значение без промежуточных мерцаний.
         if (!argAbout.trim().isEmpty()) {
             aboutView.setText(argAbout);
             aboutView.setVisibility(View.VISIBLE);
@@ -358,7 +414,11 @@ public class OtherProfileFragment extends Fragment {
 
         if (!argPhoto.isEmpty()) handleMediaLoading(activity, argPhoto);
 
-        if (!prefetchBg.isEmpty()) updateBackgroundFromPrefs(activity, prefetchBg);
+        // Фон уже мог быть выставлен синхронно выше. Если нет — пробуем штатным путём
+        // (это всё равно ничего не зальёт, если байт-кэш пуст, и Glide догрузит сетево).
+        if (!bgSetSync && prefetchBg != null && !prefetchBg.isEmpty()) {
+            updateBackgroundFromPrefs(activity, prefetchBg);
+        }
 
         btnFollow.setTag(prefetchIsFollowing);
         updateFollowButton(btnFollow, prefetchIsFollowing);
@@ -492,8 +552,13 @@ public class OtherProfileFragment extends Fragment {
                         } catch (Exception ignored) {}
 
                         prefetchFollowCache.put(targetUid, isFollowing);
-                        btnFollow.setTag(isFollowing);
-                        updateFollowButton(btnFollow, isFollowing);
+                        // Не трогаем кнопку, если значение совпадает — лишний invalidate = риск мерцания.
+                        Object curTag = btnFollow.getTag();
+                        boolean tagChanged = !(curTag instanceof Boolean) || ((Boolean) curTag) != isFollowing;
+                        if (tagChanged) {
+                            btnFollow.setTag(isFollowing);
+                            updateFollowButton(btnFollow, isFollowing);
+                        }
 
                         if (user != null) {
                             prefetchUserCache.put(targetUid, user);
@@ -503,14 +568,15 @@ public class OtherProfileFragment extends Fragment {
                             }
 
                             if (user.about != null) {
-                                if (!aboutView.getText().toString().equals(user.about)) {
-                                    aboutView.setText(user.about);
-                                }
-                                if (user.about.trim().isEmpty()) {
-                                    aboutView.setVisibility(View.GONE);
-                                } else {
-                                    aboutView.setVisibility(View.VISIBLE);
-                                }
+                                String newAbout = user.about;
+                                String curAbout = aboutView.getText().toString();
+                                boolean textChanged = !curAbout.equals(newAbout);
+                                boolean wantVisible = !newAbout.trim().isEmpty();
+                                boolean isVisible = aboutView.getVisibility() == View.VISIBLE;
+
+                                if (textChanged) aboutView.setText(newAbout);
+                                if (wantVisible && !isVisible) aboutView.setVisibility(View.VISIBLE);
+                                else if (!wantVisible && isVisible) aboutView.setVisibility(View.GONE);
                             }
 
                             applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
@@ -532,7 +598,9 @@ public class OtherProfileFragment extends Fragment {
             }
         };
 
-        uiHandler.postDelayed(dataLoader, 200);
+        // Никаких 200мс задержек: если кэш полный — сервер просто синхронизируется без перерисовки;
+        // если кэш неполный — данные применятся максимально быстро.
+        uiHandler.post(dataLoader);
 
         return wrapper;
     }
@@ -543,19 +611,7 @@ public class OtherProfileFragment extends Fragment {
         if (bgUrl == null) bgUrl = "";
         if (bgUrl.equals(currentDisplayedBg)) return; // ИЗБАВЛЯЕМСЯ ОТ МЕРЦАНИЯ!
 
-        SharedPreferences appPrefs = activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
-        boolean isGlobalEnabled = appPrefs.getBoolean("bg_global_enabled", true);
-        boolean isOthersEnabled = appPrefs.getBoolean("bg_others_profile_enabled", true);
-        boolean isOthersImages = appPrefs.getBoolean("bg_others_images_enabled", true);
-        boolean isOthersGifs = appPrefs.getBoolean("bg_others_gifs_enabled", true);
-
-        boolean allowBg = true;
-        if (!isGlobalEnabled || !isOthersEnabled || bgUrl.length() < 5) allowBg = false;
-        else {
-            boolean isGif = bgUrl.toLowerCase().endsWith(".gif");
-            if (isGif && !isOthersGifs) allowBg = false;
-            if (!isGif && !isOthersImages) allowBg = false;
-        }
+        boolean allowBg = bgAllowedByPrefs(activity, bgUrl);
 
         if (allowBg) {
             currentDisplayedBg = bgUrl;
@@ -563,7 +619,8 @@ public class OtherProfileFragment extends Fragment {
             if (cachedBytes != null) {
                 Glide.with(activity).load(cachedBytes).centerCrop().dontAnimate().into(bgImageView);
             } else {
-                Glide.with(activity).load(bgUrl).centerCrop().into(bgImageView);
+                // Первый показ — без fade-анимации, чтобы не мерцал.
+                Glide.with(activity).load(bgUrl).centerCrop().dontAnimate().into(bgImageView);
             }
         } else {
             if (!"disabled".equals(currentDisplayedBg)) {
