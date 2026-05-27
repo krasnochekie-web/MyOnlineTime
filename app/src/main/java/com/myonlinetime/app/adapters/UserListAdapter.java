@@ -12,7 +12,7 @@ import com.bumptech.glide.Glide;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.models.User;
-import com.myonlinetime.app.ui.OtherProfileFragment; // Импортируем фрагмент для предзагрузки
+import com.myonlinetime.app.ui.OtherProfileFragment;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,27 +46,19 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
     @Override
     public void onBindViewHolder(@NonNull UserViewHolder holder, int position) {
         final User u = users.get(position);
-        
+
         holder.name.setText(u.nickname != null ? u.nickname : activity.getString(R.string.new_user));
 
-        // Очищаем старую картинку, чтобы при быстром скролле не было "морганий" чужих аватарок
         Glide.with(activity).clear(holder.avatar);
 
         if (u.photo != null && u.photo.startsWith("http")) {
             Glide.with(activity)
-                 .load(u.photo)
-                 .circleCrop()
-                 .placeholder(android.R.drawable.sym_def_app_icon) 
-                 .into(holder.avatar);
+                    .load(u.photo)
+                    .circleCrop()
+                    .placeholder(android.R.drawable.sym_def_app_icon)
+                    .into(holder.avatar);
         } else {
             holder.avatar.setImageResource(android.R.drawable.sym_def_app_icon);
-        }
-
-        // === ИНТЕГРАЦИЯ TELEGRAM-ЭФФЕКТА ===
-        // Вызывается ТОЛЬКО для видимых на экране карточек. Старые данные автоматически 
-        // вытесняются из LruCache, спасая память устройства.
-        if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
-            OtherProfileFragment.prefetchProfile(activity.vpsToken, u.uid);
         }
 
         holder.itemView.setOnClickListener(v -> {
@@ -74,6 +66,26 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
                 listener.onUserClick(u);
             }
         });
+    }
+
+    /**
+     * Ленивый префетч фона: только для прикреплённых к экрану строк
+     * (видимые + RV-prefetch ~3 шт). Тяжёлая bulk-загрузка
+     * preloadBackgrounds(users) из фрагментов теперь не нужна.
+     */
+    @Override
+    public void onViewAttachedToWindow(@NonNull UserViewHolder holder) {
+        super.onViewAttachedToWindow(holder);
+        int pos = holder.getBindingAdapterPosition();
+        if (pos < 0 || pos >= users.size()) return;
+        User u = users.get(pos);
+        if (u == null || u.background == null || !u.background.startsWith("http")) return;
+
+        if (OtherProfileFragment.prefetchBgBytesCache.get(u.background) != null) return;
+
+        List<User> one = new ArrayList<>(1);
+        one.add(u);
+        OtherProfileFragment.preloadBackgrounds(one);
     }
 
     @Override
