@@ -286,7 +286,6 @@ public class OtherProfileFragment extends Fragment {
         ensureTargetSize(activity);
 
         // КРИТИЧНО: гасим глобальный фон MainActivity — он сейчас под нами и просвечивает.
-        // Делаем это синхронно, чтобы первый кадр уже не показывал чужой/свой глобальный фон.
         activity.updateGlobalBackground(false);
 
         targetUid = getArguments() != null ? getArguments().getString("TARGET_UID", "") : "";
@@ -315,16 +314,20 @@ public class OtherProfileFragment extends Fragment {
         // Приоритет кэша для follow-состояния и счётчиков.
         Boolean cachedFollow = prefetchFollowCache.get(targetUid);
         boolean effectiveIsFollowing = cachedFollow != null ? cachedFollow : prefetchIsFollowing;
-        int effectiveFollowers = prefetchFollowers;
-        int effectiveFollowing = prefetchFollowing;
+        int effectiveFollowersTmp = prefetchFollowers;
+        int effectiveFollowingTmp = prefetchFollowing;
         try {
             String countsJson = prefetchCountsCache.get(targetUid);
             if (countsJson != null) {
                 org.json.JSONObject cobj = new org.json.JSONObject(countsJson);
-                effectiveFollowers = cobj.optInt("followers", effectiveFollowers);
-                effectiveFollowing = cobj.optInt("following", effectiveFollowing);
+                effectiveFollowersTmp = cobj.optInt("followers", effectiveFollowersTmp);
+                effectiveFollowingTmp = cobj.optInt("following", effectiveFollowingTmp);
             }
         } catch (Exception ignored) {}
+
+        // Final-снапшоты для всех лямбд ниже (Java требует effectively final).
+        final int effectiveFollowers = effectiveFollowersTmp;
+        final int effectiveFollowing = effectiveFollowingTmp;
 
         // === Контейнер ===
         FrameLayout wrapper = new FrameLayout(activity);
@@ -353,7 +356,6 @@ public class OtherProfileFragment extends Fragment {
             }
         }
         if (!appliedSync) {
-            // Заливаем цветом темы (а не прозрачным) — НИКОГДА не должно просвечиваться ничего постороннего.
             bgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
             currentDisplayedBg = "disabled";
         }
@@ -524,7 +526,7 @@ public class OtherProfileFragment extends Fragment {
             boolean currentStatus = (boolean) btnFollow.getTag();
             final boolean nextStatus = !currentStatus;
 
-            // === ОПТИМИСТИЧНЫЙ UI (мгновенно, кнопка ОСТАЁТСЯ enabled — никаких «откатов» при быстрых тапах) ===
+            // === ОПТИМИСТИЧНЫЙ UI ===
             btnFollow.setTag(nextStatus);
             updateFollowButton(btnFollow, nextStatus);
             prefetchFollowCache.put(targetUid, nextStatus);
@@ -572,7 +574,7 @@ public class OtherProfileFragment extends Fragment {
                             followInFlight = false;
                             if (!isAdded()) return;
 
-                            // Подкрутим свой following в кэше моего профиля (для PRofileFragment).
+                            // Подкрутим свой following в кэше моего профиля (для ProfileFragment).
                             GoogleSignInAccount myAcc = GoogleSignIn.getLastSignedInAccount(activity);
                             if (myAcc != null) {
                                 prefetchCountsCache.remove(myAcc.getId());
