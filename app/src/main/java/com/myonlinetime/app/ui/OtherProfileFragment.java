@@ -51,11 +51,12 @@ import java.util.Set;
 
 public class OtherProfileFragment extends Fragment {
 
-    // Дефолтный лимит размера фона при предзагрузке (1 МБ)
-    private static final long DEFAULT_PRELOAD_BG_BYTES = 1024L * 1024L;
+    // Дефолтный лимит размера фона при предзагрузке — 5 МБ.
+    // Тяжёлые 4K JPG обычно 1.5–3 МБ, спокойно влезают.
+    private static final long DEFAULT_PRELOAD_BG_BYTES = 5L * 1024L * 1024L;
 
     // Запас по размеру bitmap'а относительно экрана: ровно в размер экрана,
-    // CENTER_CROP всё равно его растянет/обрежет. Брать сильно больше не нужно — это и есть источник фриза.
+    // CENTER_CROP всё равно его растянет/обрежет.
     private static final float BG_BITMAP_SCREEN_SCALE = 1.0f;
 
     private ImageView avatarView;
@@ -77,7 +78,7 @@ public class OtherProfileFragment extends Fragment {
     public static final android.util.LruCache<String, String> prefetchCountsCache = new android.util.LruCache<>(50);
     public static final android.util.LruCache<String, Boolean> prefetchFollowCache = new android.util.LruCache<>(50);
 
-    // Сырые байты фона (на случай GIF и для fallback'а)
+    // Сырые байты фона — для GIF и для последующего ленивого декода в bitmap-кэш.
     public static final android.util.LruCache<String, byte[]> prefetchBgBytesCache = new android.util.LruCache<String, byte[]>(20 * 1024 * 1024) {
         @Override
         protected int sizeOf(String key, byte[] value) {
@@ -85,8 +86,8 @@ public class OtherProfileFragment extends Fragment {
         }
     };
 
-    // ✦ НОВОЕ: уже декодированные и downsampled под экран Bitmap'ы статичных фонов.
-    // Именно отсюда UI берёт фон СИНХРОННО без декода — это и убирает фриз на 4K.
+    // Уже декодированные и downsampled под экран Bitmap'ы статичных фонов.
+    // Отсюда UI берёт фон СИНХРОННО без декода — это убирает фриз на 4K.
     public static final android.util.LruCache<String, Bitmap> prefetchBgBitmapCache = new android.util.LruCache<String, Bitmap>(40 * 1024 * 1024) {
         @Override
         protected int sizeOf(String key, Bitmap value) {
@@ -111,7 +112,7 @@ public class OtherProfileFragment extends Fragment {
     }
 
     /**
-     * Совместимая перегрузка со старым кодом — лимит фона по умолчанию 1 МБ.
+     * Совместимая перегрузка со старым кодом — лимит фона по умолчанию (5 МБ).
      */
     public static void preloadBackgrounds(List<User> users) {
         preloadBackgrounds(users, DEFAULT_PRELOAD_BG_BYTES);
@@ -145,49 +146,12 @@ public class OtherProfileFragment extends Fragment {
                 byte[] bytes = hasBytes ? prefetchBgBytesCache.get(bgUrl) : null;
 
                 if (bytes == null) {
-                    java.net.HttpURLConnection conn = null;
-                    java.io.InputStream is = null;
-                    try {
-                        java.net.URL url = new java.net.URL(bgUrl);
-                        conn = (java.net.HttpURLConnection) url.openConnection();
-                        conn.setConnectTimeout(2000);
-                        conn.setReadTimeout(2000);
-                        conn.setRequestMethod("GET");
-
-                        int contentLength = conn.getContentLength();
-                        if (contentLength > 0 && contentLength > limit) {
-                            continue;
-                        }
-
-                        is = conn.getInputStream();
-                        java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
-                        int nRead;
-                        byte[] data = new byte[16384];
-                        long totalRead = 0;
-                        boolean exceeded = false;
-
-                        while ((nRead = is.read(data, 0, data.length)) != -1) {
-                            buffer.write(data, 0, nRead);
-                            totalRead += nRead;
-                            if (totalRead > limit) {
-                                exceeded = true;
-                                break;
-                            }
-                        }
-
-                        if (!exceeded && totalRead > 0) {
-                            bytes = buffer.toByteArray();
-                            prefetchBgBytesCache.put(bgUrl, bytes);
-                        }
-                    } catch (Exception ignored) {
-                    } finally {
-                        if (is != null) { try { is.close(); } catch (Exception ignored) {} }
-                        if (conn != null) { try { conn.disconnect(); } catch (Exception ignored) {} }
-                    }
+                    bytes = downloadBytesCapped(bgUrl, limit);
+                    if (bytes != null) prefetchBgBytesCache.put(bgUrl, bytes);
                 }
 
-                // ✦ Главное: для НЕ-GIF — сразу декод и downsample под экран,
-                //    чтобы UI больше ничего не считал.
+                // Для НЕ-GIF — сразу декод и downsample под экран,
+                // чтобы UI больше ничего не считал.
                 if (!isGif && bytes != null && prefetchBgBitmapCache.get(bgUrl) == null) {
                     Bitmap bmp = decodeDownsampledBitmap(bytes, sTargetW, sTargetH);
                     if (bmp != null) {
@@ -197,6 +161,39 @@ public class OtherProfileFragment extends Fragment {
                 }
             }
         });
+    }
+
+    /** Скачивает байты по URL с жёстким верхним лимитом. Возвращает null, если превышен или ошибка. */
+    private static byte[] downloadBytesCapped(String urlStr, long maxBytes) {
+        java.net.HttpURLConnection conn = null;
+        java.io.InputStream is = null;
+        try {
+            java.net.URL url = new java.net.URL(urlStr);
+            conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(2500);
+            conn.setReadTimeout(2500);
+            conn.setRequestMethod("GET");
+
+            int contentLength = conn.getContentLength();
+            if (contentLength > 0 && contentLength > maxBytes) return null;
+
+            is = conn.getInputStream();
+            java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+            byte[] data = new byte[16384];
+            long total = 0;
+            int n;
+            while ((n = is.read(data, 0, data.length)) != -1) {
+                buffer.write(data, 0, n);
+                total += n;
+                if (total > maxBytes) return null;
+            }
+            return total > 0 ? buffer.toByteArray() : null;
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (is != null) { try { is.close(); } catch (Exception ignored) {} }
+            if (conn != null) { try { conn.disconnect(); } catch (Exception ignored) {} }
+        }
     }
 
     /**
@@ -236,7 +233,7 @@ public class OtherProfileFragment extends Fragment {
     private int prefetchFollowing = 0;
     private boolean prefetchIsFollowing = false;
 
-    // ПРЕДОХРАНИТЕЛЬ ОТ СВЕТОМУЗЫКИ
+    // ПРЕДОХРАНИТЕЛЬ ОТ СВЕТОМУЗЫКИ: содержит URL, который УЖЕ фактически запущен в bgImageView.
     private String currentDisplayedBg = null;
 
     public static void prefetchProfile(String vpsToken, String uid) {
@@ -345,8 +342,8 @@ public class OtherProfileFragment extends Fragment {
         bgImageView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         bgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
 
-        // ✦ ЕДИНСТВЕННЫЙ синхронный путь — взять УЖЕ ДЕКОДИРОВАННЫЙ Bitmap.
-        //   Никакого BitmapFactory.decodeByteArray на UI-потоке: это и есть лекарство от 4K-фриза.
+        // Синхронный путь — взять УЖЕ ДЕКОДИРОВАННЫЙ Bitmap.
+        // Никакого BitmapFactory.decodeByteArray на UI-потоке.
         boolean appliedSync = false;
         if (prefetchBg != null && !prefetchBg.isEmpty() && bgAllowedByPrefs(activity, prefetchBg)) {
             Bitmap ready = prefetchBgBitmapCache.get(prefetchBg);
@@ -364,9 +361,22 @@ public class OtherProfileFragment extends Fragment {
         wrapper.addView(bgImageView);
         wrapper.addView(originalView);
 
-        // Если Bitmap не успел приехать — догоним его асинхронно (без блокировки UI).
-        if (!appliedSync && prefetchBg != null && !prefetchBg.isEmpty()) {
-            scheduleAsyncBackgroundApply(activity, prefetchBg);
+        // Если синхронно нарисовать готовым Bitmap'ом не вышло — сразу отдаём Glide.
+        // Glide сам декодит на фоне и применит на UI без рывков.
+        // Параллельно прогреваем bitmap-кэш для будущих открытий — чтобы со второго раза
+        // (и для других пользователей с тем же URL) был синхронный мгновенный кадр.
+        if (!appliedSync && prefetchBg != null && !prefetchBg.isEmpty()
+                && bgAllowedByPrefs(activity, prefetchBg)) {
+            final String urlF = prefetchBg;
+            final boolean isGif = urlF.toLowerCase().endsWith(".gif");
+            byte[] bytes = prefetchBgBytesCache.get(urlF);
+            if (bytes != null) {
+                Glide.with(activity).load(bytes).centerCrop().dontAnimate().into(bgImageView);
+            } else {
+                Glide.with(activity).load(urlF).centerCrop().dontAnimate().into(bgImageView);
+            }
+            currentDisplayedBg = urlF;
+            if (!isGif) warmUpBitmapCacheAsync(activity, urlF);
         }
 
         activity.mainHeader.setVisibility(View.VISIBLE);
@@ -648,8 +658,8 @@ public class OtherProfileFragment extends Fragment {
             }
         };
 
-        // ✦ Если в кэше уже лежит полный User — не ходим в сеть сразу, ждём конца анимации,
-        //   иначе синхронные апдейты setText/setVisibility/Glide добавят к открытию ещё кадров.
+        // Если в кэше уже лежит полный User — не ходим в сеть сразу, ждём конца анимации,
+        // иначе синхронные апдейты setText/setVisibility/Glide добавят к открытию ещё кадров.
         if (cachedUserIsFull) {
             uiHandler.postDelayed(dataLoader, 350);
         } else {
@@ -660,62 +670,35 @@ public class OtherProfileFragment extends Fragment {
     }
 
     /**
-     * Если bitmap не успел приехать до открытия экрана — догоняем асинхронно.
-     * Никаких decode на UI-потоке.
+     * Прогрев bitmap-кэша в фоне. UI не трогает.
+     * - Если байтов в prefetchBgBytesCache нет — попробует докачать (с лимитом DEFAULT_PRELOAD_BG_BYTES).
+     * - Декодит downsampled под экран и кладёт в prefetchBgBitmapCache.
+     * Чтобы следующее открытие этого фона было синхронным и без фризов.
      */
-    private void scheduleAsyncBackgroundApply(final MainActivity activity, final String bgUrl) {
+    private void warmUpBitmapCacheAsync(final Context ctx, final String bgUrl) {
         if (bgUrl == null || bgUrl.isEmpty()) return;
-        final boolean isGif = bgUrl.toLowerCase().endsWith(".gif");
+        if (bgUrl.toLowerCase().endsWith(".gif")) return; // GIF не статичен — не кэшируем как Bitmap
+        if (prefetchBgBitmapCache.get(bgUrl) != null) return;
 
+        final Context appCtx = ctx.getApplicationContext();
         Utils.backgroundExecutor.execute(() -> {
-            if (!isAdded()) return;
+            try {
+                if (prefetchBgBitmapCache.get(bgUrl) != null) return;
+                ensureTargetSize(appCtx);
 
-            // 1) для GIF — отдадим Glide URL/байты на UI-потоке (он сам декод на фоне)
-            if (isGif) {
-                uiHandler.post(() -> {
-                    if (!isAdded() || bgImageView == null) return;
-                    if (!bgAllowedByPrefs(activity, bgUrl)) return;
-                    if (!bgUrl.equals(currentDisplayedBg)) {
-                        byte[] bytes = prefetchBgBytesCache.get(bgUrl);
-                        if (bytes != null) {
-                            Glide.with(activity).load(bytes).centerCrop().dontAnimate().into(bgImageView);
-                        } else {
-                            Glide.with(activity).load(bgUrl).centerCrop().dontAnimate().into(bgImageView);
-                        }
-                        currentDisplayedBg = bgUrl;
-                    }
-                });
-                return;
-            }
-
-            // 2) для статики — декод в фоне и затем setImageBitmap
-            ensureTargetSize(activity);
-            Bitmap bmp = prefetchBgBitmapCache.get(bgUrl);
-            if (bmp == null) {
                 byte[] bytes = prefetchBgBytesCache.get(bgUrl);
-                if (bytes != null) {
-                    bmp = decodeDownsampledBitmap(bytes, sTargetW, sTargetH);
-                    if (bmp != null) {
-                        try { bmp.prepareToDraw(); } catch (Throwable ignored) {}
-                        prefetchBgBitmapCache.put(bgUrl, bmp);
-                    }
+                if (bytes == null) {
+                    bytes = downloadBytesCapped(bgUrl, DEFAULT_PRELOAD_BG_BYTES);
+                    if (bytes != null) prefetchBgBytesCache.put(bgUrl, bytes);
                 }
-            }
-            final Bitmap finalBmp = bmp;
+                if (bytes == null) return;
 
-            uiHandler.post(() -> {
-                if (!isAdded() || bgImageView == null) return;
-                if (!bgAllowedByPrefs(activity, bgUrl)) return;
-                if (bgUrl.equals(currentDisplayedBg)) return;
-
-                if (finalBmp != null) {
-                    bgImageView.setImageBitmap(finalBmp);
-                } else {
-                    // ничего не нашли — пусть Glide грузит из сети, но без фриза на UI
-                    Glide.with(activity).load(bgUrl).centerCrop().dontAnimate().into(bgImageView);
+                Bitmap bmp = decodeDownsampledBitmap(bytes, sTargetW, sTargetH);
+                if (bmp != null) {
+                    try { bmp.prepareToDraw(); } catch (Throwable ignored) {}
+                    prefetchBgBitmapCache.put(bgUrl, bmp);
                 }
-                currentDisplayedBg = bgUrl;
-            });
+            } catch (Throwable ignored) {}
         });
     }
 
@@ -741,7 +724,8 @@ public class OtherProfileFragment extends Fragment {
         if (bgImageView == null || !isAdded()) return;
 
         if (bgUrl == null) bgUrl = "";
-        if (bgUrl.equals(currentDisplayedBg)) return; // защита от мерцания
+        // Анти-мерцающий guard: bgUrl уже ФАКТИЧЕСКИ нарисован.
+        if (bgUrl.equals(currentDisplayedBg)) return;
 
         if (!bgAllowedByPrefs(activity, bgUrl)) {
             if (!"disabled".equals(currentDisplayedBg)) {
@@ -754,31 +738,29 @@ public class OtherProfileFragment extends Fragment {
         final String urlF = bgUrl;
         final boolean isGif = urlF.toLowerCase().endsWith(".gif");
 
-        // Статика: пытаемся синхронно поставить готовый Bitmap (никакого decode на UI).
+        // 1) Готовый Bitmap — мгновенно, синхронно, без UI-работы.
         if (!isGif) {
             Bitmap ready = prefetchBgBitmapCache.get(urlF);
             if (ready != null) {
-                currentDisplayedBg = urlF;
                 bgImageView.setImageBitmap(ready);
+                currentDisplayedBg = urlF;
                 return;
             }
         }
 
-        // GIF — Glide сам декод на фоне.
-        if (isGif) {
-            currentDisplayedBg = urlF;
-            byte[] bytes = prefetchBgBytesCache.get(urlF);
-            if (bytes != null) {
-                Glide.with(activity).load(bytes).centerCrop().dontAnimate().into(bgImageView);
-            } else {
-                Glide.with(activity).load(urlF).centerCrop().dontAnimate().into(bgImageView);
-            }
-            return;
+        // 2) Готового Bitmap'а нет — отдаём Glide. Он сам декодит на фоне и применит на UI
+        //    без рывков. currentDisplayedBg выставляем ПОСЛЕ старта запроса, чтобы анти-
+        //    мерцание корректно работало для последующих повторных вызовов.
+        byte[] bytes = prefetchBgBytesCache.get(urlF);
+        if (bytes != null) {
+            Glide.with(activity).load(bytes).centerCrop().dontAnimate().into(bgImageView);
+        } else {
+            Glide.with(activity).load(urlF).centerCrop().dontAnimate().into(bgImageView);
         }
-
-        // Статика, готового Bitmap'а нет — декод в фоне, не блокируя UI.
         currentDisplayedBg = urlF;
-        scheduleAsyncBackgroundApply(activity, urlF);
+
+        // 3) Параллельно прогреваем bitmap-кэш под следующее открытие.
+        if (!isGif) warmUpBitmapCacheAsync(activity, urlF);
     }
 
     private void applyCollapseSafely(TextView aboutView, LinearLayout container, ImageView btnExpand, ImageView btnCollapse) {
