@@ -13,6 +13,11 @@ import android.app.AppOpsManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
+import com.bumptech.glide.load.DataSource;
+import com.bumptech.glide.load.engine.GlideException;
+import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.request.target.Target;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -535,23 +540,23 @@ public class MainActivity extends AppCompatActivity {
             badge.setVisibility(View.GONE);
         }
     }
+    
+private void initGlobalBackground() {
+    View oldVideoView = findViewById(R.id.global_background_video);
+    if (oldVideoView != null) oldVideoView.setVisibility(View.GONE);
 
-    private void initGlobalBackground() {
-        View oldVideoView = findViewById(R.id.global_background_video);
-        if (oldVideoView != null) oldVideoView.setVisibility(View.GONE);
+    globalImageView = findViewById(R.id.global_background_image);
 
-        globalImageView = findViewById(R.id.global_background_image);
-        
-        ViewGroup parent = (ViewGroup) globalImageView.getParent();
-        int insertIndex = parent.indexOfChild(globalImageView) + 1;
-        
-        previewImageView = new ImageView(this);
-        previewImageView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        previewImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        previewImageView.setVisibility(View.INVISIBLE);
-        parent.addView(previewImageView, insertIndex);
-    }
+    ViewGroup parent = (ViewGroup) globalImageView.getParent();
+    int insertIndex = parent.indexOfChild(globalImageView) + 1;
 
+    previewImageView = new ImageView(this);
+    previewImageView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    previewImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+    previewImageView.setVisibility(View.INVISIBLE);
+    parent.addView(previewImageView, insertIndex);
+}
+    
     public void previewBackground(String path) {
         if (path == null) return;
         if (path.equals("none")) {
