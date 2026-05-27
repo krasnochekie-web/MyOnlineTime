@@ -13,15 +13,11 @@ import android.app.AppOpsManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.drawable.Drawable;
-import com.bumptech.glide.load.DataSource;
-import com.bumptech.glide.load.engine.GlideException;
-import com.bumptech.glide.request.RequestListener;
-import com.bumptech.glide.request.target.Target;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Build;
 import com.google.firebase.messaging.FirebaseMessaging;
@@ -39,6 +35,10 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.tasks.Task;
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.DataSource;
+import com.bumptech.glide.load.engine.GlideException;
+import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.request.target.Target;
 import com.bumptech.glide.signature.ObjectKey;
 
 import java.io.File;
@@ -52,20 +52,20 @@ public class MainActivity extends AppCompatActivity {
     private View bottomNav;
     public View mainRoot;
     public TextView headerTitle;
-    public String currentBgBase64 = null; 
+    public String currentBgBase64 = null;
     public ImageView headerBackBtn;
-    
+
     public String previewBgPath = null;
-    
+
     private ImageView iconFeed, iconSearch, iconUsage, iconProfile, iconSettings;
     private int currentTab = 0;
 
     public GoogleSignInClient mGoogleSignInClient;
     private static final int RC_SIGN_IN = 9001;
-    
+
     public SharedPreferences prefs;
     public LruCache<String, Bitmap> mMemoryCache;
-    
+
     public String vpsToken = null;
     public com.myonlinetime.app.utils.AppNavigator navigator;
     public SmartHeaderManager headerManager;
@@ -75,10 +75,10 @@ public class MainActivity extends AppCompatActivity {
     private ImageView globalImageView;
     private String currentBgPath = null;
     private ImageView previewImageView;
-    private boolean isSyncingBg = false; 
+    private boolean isSyncingBg = false;
 
     private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-    
+
     private BroadcastReceiver badgeReceiver;
 
     private final SharedPreferences.OnSharedPreferenceChangeListener notifListener = (sharedPrefs, key) -> {
@@ -98,7 +98,7 @@ public class MainActivity extends AppCompatActivity {
         AppCompatDelegate.setDefaultNightMode(savedTheme);
 
         super.onCreate(savedInstanceState);
-        
+
         badgeReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -109,13 +109,13 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         };
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(this)
-                .registerReceiver(badgeReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"));
+                    .registerReceiver(badgeReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"));
         } else {
             androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(this)
-                .registerReceiver(badgeReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"));
+                    .registerReceiver(badgeReceiver, new IntentFilter("UPDATE_BADGE_BROADCAST"));
         }
 
         getSupportFragmentManager().registerFragmentLifecycleCallbacks(new FragmentManager.FragmentLifecycleCallbacks() {
@@ -123,10 +123,10 @@ public class MainActivity extends AppCompatActivity {
             public void onFragmentViewCreated(@NonNull FragmentManager fm, @NonNull Fragment f, @NonNull View v, Bundle savedInstanceState) {
                 super.onFragmentViewCreated(fm, f, v, savedInstanceState);
                 String fragName = f.getClass().getSimpleName();
-                
+
                 if (fragName.contains("NotificationsHistory") || fragName.contains("EditProfile") || fragName.contains("Follows")) {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                        v.setTranslationZ(100f); 
+                        v.setTranslationZ(100f);
                     }
                 }
                 container.post(() -> enforceLoginOverlays());
@@ -138,10 +138,10 @@ public class MainActivity extends AppCompatActivity {
         window.setStatusBarColor(android.graphics.Color.TRANSPARENT);
 
         setContentView(R.layout.activity_main);
-        
+
         navigator = new com.myonlinetime.app.utils.AppNavigator(this, R.id.fragment_container);
         mainRoot = findViewById(R.id.main_root);
-        
+
         prefs = getSharedPreferences("UserProfile", MODE_PRIVATE);
         final int maxMemory = (int) (Runtime.getRuntime().maxMemory() / 1024);
         final int cacheSize = maxMemory / 8;
@@ -151,7 +151,7 @@ public class MainActivity extends AppCompatActivity {
         };
 
         GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestIdToken("603306715003-0ptgu4fqnldcsoon9niprvi772m2ebks.apps.googleusercontent.com") 
+                .requestIdToken("603306715003-0ptgu4fqnldcsoon9niprvi772m2ebks.apps.googleusercontent.com")
                 .requestEmail().build();
         mGoogleSignInClient = GoogleSignIn.getClient(this, gso);
         container = (FrameLayout) findViewById(R.id.fragment_container);
@@ -168,28 +168,28 @@ public class MainActivity extends AppCompatActivity {
         headerTitle = (TextView) findViewById(R.id.header_title);
         headerBackBtn = (ImageView) findViewById(R.id.header_back_btn);
         bottomNav = (View) findViewById(R.id.bottom_nav_container);
-        
+
         headerManager = new SmartHeaderManager(this, this::updateNotificationBadge);
 
         ImageView headerBellBtn = findViewById(R.id.header_bell_btn);
         View headerBellContainer = findViewById(R.id.header_bell_container);
-        
+
         View.OnClickListener bellListener = v -> {
             if (navigator != null) {
                 navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
             }
         };
-        
+
         if (headerBellBtn != null) headerBellBtn.setOnClickListener(bellListener);
         if (headerBellContainer != null) headerBellContainer.setOnClickListener(bellListener);
-        
+
         updateNotificationBadge();
 
-        iconFeed = (ImageView) findViewById(R.id.icon_feed); 
+        iconFeed = (ImageView) findViewById(R.id.icon_feed);
         iconSearch = (ImageView) findViewById(R.id.icon_search);
-        iconProfile = (ImageView) findViewById(R.id.icon_profile); 
-        iconUsage = (ImageView) findViewById(R.id.icon_usage); 
-        iconSettings = (ImageView) findViewById(R.id.icon_settings); 
+        iconProfile = (ImageView) findViewById(R.id.icon_profile);
+        iconUsage = (ImageView) findViewById(R.id.icon_usage);
+        iconSettings = (ImageView) findViewById(R.id.icon_settings);
 
         permissionOverlay = findViewById(R.id.permission_overlay);
         if (permissionOverlay != null) {
@@ -203,41 +203,41 @@ public class MainActivity extends AppCompatActivity {
             if (currentTab == 0) return;
             updateNavState(0);
             navigator.switchScreen(0, null);
-            syncHeaderState(); 
+            syncHeaderState();
         });
 
-        findViewById(R.id.nav_search).setOnClickListener(v -> { 
+        findViewById(R.id.nav_search).setOnClickListener(v -> {
             if (currentTab == 1) return;
-            updateNavState(1); 
-            checkAuthAndLoad(1); 
+            updateNavState(1);
+            checkAuthAndLoad(1);
         });
-        
-        findViewById(R.id.nav_profile).setOnClickListener(v -> { 
+
+        findViewById(R.id.nav_profile).setOnClickListener(v -> {
             if (currentTab == 4) return;
-            updateNavState(4); 
-            checkAuthAndLoad(4); 
+            updateNavState(4);
+            checkAuthAndLoad(4);
         });
 
         findViewById(R.id.nav_usage).setOnClickListener(v -> {
             if (currentTab == 3) return;
             updateNavState(3);
             navigator.switchScreen(3, null);
-            syncHeaderState(); 
+            syncHeaderState();
         });
 
         findViewById(R.id.nav_settings).setOnClickListener(v -> {
             if (currentTab == 5) return;
             updateNavState(5);
             navigator.switchScreen(5, null);
-            syncHeaderState(); 
+            syncHeaderState();
         });
-        
+
         headerBackBtn.setOnClickListener(v -> handleBackNavigation());
 
         initGlobalBackground();
         updateGlobalBackground(true);
 
-        int tabToOpen = 0; 
+        int tabToOpen = 0;
         if (appPrefs.contains("open_tab_after_login")) {
             tabToOpen = appPrefs.getInt("open_tab_after_login", 0);
             appPrefs.edit().remove("open_tab_after_login").apply();
@@ -263,34 +263,33 @@ public class MainActivity extends AppCompatActivity {
         androidx.work.PeriodicWorkRequest weeklyWorkRequest = new androidx.work.PeriodicWorkRequest.Builder(
                 com.myonlinetime.app.utils.WeeklyStatsWorker.class, 7, java.util.concurrent.TimeUnit.DAYS)
                 .build();
-        
+
         androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
                 "WeeklyStatsNotification",
                 androidx.work.ExistingPeriodicWorkPolicy.KEEP,
                 weeklyWorkRequest
         );
-        
+
         handleNotificationIntent(getIntent());
-        
+
         refreshGoogleAndVpsToken(true);
     }
 
     // === ТИХАЯ ФОНОВАЯ СИНХРОНИЗАЦИЯ ЛИЧНОГО ПРОФИЛЯ ===
     public void syncMyProfileSilently() {
         if (vpsToken == null || vpsToken.isEmpty()) return;
-        
+
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         if (account == null) return;
 
         VpsApi.getAggregatedProfile(this, vpsToken, account.getId(), new VpsApi.AggregatedProfileCallback() {
             @Override
             public void onLoaded(User user, int followers, int following, boolean isFollowing) {
-                // Сохраняем сверенные с сервером цифры на жесткий диск
                 prefs.edit()
-                     .putInt("my_followers_count", followers)
-                     .putInt("my_following_count", following)
-                     .apply();
-                     
+                        .putInt("my_followers_count", followers)
+                        .putInt("my_following_count", following)
+                        .apply();
+
                 if (user != null) {
                     if (user.nickname != null) prefs.edit().putString("my_nickname", user.nickname).apply();
                     if (user.about != null) prefs.edit().putString("my_about", user.about).apply();
@@ -302,20 +301,20 @@ public class MainActivity extends AppCompatActivity {
 
     private void checkIfNewUserAndEnforce(String uid) {
         if (vpsToken == null) return;
-        
+
         if (prefs.getBoolean("is_nickname_confirmed", false)) {
             enforceLoginOverlays();
             return;
         }
-        
+
         VpsApi.getUser(this, vpsToken, uid, new VpsApi.UserCallback() {
             @Override public void onLoaded(com.myonlinetime.app.models.User user) {
                 if (isDestroyed()) return;
-                
-                boolean isConfirmed = true; 
+
+                boolean isConfirmed = true;
                 if (user != null) {
                     isConfirmed = user.isNicknameConfirmed;
-                    
+
                     if (user.createdAt != null) {
                         try {
                             String clean = user.createdAt;
@@ -338,8 +337,7 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                 }
-                
-                // ИСПРАВЛЕНО: putBoolean
+
                 prefs.edit().putBoolean("is_nickname_confirmed", isConfirmed).apply();
                 runOnUiThread(() -> enforceLoginOverlays());
             }
@@ -359,11 +357,11 @@ public class MainActivity extends AppCompatActivity {
                 GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
                 if (acct != null) {
                     checkIfNewUserAndEnforce(acct.getId());
-                    syncMyProfileSilently(); // Запуск тихой синхронизации при старте
+                    syncMyProfileSilently();
                 }
                 else enforceLoginOverlays();
             }
-            return; 
+            return;
         }
 
         if (mGoogleSignInClient == null) return;
@@ -372,14 +370,14 @@ public class MainActivity extends AppCompatActivity {
             try {
                 final GoogleSignInAccount account = task.getResult(ApiException.class);
                 if (account != null && account.getIdToken() != null) {
-                    
+
                     VpsApi.authenticateWithGoogle(MainActivity.this, account.getIdToken(), new VpsApi.LoginCallback() {
                         @Override
                         public void onSuccess(String ourServerToken) {
                             vpsToken = ourServerToken;
                             StatsHelper.syncUserProfile(MainActivity.this);
-                            syncMyProfileSilently(); // Запуск тихой синхронизации
-                            
+                            syncMyProfileSilently();
+
                             checkIfNewUserAndEnforce(account.getId());
 
                             Utils.backgroundExecutor.execute(() -> {
@@ -408,19 +406,19 @@ public class MainActivity extends AppCompatActivity {
                             Utils.backgroundExecutor.execute(() -> {
                                 com.myonlinetime.app.utils.UsageMath.preloadCoreStats(MainActivity.this);
                             });
-                            return false; 
+                            return false;
                         });
                     }
                 } else {
                     vpsToken = null;
                     enforceLoginOverlays();
                 }
-            } catch (Exception ignored) { 
+            } catch (Exception ignored) {
                 vpsToken = null;
                 enforceLoginOverlays();
             }
-            
-            loadUserAvatarToBottomNav(); 
+
+            loadUserAvatarToBottomNav();
         });
     }
 
@@ -433,7 +431,7 @@ public class MainActivity extends AppCompatActivity {
         }
         ft.commitAllowingStateLoss();
         fm.executePendingTransactions();
-        
+
         navigator = new com.myonlinetime.app.utils.AppNavigator(this, R.id.fragment_container);
     }
 
@@ -441,8 +439,8 @@ public class MainActivity extends AppCompatActivity {
         if (mGoogleSignInClient != null) {
             mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
                 resetAccountState();
-                clearAllFragments(); 
-                
+                clearAllFragments();
+
                 updateNavState(5);
                 navigator.switchScreen(5, null);
                 loadUserAvatarToBottomNav();
@@ -457,9 +455,9 @@ public class MainActivity extends AppCompatActivity {
         currentBgBase64 = null;
         currentBgPath = null;
         previewBgPath = null;
-        
+
         if (mMemoryCache != null) mMemoryCache.evictAll();
-        
+
         if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
         if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
 
@@ -471,9 +469,9 @@ public class MainActivity extends AppCompatActivity {
         if (prefs != null) prefs.edit().clear().apply();
 
         getSharedPreferences("AppPrefs", MODE_PRIVATE).edit()
-            .remove("vps_access_token")
-            .remove("vps_refresh_token")
-            .apply();
+                .remove("vps_access_token")
+                .remove("vps_refresh_token")
+                .apply();
 
         try {
             File dir = getFilesDir();
@@ -498,7 +496,7 @@ public class MainActivity extends AppCompatActivity {
             container.post(this::enforceLoginOverlays);
         }
     }
-    
+
     public void updateNotificationBadge() {
         TextView badge = findViewById(R.id.header_bell_badge);
         if (badge == null) return;
@@ -511,8 +509,8 @@ public class MainActivity extends AppCompatActivity {
 
         ImageView bellBtn = findViewById(R.id.header_bell_btn);
         View bellContainer = findViewById(R.id.header_bell_container);
-        if ((bellBtn != null && bellBtn.getVisibility() != View.VISIBLE) || 
-            (bellContainer != null && bellContainer.getVisibility() != View.VISIBLE)) {
+        if ((bellBtn != null && bellBtn.getVisibility() != View.VISIBLE) ||
+                (bellContainer != null && bellContainer.getVisibility() != View.VISIBLE)) {
             badge.setVisibility(View.GONE);
             return;
         }
@@ -523,7 +521,7 @@ public class MainActivity extends AppCompatActivity {
 
         SharedPreferences appPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
         String historyJson = appPrefs.getString(cacheKey, "[]");
-        
+
         int unreadCount = 0;
         try {
             JSONArray array = new JSONArray(historyJson);
@@ -540,23 +538,53 @@ public class MainActivity extends AppCompatActivity {
             badge.setVisibility(View.GONE);
         }
     }
-    
-private void initGlobalBackground() {
-    View oldVideoView = findViewById(R.id.global_background_video);
-    if (oldVideoView != null) oldVideoView.setVisibility(View.GONE);
 
-    globalImageView = findViewById(R.id.global_background_image);
+    // ===================== ФОН: глобальный + preview =====================
 
-    ViewGroup parent = (ViewGroup) globalImageView.getParent();
-    int insertIndex = parent.indexOfChild(globalImageView) + 1;
+    private void initGlobalBackground() {
+        View oldVideoView = findViewById(R.id.global_background_video);
+        if (oldVideoView != null) oldVideoView.setVisibility(View.GONE);
 
-    previewImageView = new ImageView(this);
-    previewImageView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-    previewImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-    previewImageView.setVisibility(View.INVISIBLE);
-    parent.addView(previewImageView, insertIndex);
-}
-    
+        globalImageView = findViewById(R.id.global_background_image);
+
+        ViewGroup parent = (ViewGroup) globalImageView.getParent();
+        int insertIndex = parent.indexOfChild(globalImageView) + 1;
+
+        previewImageView = new ImageView(this);
+        previewImageView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        previewImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        previewImageView.setVisibility(View.INVISIBLE);
+        parent.addView(previewImageView, insertIndex);
+    }
+
+    /**
+     * Плавная подмена фоновой картинки.
+     * Грузим новое изображение в {@code target}, при этом {@code fading} остаётся видимым ВПЛОТЬ
+     * до момента, когда Glide реально сообщит, что новая картинка готова к отрисовке.
+     * Это даёт «эффект галереи» — между фрагментами ни одного пустого кадра.
+     */
+    private void loadIntoSmoothly(final ImageView target, final ImageView fading, final Object src) {
+        if (target == null || src == null) return;
+        Glide.with(this)
+                .load(src)
+                .centerCrop()
+                .dontAnimate()
+                .listener(new RequestListener<Drawable>() {
+                    @Override
+                    public boolean onLoadFailed(GlideException e, Object model, Target<Drawable> t, boolean isFirstResource) {
+                        // Не дёргаем visibility: пусть на экране останется то, что было.
+                        return false;
+                    }
+                    @Override
+                    public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> t, DataSource dataSource, boolean isFirstResource) {
+                        target.setVisibility(View.VISIBLE);
+                        if (fading != null && fading != target) fading.setVisibility(View.INVISIBLE);
+                        return false;
+                    }
+                })
+                .into(target);
+    }
+
     public void previewBackground(String path) {
         if (path == null) return;
         if (path.equals("none")) {
@@ -567,31 +595,24 @@ private void initGlobalBackground() {
         }
 
         previewBgPath = path;
-        if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
-        
-        if (previewImageView != null) {
-            previewImageView.setVisibility(View.VISIBLE);
-            if (path.startsWith("http")) {
-                Glide.with(this).load(path).centerCrop().into(previewImageView);
-            } else {
-                Glide.with(this).load(new File(path)).centerCrop().into(previewImageView);
-            }
-        }
+        if (previewImageView == null) return;
+
+        Object src = path.startsWith("http") ? (Object) path : (Object) new File(path);
+        // Грузим в previewImageView; globalImageView (если он сейчас на экране со старым фоном)
+        // остаётся видимым до момента, когда новая картинка реально готова.
+        loadIntoSmoothly(previewImageView, globalImageView, src);
     }
-    
+
     public void clearPreviewBackground() {
         clearPreviewBackground(false);
     }
 
     public void clearPreviewBackground(boolean instant) {
-        if (previewBgPath != null) {
-            previewBgPath = null;
-            if (currentTab == 4) {
-                updateGlobalBackground(true);
-            } else {
-                updateGlobalBackground(false);
-            }
-        }
+        if (previewBgPath == null) return;
+        previewBgPath = null;
+        // Всегда просим updateGlobalBackground(true) — он сам корректно решит,
+        // надо ли что-то показывать (с учётом тогглов в настройках).
+        updateGlobalBackground(true);
     }
 
     public void deleteMyBackgroundLocal() {
@@ -608,15 +629,15 @@ private void initGlobalBackground() {
         }
 
         prefs.edit()
-            .remove("custom_bg_path_" + uid)
-            .remove("custom_bg_is_video_" + uid)
-            .remove("synced_bg_url_" + uid)
-            .remove("my_bg_base64")
-            .apply();
+                .remove("custom_bg_path_" + uid)
+                .remove("custom_bg_is_video_" + uid)
+                .remove("synced_bg_url_" + uid)
+                .remove("my_bg_base64")
+                .apply();
 
         currentBgBase64 = null;
         currentBgPath = null;
-        
+
         updateGlobalBackground(true);
 
         if (vpsToken != null) {
@@ -652,7 +673,7 @@ private void initGlobalBackground() {
         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(this);
         if (acct == null) return null;
         String uid = acct.getId();
-        
+
         String myBgUrl = prefs.getString("my_bg_base64", null);
         if (myBgUrl != null && myBgUrl.startsWith("http")) syncMyBackground(myBgUrl);
 
@@ -671,12 +692,13 @@ private void initGlobalBackground() {
         if (!show) {
             if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
             if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
+            currentBgPath = null;
             return;
         }
 
         SharedPreferences appPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
         boolean isGlobalEnabled = appPrefs.getBoolean("bg_global_enabled", true);
-        
+
         if (!isGlobalEnabled) {
             if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
             if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
@@ -693,12 +715,12 @@ private void initGlobalBackground() {
             }
             return;
         }
-        
+
         String targetPath = resolveMyBackground();
 
         boolean isOthersBackground = (currentTab == 4 && currentBgBase64 != null && !currentBgBase64.isEmpty() && !currentBgBase64.equals("null"));
-        boolean isMyProfile = !isOthersBackground; 
-        
+        boolean isMyProfile = !isOthersBackground;
+
         boolean isGif = targetPath != null && targetPath.toLowerCase().endsWith(".gif");
 
         if (targetPath != null && !targetPath.isEmpty()) {
@@ -716,46 +738,45 @@ private void initGlobalBackground() {
         }
 
         if (targetPath == null || targetPath.isEmpty()) {
-            currentBgPath = null; 
+            currentBgPath = null;
             if (globalImageView != null) globalImageView.setVisibility(View.INVISIBLE);
             if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
             return;
         }
 
+        // Уже показываем тот же путь — ничего не меняем, только подчищаем preview.
         if (targetPath.equals(currentBgPath) && globalImageView != null && globalImageView.getVisibility() == View.VISIBLE) {
             if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
             return;
         }
 
         currentBgPath = targetPath;
-        if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
-        
-        if (globalImageView != null) {
-            globalImageView.setVisibility(View.VISIBLE);
-            Glide.with(this).load(targetPath).centerCrop().into(globalImageView);
-        }
-    }   
-    
+        Object src = targetPath.startsWith("http") ? (Object) targetPath : (Object) new File(targetPath);
+        // Плавная подмена: грузим новый фон в globalImageView, а previewImageView
+        // (если он показывает старую картинку) гасим только после onResourceReady.
+        loadIntoSmoothly(globalImageView, previewImageView, src);
+    }
+
     public void syncMyBackground(String bgUrl) {
         if (bgUrl == null || bgUrl.isEmpty() || bgUrl.equals("null") || isSyncingBg) return;
-        
+
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         if (account == null) return;
-        
+
         String uid = account.getId();
         String cachedUrl = prefs.getString("synced_bg_url_" + uid, "");
         String currentCustom = prefs.getString("custom_bg_path_" + uid, "");
-        
+
         if (bgUrl.equals(cachedUrl) && new File(currentCustom).exists()) {
-            return; 
+            return;
         }
 
         isSyncingBg = true;
         Utils.backgroundExecutor.execute(() -> {
             try {
                 boolean isGif = bgUrl.toLowerCase().endsWith(".gif");
-                String ext = isGif ? ".gif" : ".jpg"; 
-                
+                String ext = isGif ? ".gif" : ".jpg";
+
                 File dir = getFilesDir();
                 File[] files = dir.listFiles();
                 if (files != null) {
@@ -781,10 +802,10 @@ private void initGlobalBackground() {
                 runOnUiThread(() -> {
                     isSyncingBg = false;
                     prefs.edit()
-                         .putString("synced_bg_url_" + uid, bgUrl)
-                         .putString("custom_bg_path_" + uid, localFile.getAbsolutePath())
-                         .apply();
-                         
+                            .putString("synced_bg_url_" + uid, bgUrl)
+                            .putString("custom_bg_path_" + uid, localFile.getAbsolutePath())
+                            .apply();
+
                     updateGlobalBackground(true);
                 });
             } catch (Exception e) {
@@ -798,15 +819,15 @@ private void initGlobalBackground() {
     protected void onPause() {
         super.onPause();
         getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-            .unregisterOnSharedPreferenceChangeListener(notifListener);
+                .unregisterOnSharedPreferenceChangeListener(notifListener);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        loadUserAvatarToBottomNav(); 
-        updateNotificationBadge(); 
-        
+        loadUserAvatarToBottomNav();
+        updateNotificationBadge();
+
         boolean hideGlobalBg = false;
         if (navigator != null && navigator.hasSubScreen()) {
             Fragment current = getSupportFragmentManager().findFragmentById(R.id.fragment_container);
@@ -821,21 +842,21 @@ private void initGlobalBackground() {
         if (previewBgPath != null && navigator != null && navigator.hasSubScreen()) {
             previewBackground(previewBgPath);
         } else if (hideGlobalBg) {
-            updateGlobalBackground(false); 
+            updateGlobalBackground(false);
         } else {
             updateGlobalBackground(true);
         }
-        
+
         getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-            .registerOnSharedPreferenceChangeListener(notifListener);
-        
+                .registerOnSharedPreferenceChangeListener(notifListener);
+
         if (hasPermission()) {
             GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
             if (account != null) StatsHelper.syncUserProfile(this);
         }
-        
+
         enforceLoginOverlays();
-        
+
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
             adjustHeaderForWindowMode(isInMultiWindowMode());
         }
@@ -856,19 +877,19 @@ private void initGlobalBackground() {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        setIntent(intent); 
+        setIntent(intent);
         handleNotificationIntent(intent);
     }
 
     private void handleNotificationIntent(Intent intent) {
         if (intent != null && intent.hasExtra("open_tab")) {
             String tab = intent.getStringExtra("open_tab");
-            
+
             if ("time".equals(tab) || "notifications".equals(tab) || "other_profile".equals(tab)) {
                 if (navigator != null && navigator.hasSubScreen()) {
                     navigator.closeSubScreen();
                 }
-                
+
                 if ("other_profile".equals(tab)) {
                     String targetUid = intent.getStringExtra("target_uid");
                     String targetNickname = intent.getStringExtra("target_nickname");
@@ -878,18 +899,18 @@ private void initGlobalBackground() {
                         }
 
                         navigator.openSubScreen(com.myonlinetime.app.ui.OtherProfileFragment.newInstance(
-                                targetUid, 
-                                getString(R.string.title_notifications), 
-                                targetNickname, 
-                                "", 
+                                targetUid,
+                                getString(R.string.title_notifications),
+                                targetNickname,
+                                "",
                                 ""
                         ));
                     }
                 } else {
-                    updateNavState(3); 
+                    updateNavState(3);
                     navigator.switchScreen(3, null);
-                    syncHeaderState(); 
-                    
+                    syncHeaderState();
+
                     if ("notifications".equals(tab) && navigator != null) {
                         navigator.openSubScreen(new com.myonlinetime.app.ui.NotificationsHistoryFragment());
                     }
@@ -902,7 +923,7 @@ private void initGlobalBackground() {
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        outState.putInt("SAVED_TAB", currentTab); 
+        outState.putInt("SAVED_TAB", currentTab);
     }
 
     public void updateAvatarInUI() {
@@ -925,7 +946,7 @@ private void initGlobalBackground() {
             if (customAvatarPath != null) {
                 File localFile = new File(customAvatarPath);
                 if (localFile.exists()) {
-                    iconProfile.setImageTintList(null); 
+                    iconProfile.setImageTintList(null);
                     Glide.with(this).load(localFile).signature(new ObjectKey(localFile.lastModified())).circleCrop().into(iconProfile);
                     return;
                 }
@@ -933,11 +954,11 @@ private void initGlobalBackground() {
 
             Bitmap cachedAvatar = mMemoryCache.get("avatar_" + uid);
             if (cachedAvatar != null) {
-                iconProfile.setImageTintList(null); 
+                iconProfile.setImageTintList(null);
                 Glide.with(this).load(cachedAvatar).circleCrop().into(iconProfile);
                 return;
-            } 
-            
+            }
+
             String savedUrl = prefs.getString("my_photo_base64", null);
             if (savedUrl != null) {
                 iconProfile.setImageTintList(null);
@@ -951,11 +972,11 @@ private void initGlobalBackground() {
                 }
             } else {
                 iconProfile.setImageTintList(androidx.core.content.ContextCompat.getColorStateList(this, R.color.nav_icon_selector));
-                iconProfile.setImageResource(R.drawable.ic_nav_profile); 
+                iconProfile.setImageResource(R.drawable.ic_nav_profile);
             }
         }
     }
-    
+
     private void showBottomNav() {
         if (bottomNav == null) return;
         bottomNav.animate().translationY(0).setDuration(250).start();
@@ -967,17 +988,17 @@ private void initGlobalBackground() {
     }
 
     @Override
-    public void onBackPressed() { handleBackNavigation(); }  
+    public void onBackPressed() { handleBackNavigation(); }
 
     private void handleBackNavigation() {
         if (navigator.closeSubScreen()) {
-            syncHeaderState(); 
-            return; 
+            syncHeaderState();
+            return;
         }
         if (currentTab != 0) {
             updateNavState(0);
             navigator.switchScreen(0, null);
-            syncHeaderState(); 
+            syncHeaderState();
         } else {
             super.onBackPressed();
         }
@@ -985,20 +1006,20 @@ private void initGlobalBackground() {
 
     private void checkAuthAndLoad(int tabIndex) {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
-        
+
         if (tabIndex == 1) {
-            navigator.switchScreen(1, null); 
+            navigator.switchScreen(1, null);
         } else if (tabIndex == 4) {
             if (account != null) StatsHelper.syncUserProfile(MainActivity.this);
-            navigator.switchScreen(4, account != null ? account.getId() : ""); 
+            navigator.switchScreen(4, account != null ? account.getId() : "");
         }
-        
+
         getSupportFragmentManager().executePendingTransactions();
-        syncHeaderState(); 
-        
+        syncHeaderState();
+
         enforceLoginOverlays();
         container.post(this::enforceLoginOverlays);
-    } 
+    }
 
     public void enforceLoginOverlays() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
@@ -1011,7 +1032,7 @@ private void initGlobalBackground() {
             if (prefs.contains("is_nickname_confirmed")) {
                 needsNicknameSetup = !prefs.getBoolean("is_nickname_confirmed", true);
             } else {
-                needsNicknameSetup = false; 
+                needsNicknameSetup = false;
             }
         }
 
@@ -1042,7 +1063,7 @@ private void initGlobalBackground() {
         for (Fragment f : getSupportFragmentManager().getFragments()) {
             if (f != null && f.getView() instanceof ViewGroup) {
                 String fragName = f.getClass().getSimpleName();
-                
+
                 if (fragName.contains("Notification") || fragName.contains("Edit") || fragName.contains("Follow")) {
                     continue;
                 }
@@ -1056,14 +1077,14 @@ private void initGlobalBackground() {
 
                     if (noAuth) {
                         if (setupOverlay != null) setupOverlay.setVisibility(View.GONE);
-                        
+
                         if (loginOverlay == null) {
                             try {
                                 loginOverlay = getLayoutInflater().inflate(R.layout.layout_login_required, root, false);
-                                loginOverlay.setClickable(true); 
+                                loginOverlay.setClickable(true);
                                 loginOverlay.setTag("login_screen_overlay");
                                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                                    loginOverlay.setTranslationZ(50f); 
+                                    loginOverlay.setTranslationZ(50f);
                                 }
                                 Button btn = loginOverlay.findViewById(R.id.btn_login_center);
                                 if (btn != null) btn.setOnClickListener(v -> startActivityForResult(mGoogleSignInClient.getSignInIntent(), RC_SIGN_IN));
@@ -1073,7 +1094,7 @@ private void initGlobalBackground() {
                             loginOverlay.setVisibility(View.VISIBLE);
                             loginOverlay.bringToFront();
                             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                                loginOverlay.setTranslationZ(50f); 
+                                loginOverlay.setTranslationZ(50f);
                             }
                         }
                     } else if (needsNicknameSetup) {
@@ -1086,7 +1107,7 @@ private void initGlobalBackground() {
                                             enforceLoginOverlays();
                                         }
                                 );
-                                setupOverlay.setClickable(true); 
+                                setupOverlay.setClickable(true);
                                 setupOverlay.setFocusable(true);
                                 setupOverlay.setTag("setup_screen_overlay");
                                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
@@ -1100,7 +1121,7 @@ private void initGlobalBackground() {
                             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                                 setupOverlay.setTranslationZ(50f);
                             }
-                            
+
                             EditText inputName = setupOverlay.findViewById(R.id.setup_nickname_input);
                             if (inputName != null) {
                                 String draft = prefs.getString("draft_setup_nickname", null);
@@ -1125,22 +1146,22 @@ private void initGlobalBackground() {
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        
+
         if (requestCode == RC_SIGN_IN) {
             Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
             try {
                 final GoogleSignInAccount acct = task.getResult(ApiException.class);
-                
+
                 resetAccountState();
-                clearAllFragments(); 
-                
+                clearAllFragments();
+
                 VpsApi.authenticateWithGoogle(MainActivity.this, acct.getIdToken(), new VpsApi.LoginCallback() {
                     @Override
                     public void onSuccess(String ourServerToken) {
                         vpsToken = ourServerToken;
                         StatsHelper.syncUserProfile(MainActivity.this);
-                        syncMyProfileSilently(); // Запуск тихой синхронизации
-                        
+                        syncMyProfileSilently();
+
                         checkIfNewUserAndEnforce(acct.getId());
 
                         runOnUiThread(() -> {
@@ -1148,9 +1169,9 @@ private void initGlobalBackground() {
                             navigator.switchScreen(4, acct.getId());
                             loadUserAvatarToBottomNav();
                             enforceLoginOverlays();
-                            
+
                             androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(MainActivity.this)
-                                .sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
+                                    .sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
                         });
                     }
                     @Override
@@ -1166,9 +1187,9 @@ private void initGlobalBackground() {
 
     private void updateNavState(int index) {
         currentTab = index;
-        
+
         mainHeader.setVisibility(View.VISIBLE);
-        mainHeader.bringToFront(); 
+        mainHeader.bringToFront();
         if (permissionOverlay != null && permissionOverlay.getVisibility() == View.VISIBLE) {
             mainHeader.bringToFront();
         }
@@ -1177,11 +1198,11 @@ private void initGlobalBackground() {
 
         iconFeed.setSelected(index == 0);
         iconSearch.setSelected(index == 1);
-        iconProfile.setSelected(index == 4); 
+        iconProfile.setSelected(index == 4);
         iconUsage.setSelected(index == 3);
-        iconSettings.setSelected(index == 5); 
-        
-        updateGlobalBackground(true); 
+        iconSettings.setSelected(index == 5);
+
+        updateGlobalBackground(true);
 
         container.post(this::enforceLoginOverlays);
     }
@@ -1200,33 +1221,33 @@ private void initGlobalBackground() {
 
     private void adjustHeaderForWindowMode(boolean isMultiWindow) {
         if (mainHeader == null || !(mainHeader instanceof ViewGroup)) return;
-        
+
         ViewGroup headerGroup = (ViewGroup) mainHeader;
         if (headerGroup.getChildCount() == 0) return;
-        
+
         View innerHeader = headerGroup.getChildAt(0);
         ViewGroup.LayoutParams innerParams = innerHeader.getLayoutParams();
 
         if (isMultiWindow) {
             innerParams.height = (int) (56 * getResources().getDisplayMetrics().density);
             innerHeader.setPadding(
-                innerHeader.getPaddingLeft(), 
-                0, 
-                innerHeader.getPaddingRight(), 
-                innerHeader.getPaddingBottom()
+                    innerHeader.getPaddingLeft(),
+                    0,
+                    innerHeader.getPaddingRight(),
+                    innerHeader.getPaddingBottom()
             );
             mainHeader.setPadding(0, 0, 0, 0);
         } else {
             innerParams.height = (int) (76 * getResources().getDisplayMetrics().density);
             innerHeader.setPadding(
-                innerHeader.getPaddingLeft(), 
-                (int) (20 * getResources().getDisplayMetrics().density), 
-                innerHeader.getPaddingRight(), 
-                innerHeader.getPaddingBottom()
+                    innerHeader.getPaddingLeft(),
+                    (int) (20 * getResources().getDisplayMetrics().density),
+                    innerHeader.getPaddingRight(),
+                    innerHeader.getPaddingBottom()
             );
             mainHeader.requestApplyInsets();
         }
-        
+
         innerHeader.setLayoutParams(innerParams);
     }
 }
