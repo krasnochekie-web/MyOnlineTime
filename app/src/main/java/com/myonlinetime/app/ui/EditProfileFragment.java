@@ -416,9 +416,10 @@ private void loadInitialBgIntoOwnView(MainActivity activity, String uid) {
     // globalImageView у Activity уже содержит фон Profile-таба, прямо сейчас.
     android.graphics.drawable.Drawable snapshot = null;
     try {
-        if (activity.globalImageView != null) {
-            snapshot = activity.globalImageView.getDrawable();
-        }
+ImageView gv = activity.getGlobalImageView();
+if (gv != null) {
+    snapshot = gv.getDrawable();
+}
     } catch (Throwable ignored) {}
     if (snapshot != null) {
         editBgImageView.setImageDrawable(snapshot);
