@@ -29,13 +29,12 @@ public class StatsHostFragment extends Fragment {
         final TextView txtTime = view.findViewById(R.id.txt_tab_time);
         final TextView txtChart = view.findViewById(R.id.txt_tab_chart);
         final TextView txtAllTime = view.findViewById(R.id.txt_tab_all_time);
-        
+
         final View lineTime = view.findViewById(R.id.line_tab_time);
         final View lineChart = view.findViewById(R.id.line_tab_chart);
         final View lineAllTime = view.findViewById(R.id.line_tab_all_time);
 
         final ViewPager2 viewPager = view.findViewById(R.id.stats_view_pager);
-        // МАГИЯ ПЛАВНОСТИ: Заставляем Android заранее отрисовать обе соседние вкладки в фоне!
         viewPager.setOffscreenPageLimit(2);
 
         viewPager.setAdapter(new FragmentStateAdapter(this) {
@@ -76,11 +75,6 @@ public class StatsHostFragment extends Fragment {
         return view;
     }
 
-    // =========================================================================
-    // УПРАВЛЕНИЕ ГЛОБАЛЬНЫМ ФОНОМ ДЛЯ BOTTOM NAV
-    // =========================================================================
-    
-    // 1. Срабатывает при самом первом запуске (добавлении фрагмента)
     @Override
     public void onResume() {
         super.onResume();
@@ -89,7 +83,6 @@ public class StatsHostFragment extends Fragment {
         }
     }
 
-    // 2. Срабатывает при переключении вкладок через AppNavigator (hide/show)
     @Override
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
@@ -98,10 +91,9 @@ public class StatsHostFragment extends Fragment {
         }
     }
 
-    // 3. Единый метод, который отключает фон (так как это статистика, тут фона нет)
     private void updateBackgroundBasedOnTab() {
         if (getActivity() instanceof MainActivity) {
-            ((MainActivity) getActivity()).updateGlobalBackground(false); 
+            ((MainActivity) getActivity()).updateGlobalBackground(false);
         }
     }
 }
