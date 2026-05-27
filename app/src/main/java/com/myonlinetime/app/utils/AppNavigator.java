@@ -1,6 +1,8 @@
 package com.myonlinetime.app.utils;
 
+import android.os.Bundle;
 import android.os.SystemClock;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
@@ -9,154 +11,185 @@ import androidx.fragment.app.FragmentTransaction;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.ui.FeedFragment;
 import com.myonlinetime.app.ui.ProfileFragment;
-import com.myonlinetime.app.ui.OtherProfileFragment; 
+import com.myonlinetime.app.ui.OtherProfileFragment;
 import com.myonlinetime.app.ui.SearchFragment;
-import com.myonlinetime.app.ui.SettingsFragment; 
-import com.myonlinetime.app.ui.StatsHostFragment; 
+import com.myonlinetime.app.ui.SettingsFragment;
+import com.myonlinetime.app.ui.StatsHostFragment;
 import com.myonlinetime.app.ui.NotificationsHistoryFragment;
 import com.myonlinetime.app.ui.FollowsFragment;
 import com.myonlinetime.app.ui.NotificationsFragment;
 import com.myonlinetime.app.ui.ClearCacheFragment;
-import com.myonlinetime.app.ui.BackgroundsFragment; // НОВЫЙ ИМПОРТ
+import com.myonlinetime.app.ui.BackgroundsFragment;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class AppNavigator {
 
+    private static final String STATE_KEY_CURRENT_TAB = "AppNavigator.currentTabIndex";
+
     private final FragmentManager fm;
     private final int containerId;
 
-    private FeedFragment feedFragment; 
+    private FeedFragment feedFragment;
     private SearchFragment searchFragment;
-    private StatsHostFragment statsFragment; 
+    private StatsHostFragment statsFragment;
     private ProfileFragment profileFragment;
-    private SettingsFragment settingsFragment; 
+    private SettingsFragment settingsFragment;
 
     private final Map<Integer, List<Fragment>> subStacks = new HashMap<>();
-    
+
     private int currentTabIndex = -1;
     private long lastSubScreenOpenTime = 0;
 
     public AppNavigator(AppCompatActivity activity, int containerId) {
+        this(activity, containerId, null);
+    }
+
+    public AppNavigator(AppCompatActivity activity, int containerId, @Nullable Bundle savedInstanceState) {
         this.fm = activity.getSupportFragmentManager();
         this.containerId = containerId;
 
-        feedFragment = (FeedFragment) fm.findFragmentByTag("FEED");
-        searchFragment = (SearchFragment) fm.findFragmentByTag("SEARCH");
-        statsFragment = (StatsHostFragment) fm.findFragmentByTag("STATS"); 
-        profileFragment = (ProfileFragment) fm.findFragmentByTag("PROFILE");
+        feedFragment     = (FeedFragment)     fm.findFragmentByTag("FEED");
+        searchFragment   = (SearchFragment)   fm.findFragmentByTag("SEARCH");
+        statsFragment    = (StatsHostFragment)fm.findFragmentByTag("STATS");
+        profileFragment  = (ProfileFragment)  fm.findFragmentByTag("PROFILE");
         settingsFragment = (SettingsFragment) fm.findFragmentByTag("SETTINGS");
-        
-        for (int tab = 0; tab <= 5; tab++) {
-            List<Fragment> stack = new ArrayList<>();
-            for (int depth = 0; depth < 10; depth++) {
-                Fragment sub = fm.findFragmentByTag("SUB_" + tab + "_" + depth);
-                if (sub != null) {
-                    stack.add(sub);
-                } else {
-                    break;
+
+        // Восстанавливаем сабы НЕ угадыванием тегов, а перечислением всех фрагментов,
+        // что лежат в FM, и сортировкой по depth, зашитому в тег.
+        Map<Integer, List<Fragment>> tmp = new HashMap<>();
+        for (Fragment f : fm.getFragments()) {
+            if (f == null) continue;
+            String tag = f.getTag();
+            if (tag == null || !tag.startsWith("SUB_")) continue;
+            int[] td = parseSubTag(tag);
+            if (td == null) continue;
+            int tab = td[0];
+            List<Fragment> list = tmp.get(tab);
+            if (list == null) { list = new ArrayList<>(); tmp.put(tab, list); }
+            list.add(f);
+        }
+        for (Map.Entry<Integer, List<Fragment>> e : tmp.entrySet()) {
+            Collections.sort(e.getValue(), new Comparator<Fragment>() {
+                @Override public int compare(Fragment a, Fragment b) {
+                    int da = parseSubTag(a.getTag())[1];
+                    int db = parseSubTag(b.getTag())[1];
+                    return Integer.compare(da, db);
                 }
-            }
-            if (!stack.isEmpty()) {
-                subStacks.put(tab, stack);
-            }
+            });
+            subStacks.put(e.getKey(), e.getValue());
+        }
+
+        if (savedInstanceState != null) {
+            currentTabIndex = savedInstanceState.getInt(STATE_KEY_CURRENT_TAB, -1);
         }
     }
 
-    public int getCurrentTabIndex() {
-        return currentTabIndex;
+    /** Вызывать из MainActivity.onSaveInstanceState. */
+    public void onSaveInstanceState(Bundle outState) {
+        outState.putInt(STATE_KEY_CURRENT_TAB, currentTabIndex);
     }
 
-    // === Визуальное расположение кнопок на нижней панели ===
-    // Порядок: Feed(0), Search(1), Profile(4), Time(3), Settings(5)
+    private static String subTag(int tab, int depth) {
+        return "SUB_" + tab + "_" + depth;
+    }
+
+    private static int[] parseSubTag(String tag) {
+        if (tag == null || !tag.startsWith("SUB_")) return null;
+        String[] parts = tag.split("_");
+        if (parts.length != 3) return null;
+        try {
+            return new int[] { Integer.parseInt(parts[1]), Integer.parseInt(parts[2]) };
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    public int getCurrentTabIndex() { return currentTabIndex; }
+
+    // Визуальный порядок кнопок: Feed(0), Search(1), Profile(4), Time(3), Settings(5)
     private int getVisualIndex(int tabIndex) {
-        switch(tabIndex) {
-            case 0: return 0; // Лента
-            case 1: return 1; // Поиск
-            case 4: return 2; // Наш профиль (ВИЗУАЛЬНО он левее Времени)
-            case 3: return 3; // Время (Usage)
-            case 5: return 4; // Настройки
+        switch (tabIndex) {
+            case 0: return 0;
+            case 1: return 1;
+            case 4: return 2;
+            case 3: return 3;
+            case 5: return 4;
             default: return tabIndex;
         }
     }
 
     public void openSubScreen(Fragment fragment) {
-        if (SystemClock.elapsedRealtime() - lastSubScreenOpenTime < 500) {
-            return; 
-        }
+        if (SystemClock.elapsedRealtime() - lastSubScreenOpenTime < 500) return;
         lastSubScreenOpenTime = SystemClock.elapsedRealtime();
 
-        List<Fragment> stack = subStacks.get(currentTabIndex);
-        if (stack == null) {
-            stack = new ArrayList<>();
-            subStacks.put(currentTabIndex, stack);
-        }
+        // На случай, если sub открыли до switchScreen — кладём в текущий таб (или 0, если ничего ещё не выбрано).
+        int tab = currentTabIndex >= 0 ? currentTabIndex : 0;
+
+        List<Fragment> stack = subStacks.get(tab);
+        if (stack == null) { stack = new ArrayList<>(); subStacks.put(tab, stack); }
 
         if (!stack.isEmpty()) {
             Fragment currentTop = stack.get(stack.size() - 1);
-            if (currentTop.getClass().equals(fragment.getClass())) {
-                return;
-            }
+            if (currentTop.getClass().equals(fragment.getClass())) return;
         }
 
         FragmentTransaction ft = fm.beginTransaction();
-        
-        // === Эти экраны ВСЕГДА выезжают справа ===
-        if (fragment instanceof OtherProfileFragment || 
-            fragment instanceof NotificationsHistoryFragment || 
+
+        if (fragment instanceof OtherProfileFragment ||
+            fragment instanceof NotificationsHistoryFragment ||
             fragment instanceof FollowsFragment ||
             fragment instanceof NotificationsFragment ||
             fragment instanceof ClearCacheFragment ||
-            fragment instanceof BackgroundsFragment) { // ДОБАВЛЕНО ИСКЛЮЧЕНИЕ
-            ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left, R.anim.slide_in_left, R.anim.slide_out_right);
+            fragment instanceof BackgroundsFragment) {
+            ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left,
+                                   R.anim.slide_in_left,  R.anim.slide_out_right);
         } else {
-            // Все остальные экраны выезжают снизу
-            ft.setCustomAnimations(R.anim.slide_in_up, android.R.anim.fade_out, android.R.anim.fade_in, R.anim.slide_out_down);
+            ft.setCustomAnimations(R.anim.slide_in_up, android.R.anim.fade_out,
+                                   android.R.anim.fade_in, R.anim.slide_out_down);
         }
-        
+
         hideAll(ft);
 
-        ft.add(containerId, fragment, "SUB_" + currentTabIndex + "_" + stack.size());
+        ft.add(containerId, fragment, subTag(tab, stack.size()));
         stack.add(fragment);
-        
+
         ft.commit();
     }
 
     public boolean closeSubScreen() {
         List<Fragment> stack = subStacks.get(currentTabIndex);
-        
-        if (stack == null || stack.isEmpty()) {
-            return false;
-        }
+        if (stack == null || stack.isEmpty()) return false;
 
         FragmentTransaction ft = fm.beginTransaction();
-        
+
         Fragment topFragment = stack.get(stack.size() - 1);
-        
-        // === Эти экраны ВСЕГДА уезжают вправо ===
-        if (topFragment instanceof OtherProfileFragment || 
-            topFragment instanceof NotificationsHistoryFragment || 
+
+        if (topFragment instanceof OtherProfileFragment ||
+            topFragment instanceof NotificationsHistoryFragment ||
             topFragment instanceof FollowsFragment ||
             topFragment instanceof NotificationsFragment ||
             topFragment instanceof ClearCacheFragment ||
-            topFragment instanceof BackgroundsFragment) { // ДОБАВЛЕНО ИСКЛЮЧЕНИЕ
+            topFragment instanceof BackgroundsFragment) {
             ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
         } else {
             ft.setCustomAnimations(android.R.anim.fade_in, R.anim.slide_out_down);
         }
-        
+
         stack.remove(stack.size() - 1);
-        ft.remove(topFragment); 
-        
+        ft.remove(topFragment);
+
         if (stack.isEmpty()) {
             showMainTab(currentTabIndex, ft);
         } else {
             ft.show(stack.get(stack.size() - 1));
         }
-        
+
         ft.commit();
         return true;
     }
@@ -167,10 +200,8 @@ public class AppNavigator {
         FragmentTransaction ft = fm.beginTransaction();
 
         if (currentTabIndex != -1) {
-            // Математика переходов опирается на ВИЗУАЛЬНЫЙ индекс
-            int visualTarget = getVisualIndex(tabIndex);
+            int visualTarget  = getVisualIndex(tabIndex);
             int visualCurrent = getVisualIndex(currentTabIndex);
-            
             if (visualTarget > visualCurrent) {
                 ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left);
             } else {
@@ -182,7 +213,6 @@ public class AppNavigator {
         hideAll(ft);
 
         List<Fragment> stack = subStacks.get(tabIndex);
-        
         if (stack != null && !stack.isEmpty()) {
             ft.show(stack.get(stack.size() - 1));
         } else {
@@ -193,17 +223,16 @@ public class AppNavigator {
     }
 
     private void hideAll(FragmentTransaction ft) {
-        if (feedFragment != null) ft.hide(feedFragment);
-        if (searchFragment != null) ft.hide(searchFragment);
-        if (statsFragment != null) ft.hide(statsFragment);
-        if (profileFragment != null) ft.hide(profileFragment);
-        if (settingsFragment != null) ft.hide(settingsFragment); 
-        
+        if (feedFragment     != null && !feedFragment.isHidden())     ft.hide(feedFragment);
+        if (searchFragment   != null && !searchFragment.isHidden())   ft.hide(searchFragment);
+        if (statsFragment    != null && !statsFragment.isHidden())    ft.hide(statsFragment);
+        if (profileFragment  != null && !profileFragment.isHidden())  ft.hide(profileFragment);
+        if (settingsFragment != null && !settingsFragment.isHidden()) ft.hide(settingsFragment);
+
         for (List<Fragment> stack : subStacks.values()) {
+            if (stack == null) continue;
             for (Fragment sub : stack) {
-                if (sub != null && !sub.isHidden()) {
-                    ft.hide(sub);
-                }
+                if (sub != null && !sub.isHidden()) ft.hide(sub);
             }
         }
     }
@@ -211,33 +240,29 @@ public class AppNavigator {
     private void showMainTab(int index, FragmentTransaction ft, String uid) {
         if (index == 0) {
             if (feedFragment == null) {
-                feedFragment = new FeedFragment(); 
+                feedFragment = new FeedFragment();
                 ft.add(containerId, feedFragment, "FEED");
             }
             ft.show(feedFragment);
-        } 
-        else if (index == 1) {
+        } else if (index == 1) {
             if (searchFragment == null) {
                 searchFragment = new SearchFragment();
                 ft.add(containerId, searchFragment, "SEARCH");
             }
             ft.show(searchFragment);
-        } 
-        else if (index == 3) {
+        } else if (index == 3) {
             if (statsFragment == null) {
-                statsFragment = new StatsHostFragment(); 
+                statsFragment = new StatsHostFragment();
                 ft.add(containerId, statsFragment, "STATS");
             }
             ft.show(statsFragment);
-        } 
-        else if (index == 4) {
+        } else if (index == 4) {
             if (profileFragment == null) {
                 profileFragment = ProfileFragment.newInstance(uid);
                 ft.add(containerId, profileFragment, "PROFILE");
             }
             ft.show(profileFragment);
-        }
-        else if (index == 5) {
+        } else if (index == 5) {
             if (settingsFragment == null) {
                 settingsFragment = new SettingsFragment();
                 ft.add(containerId, settingsFragment, "SETTINGS");
@@ -245,7 +270,7 @@ public class AppNavigator {
             ft.show(settingsFragment);
         }
     }
-    
+
     private void showMainTab(int index, FragmentTransaction ft) {
         showMainTab(index, ft, null);
     }
@@ -258,11 +283,10 @@ public class AppNavigator {
     public void preloadProfile(String uid) {
         if (profileFragment == null) {
             profileFragment = ProfileFragment.newInstance(uid);
-            
             fm.beginTransaction()
               .add(containerId, profileFragment, "PROFILE")
               .commitAllowingStateLoss();
-              
+
             new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
                 try {
                     fm.beginTransaction().hide(profileFragment).commitAllowingStateLoss();
@@ -274,11 +298,10 @@ public class AppNavigator {
     public void preloadStats() {
         if (statsFragment == null) {
             statsFragment = new StatsHostFragment();
-            
             fm.beginTransaction()
               .add(containerId, statsFragment, "STATS")
               .commitAllowingStateLoss();
-              
+
             new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
                 try {
                     fm.beginTransaction().hide(statsFragment).commitAllowingStateLoss();
