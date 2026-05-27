@@ -1,12 +1,15 @@
 package com.myonlinetime.app.ui;
 
+import android.animation.Animator;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -15,14 +18,18 @@ import android.text.Editable;
 import android.text.InputFilter;
 import android.text.Spanned;
 import android.text.TextWatcher;
+import android.view.animation.Animation;
 import android.view.inputmethod.InputMethodManager;
 import com.myonlinetime.app.utils.Utils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.signature.ObjectKey;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -45,7 +52,6 @@ public class EditProfileFragment extends Fragment {
 
     public static volatile boolean isProfileUploading = false;
     public static long lastProfileSyncTime = 0;
-
     public static volatile long currentUploadGeneration = 0;
 
     private File pendingPhotoFile = null;
@@ -54,8 +60,11 @@ public class EditProfileFragment extends Fragment {
     private long currentPhotoSelectionId = 0;
     private long currentBgSelectionId = 0;
 
-    // True только когда мы фактически подсветили preview-фон. Влияет на clearPreviewBackground.
-    private boolean previewWasApplied = false;
+    // === ГИБРИДНЫЙ INLINE-ФОН ===
+    // Прозрачный при открытии/закрытии относительно ProfileFragment (под нами есть фон).
+    // Непрозрачный при переключении на другой таб (чтобы фон ехал вместе с фрагментом).
+    private ImageView editBgImageView;
+    private String myUid = "";
 
     private static long penaltyEndTime = 0;
     private static final java.util.LinkedList<Long> textAttemptTimes = new java.util.LinkedList<>();
@@ -102,13 +111,11 @@ public class EditProfileFragment extends Fragment {
 
     private boolean isActionSpam(boolean isMedia) {
         long now = System.currentTimeMillis();
-
         if (now < penaltyEndTime) {
             penaltyEndTime = now + 30000;
             if (getActivity() != null) Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
             return true;
         }
-
         if (isMedia) {
             mediaAttemptTimes.add(now);
             while (!mediaAttemptTimes.isEmpty() && now - mediaAttemptTimes.getFirst() > 10000) mediaAttemptTimes.removeFirst();
@@ -121,7 +128,6 @@ public class EditProfileFragment extends Fragment {
         } else {
             textAttemptTimes.add(now);
             while (!textAttemptTimes.isEmpty() && now - textAttemptTimes.getFirst() > 5000) textAttemptTimes.removeFirst();
-
             if (textAttemptTimes.size() > 5) {
                 penaltyEndTime = now + 30000;
                 textAttemptTimes.clear();
@@ -140,16 +146,29 @@ public class EditProfileFragment extends Fragment {
             LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_EDIT_PROFILE_OPENED"));
         }
 
-        final View view = inflater.inflate(R.layout.layout_edit_profile, container, false);
-        // Никаких опаковых фоновых заливок на корне фрагмента — иначе кадр редактирования
-        // перекроет глобальный фон при любой неувязке с прозрачностью.
+        // FrameLayout-обёртка с собственным inline-фоном (mirror ProfileFragment).
+        final FrameLayout wrapper = new FrameLayout(requireContext());
+        wrapper.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        editBgImageView = new ImageView(requireContext());
+        editBgImageView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        editBgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        // СТАРТ — ПРОЗРАЧНЫЙ. Под нами лежит ProfileFragment со своим фоном.
+        // Никаких initial ColorDrawable — пусть будет null, иначе будет серая заливка.
+        editBgImageView.setImageDrawable(null);
+
+        final View view = inflater.inflate(R.layout.layout_edit_profile, wrapper, false);
         view.setBackground(null);
 
-        if (activity == null) return view;
+        wrapper.addView(editBgImageView, 0);
+        wrapper.addView(view, 1);
+
+        if (activity == null) return wrapper;
         setupHeader(activity);
 
         final GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
-        if (acct == null) return view;
+        if (acct == null) return wrapper;
+        myUid = acct.getId();
 
         final String initialName = getArguments() != null ? getArguments().getString("CURRENT_NAME", "") : "";
         final String initialAbout = getArguments() != null ? getArguments().getString("CURRENT_ABOUT", "") : "";
@@ -198,7 +217,7 @@ public class EditProfileFragment extends Fragment {
             Glide.with(activity)
                     .load(new File(customAvatarPath))
                     .skipMemoryCache(true)
-                    .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
+                    .diskCacheStrategy(DiskCacheStrategy.NONE)
                     .circleCrop()
                     .into(avatarPreview);
         } else {
@@ -210,7 +229,7 @@ public class EditProfileFragment extends Fragment {
                     try {
                         byte[] bytes = android.util.Base64.decode(savedAvatar, android.util.Base64.DEFAULT);
                         Glide.with(activity).load(bytes).circleCrop().into(avatarPreview);
-                    } catch (Exception e){}
+                    } catch (Exception e) {}
                 }
             }
         }
@@ -307,14 +326,18 @@ public class EditProfileFragment extends Fragment {
                         activity.updateAvatarInUI();
                     }
 
-                    // Сначала просим Activity подгрузить новый сохранённый фон в globalImageView —
-                    // плавно, через listener: preview останется виден до момента, когда новая
-                    // картинка реально готова.
-                    activity.updateGlobalBackground(true);
-                    // Только теперь сбрасываем previewBgPath (clearPreviewBackground сам решит,
-                    // что делать; globalImageView у нас уже грузится).
-                    previewWasApplied = false;
-                    activity.clearPreviewBackground();
+                    if (finalBgFile != null) {
+                        // Плавно обновляем global ImageView, чтобы под нами уже был свежий фон,
+                        // когда EditProfile уедет вниз.
+                        activity.updateGlobalBackground(true);
+                    }
+
+                    // ВАЖНО: перед close очищаем editBg — slide-down не должен показывать
+                    // выбранный preview поверх уже обновлённого фона Profile (двойное наложение).
+                    // pendingBgFile занулим, чтобы onCreateAnimation корректно очистил editBg.
+                    pendingBgFile = null;
+                    pendingPhotoFile = null;
+                    if (editBgImageView != null) editBgImageView.setImageDrawable(null);
 
                     activity.navigator.closeSubScreen();
                     LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
@@ -347,7 +370,6 @@ public class EditProfileFragment extends Fragment {
                         }
                         @Override public void onError(String error) {
                             if (myGeneration != currentUploadGeneration) return;
-
                             new Handler(Looper.getMainLooper()).post(() -> {
                                 String displayError = activity.getString(R.string.err_server);
                                 try {
@@ -372,7 +394,57 @@ public class EditProfileFragment extends Fragment {
             });
         });
 
-        return view;
+        return wrapper;
+    }
+
+    /**
+     * Грузит актуальный фон пользователя из prefs в editBgImageView.
+     * Вызывается ТОЛЬКО когда фрагмент уходит на другой таб через hide(),
+     * чтобы при slide-анимации фон ехал вместе с фрагментом.
+     */
+    private void loadInitialBgIntoOwnView(MainActivity activity, String uid) {
+        if (editBgImageView == null) return;
+
+        SharedPreferences appPrefs = activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
+        boolean isGlobalEnabled = appPrefs.getBoolean("bg_global_enabled", true);
+        boolean isMyProfileEnabled = appPrefs.getBoolean("bg_my_profile_enabled", true);
+        boolean isMyImagesEnabled = appPrefs.getBoolean("bg_my_images_enabled", true);
+        boolean isMyGifsEnabled = appPrefs.getBoolean("bg_my_gifs_enabled", true);
+
+        String bgPath = activity.prefs.getString("custom_bg_path_" + uid, null);
+        String remoteBg = activity.prefs.getString("my_bg_base64", null);
+
+        String targetPath = null;
+        if (bgPath != null && new File(bgPath).exists()) targetPath = bgPath;
+        else if (remoteBg != null && remoteBg.startsWith("http")) targetPath = remoteBg;
+
+        if (!isGlobalEnabled || !isMyProfileEnabled || targetPath == null) {
+            editBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
+            return;
+        }
+
+        boolean isGif = targetPath.toLowerCase().endsWith(".gif");
+        if (isGif && !isMyGifsEnabled) {
+            editBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
+            return;
+        }
+        if (!isGif && !isMyImagesEnabled) {
+            editBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
+            return;
+        }
+
+        if (targetPath.startsWith("http")) {
+            Glide.with(this).load(targetPath).dontAnimate().centerCrop().into(editBgImageView);
+        } else {
+            File f = new File(targetPath);
+            Glide.with(this)
+                    .load(f)
+                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .signature(new ObjectKey(f.lastModified()))
+                    .dontAnimate()
+                    .centerCrop()
+                    .into(editBgImageView);
+        }
     }
 
     private void executeFinalUpload(String token, String targetUid, String nickname, String about, File photo, File bg, long ticket, long generation, MainActivity activity) {
@@ -383,7 +455,6 @@ public class EditProfileFragment extends Fragment {
                     cleanupFiles(photo, bg);
                     return;
                 }
-
                 try {
                     JSONObject json = new JSONObject(result);
                     if ("ignored".equals(json.optString("status"))) {
@@ -422,6 +493,7 @@ public class EditProfileFragment extends Fragment {
                 } catch (Exception ignored) {}
                 finally { cleanupFiles(photo, bg); }
             }
+
             @Override public void onError(String error) {
                 if (generation == currentUploadGeneration) {
                     EditProfileFragment.isProfileUploading = false;
@@ -500,9 +572,17 @@ public class EditProfileFragment extends Fragment {
                         ImageView avatarPreview = getView() != null ? getView().findViewById(R.id.edit_avatar_preview) : null;
                         if (avatarPreview != null) Glide.with(this).load(tempFile).circleCrop().into(avatarPreview);
                     } else {
+                        // Грузим выбранный фон в свой inline editBgImageView (он становится непрозрачным).
                         pendingBgFile = tempFile;
-                        activity.previewBackground(tempFile.getAbsolutePath());
-                        previewWasApplied = true;
+                        if (editBgImageView != null) {
+                            Glide.with(this)
+                                    .load(tempFile)
+                                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                                    .signature(new ObjectKey(tempFile.lastModified()))
+                                    .dontAnimate()
+                                    .centerCrop()
+                                    .into(editBgImageView);
+                        }
                     }
                 });
             } catch (Exception e) {}
@@ -518,6 +598,48 @@ public class EditProfileFragment extends Fragment {
         }
     }
 
+    // =========================================================================
+    // ГИБРИДНАЯ ПРОЗРАЧНОСТЬ INLINE-ФОНА
+    // =========================================================================
+
+    // Вызывается перед XML-анимацией (R.anim.*)
+    @Override
+    public android.view.animation.Animation onCreateAnimation(int transit, boolean enter, int nextAnim) {
+        applyBgVisibilityForAnimation(enter);
+        return super.onCreateAnimation(transit, enter, nextAnim);
+    }
+
+    // Вызывается перед Animator-анимацией (objectAnimator) — на случай если AppNavigator использует именно их
+    @Override
+    public Animator onCreateAnimator(int transit, boolean enter, int nextAnim) {
+        applyBgVisibilityForAnimation(enter);
+        return super.onCreateAnimator(transit, enter, nextAnim);
+    }
+
+    /**
+     * Управляет прозрачностью editBgImageView на момент анимаций фрагмента.
+     *
+     * — enter=true  (slide-up из Profile или slide-in при возврате на таб):
+     *     если pendingBgFile == null → делаем editBg прозрачным.
+     *     Под нами ProfileFragment со своим фоном — никакого двойного наложения.
+     *
+     * — enter=false и !isHidden() (slide-down при closeSubScreen = ft.remove):
+     *     если pendingBgFile == null → делаем editBg прозрачным.
+     *     При закрытии EditProfile «уезжают» только UI-элементы, фон Profile остаётся на месте.
+     *
+     * — enter=false и isHidden()  (slide на другой таб = ft.hide):
+     *     ничего не трогаем. На этот момент editBg уже наполнен в onHiddenChanged(true)
+     *     фоном Profile (см. ниже) — фон уезжает вместе с EditProfile = эффект галереи.
+     */
+    private void applyBgVisibilityForAnimation(boolean enter) {
+        if (editBgImageView == null) return;
+        if (enter) {
+            if (pendingBgFile == null) editBgImageView.setImageDrawable(null);
+        } else if (!isHidden()) {
+            if (pendingBgFile == null) editBgImageView.setImageDrawable(null);
+        }
+    }
+
     @Override
     public void onDestroyView() {
         super.onDestroyView();
@@ -526,44 +648,40 @@ public class EditProfileFragment extends Fragment {
             cleanupTempCacheDir(activity);
             LocalBroadcastManager.getInstance(requireContext()).sendBroadcast(new Intent("ACTION_EDIT_PROFILE_CLOSED"));
 
-            // Сбрасываем preview ТОЛЬКО если он действительно был применён.
-            // Это убирает баг «после нескольких циклов фон уходит» — мы не дёргаем
-            // глобальное состояние, если пользователь ничего не менял.
-            if (previewWasApplied) {
-                previewWasApplied = false;
-                activity.clearPreviewBackground();
-            }
-
-            // Заголовок аккуратно перезагрузим, если мы вернулись на корневой экран таба.
             if (!activity.navigator.hasSubScreen()) {
                 activity.headerManager.resetHeader();
             }
-
-            // НИКАКИХ postDelayed updateGlobalBackground(false) — целевой фрагмент
-            // сам управляет своим фоном. Иначе через 400 мс мы гасим фон уже на
-            // соседнем экране, и он остаётся пустым до следующего тапа по навигации.
         }
+        editBgImageView = null;
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        // Жёстко включать/выключать фон здесь не надо — за это отвечает MainActivity
-        // и updateGlobalBackground через свой listener-механизм.
+        // Не трогаем глобальный фон — за inline-фон отвечаем сами, за глобальный — Activity.
     }
 
     @Override
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
-        if (getActivity() instanceof MainActivity) {
-            MainActivity activity = (MainActivity) getActivity();
-            if (!hidden) {
-                setupHeader(activity);
-                // Если у нас всё ещё активен preview — снова попросим Activity
-                // его применить (плавно, без моргания).
-                if (previewWasApplied && pendingBgFile != null) {
-                    activity.previewBackground(pendingBgFile.getAbsolutePath());
-                }
+        MainActivity activity = (MainActivity) getActivity();
+        if (activity == null) return;
+
+        if (hidden) {
+            // === УХОДИМ НА ДРУГОЙ ТАБ через ft.hide() ===
+            // Нужен непрозрачный фон, чтобы slide-анимация показала эффект «листания галереи»
+            // (фон едет вместе с фрагментом, как у ProfileFragment).
+            // Это делаем ДО старта анимации hide (onHiddenChanged вызывается синхронно с commit).
+            if (pendingBgFile == null) {
+                loadInitialBgIntoOwnView(activity, myUid);
+            }
+        } else {
+            // === ВЕРНУЛИСЬ ОБРАТНО на этот таб ===
+            // Под нами снова виден ProfileFragment — делаем editBg прозрачным,
+            // если пользователь не выбрал новый фон.
+            setupHeader(activity);
+            if (pendingBgFile == null && editBgImageView != null) {
+                editBgImageView.setImageDrawable(null);
             }
         }
     }
