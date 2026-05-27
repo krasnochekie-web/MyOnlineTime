@@ -166,33 +166,11 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
 
-        // 1) Если на текущей вкладке открыт саб — спрячем его (НЕ удаляя!) с его "родной"
-        //    exit-анимацией: вправо для right-slide субов, вниз — для bottom-slide.
-        //    Саб остаётся в subStacks и вернётся, когда юзер тапнет эту вкладку снова.
-        Fragment activeSubOnSource = null;
-        List<Fragment> sourceStack = subStacks.get(currentTabIndex);
-        if (sourceStack != null && !sourceStack.isEmpty()) {
-            Fragment top = sourceStack.get(sourceStack.size() - 1);
-            if (top != null && !top.isHidden()) {
-                activeSubOnSource = top;
-            }
-        }
-
-        if (activeSubOnSource != null) {
-            if (activeSubOnSource instanceof OtherProfileFragment ||
-                    activeSubOnSource instanceof NotificationsHistoryFragment ||
-                    activeSubOnSource instanceof FollowsFragment ||
-                    activeSubOnSource instanceof NotificationsFragment ||
-                    activeSubOnSource instanceof ClearCacheFragment ||
-                    activeSubOnSource instanceof BackgroundsFragment) {
-                ft.setCustomAnimations(0, R.anim.slide_out_right);
-            } else {
-                ft.setCustomAnimations(0, R.anim.slide_out_down);
-            }
-            ft.hide(activeSubOnSource);
-        }
-
-        // 2) Анимация смены табов (опирается на ВИЗУАЛЬНЫЙ индекс)
+        // Анимация смены табов — опирается на ВИЗУАЛЬНЫЙ индекс.
+        // Активный саб на исходной вкладке (если есть) НЕ удаляем и НЕ играем ему
+        // отдельной "родной" exit-анимации. Он считается частью своей вкладки
+        // и уедет вместе со всем её содержимым в ту же сторону, что и tab-switch.
+        // Когда юзер вернётся на эту вкладку — саб снова покажется (он остался в subStacks).
         if (currentTabIndex != -1) {
             int visualTarget = getVisualIndex(tabIndex);
             int visualCurrent = getVisualIndex(currentTabIndex);
@@ -205,11 +183,8 @@ public class AppNavigator {
         }
         currentTabIndex = tabIndex;
 
-        // 3) Прячем всё остальное (саб исходной вкладки уже спрятан выше — пропускаем его,
-        //    чтобы не накладывать вторую анимацию на тот же фрагмент).
-        hideAll(ft, activeSubOnSource);
+        hideAll(ft);
 
-        // 4) Показываем то, что должно быть на целевой вкладке
         List<Fragment> stack = subStacks.get(tabIndex);
 
         if (stack != null && !stack.isEmpty()) {
@@ -222,19 +197,15 @@ public class AppNavigator {
     }
 
     private void hideAll(FragmentTransaction ft) {
-        hideAll(ft, null);
-    }
-
-    private void hideAll(FragmentTransaction ft, Fragment skip) {
-        if (feedFragment     != null && feedFragment     != skip && !feedFragment.isHidden())     ft.hide(feedFragment);
-        if (searchFragment   != null && searchFragment   != skip && !searchFragment.isHidden())   ft.hide(searchFragment);
-        if (statsFragment    != null && statsFragment    != skip && !statsFragment.isHidden())    ft.hide(statsFragment);
-        if (profileFragment  != null && profileFragment  != skip && !profileFragment.isHidden())  ft.hide(profileFragment);
-        if (settingsFragment != null && settingsFragment != skip && !settingsFragment.isHidden()) ft.hide(settingsFragment);
+        if (feedFragment != null && !feedFragment.isHidden())         ft.hide(feedFragment);
+        if (searchFragment != null && !searchFragment.isHidden())     ft.hide(searchFragment);
+        if (statsFragment != null && !statsFragment.isHidden())       ft.hide(statsFragment);
+        if (profileFragment != null && !profileFragment.isHidden())   ft.hide(profileFragment);
+        if (settingsFragment != null && !settingsFragment.isHidden()) ft.hide(settingsFragment);
 
         for (List<Fragment> stack : subStacks.values()) {
             for (Fragment sub : stack) {
-                if (sub != null && sub != skip && !sub.isHidden()) {
+                if (sub != null && !sub.isHidden()) {
                     ft.hide(sub);
                 }
             }
