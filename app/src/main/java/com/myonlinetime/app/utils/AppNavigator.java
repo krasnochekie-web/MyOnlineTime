@@ -9,15 +9,15 @@ import androidx.fragment.app.FragmentTransaction;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.ui.FeedFragment;
 import com.myonlinetime.app.ui.ProfileFragment;
-import com.myonlinetime.app.ui.OtherProfileFragment; 
+import com.myonlinetime.app.ui.OtherProfileFragment;
 import com.myonlinetime.app.ui.SearchFragment;
-import com.myonlinetime.app.ui.SettingsFragment; 
-import com.myonlinetime.app.ui.StatsHostFragment; 
+import com.myonlinetime.app.ui.SettingsFragment;
+import com.myonlinetime.app.ui.StatsHostFragment;
 import com.myonlinetime.app.ui.NotificationsHistoryFragment;
 import com.myonlinetime.app.ui.FollowsFragment;
 import com.myonlinetime.app.ui.NotificationsFragment;
 import com.myonlinetime.app.ui.ClearCacheFragment;
-import com.myonlinetime.app.ui.BackgroundsFragment; // НОВЫЙ ИМПОРТ
+import com.myonlinetime.app.ui.BackgroundsFragment;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,14 +29,14 @@ public class AppNavigator {
     private final FragmentManager fm;
     private final int containerId;
 
-    private FeedFragment feedFragment; 
+    private FeedFragment feedFragment;
     private SearchFragment searchFragment;
-    private StatsHostFragment statsFragment; 
+    private StatsHostFragment statsFragment;
     private ProfileFragment profileFragment;
-    private SettingsFragment settingsFragment; 
+    private SettingsFragment settingsFragment;
 
     private final Map<Integer, List<Fragment>> subStacks = new HashMap<>();
-    
+
     private int currentTabIndex = -1;
     private long lastSubScreenOpenTime = 0;
 
@@ -46,10 +46,10 @@ public class AppNavigator {
 
         feedFragment = (FeedFragment) fm.findFragmentByTag("FEED");
         searchFragment = (SearchFragment) fm.findFragmentByTag("SEARCH");
-        statsFragment = (StatsHostFragment) fm.findFragmentByTag("STATS"); 
+        statsFragment = (StatsHostFragment) fm.findFragmentByTag("STATS");
         profileFragment = (ProfileFragment) fm.findFragmentByTag("PROFILE");
         settingsFragment = (SettingsFragment) fm.findFragmentByTag("SETTINGS");
-        
+
         for (int tab = 0; tab <= 5; tab++) {
             List<Fragment> stack = new ArrayList<>();
             for (int depth = 0; depth < 10; depth++) {
@@ -85,7 +85,7 @@ public class AppNavigator {
 
     public void openSubScreen(Fragment fragment) {
         if (SystemClock.elapsedRealtime() - lastSubScreenOpenTime < 500) {
-            return; 
+            return;
         }
         lastSubScreenOpenTime = SystemClock.elapsedRealtime();
 
@@ -103,60 +103,60 @@ public class AppNavigator {
         }
 
         FragmentTransaction ft = fm.beginTransaction();
-        
+
         // === Эти экраны ВСЕГДА выезжают справа ===
-        if (fragment instanceof OtherProfileFragment || 
-            fragment instanceof NotificationsHistoryFragment || 
-            fragment instanceof FollowsFragment ||
-            fragment instanceof NotificationsFragment ||
-            fragment instanceof ClearCacheFragment ||
-            fragment instanceof BackgroundsFragment) { // ДОБАВЛЕНО ИСКЛЮЧЕНИЕ
+        if (fragment instanceof OtherProfileFragment ||
+                fragment instanceof NotificationsHistoryFragment ||
+                fragment instanceof FollowsFragment ||
+                fragment instanceof NotificationsFragment ||
+                fragment instanceof ClearCacheFragment ||
+                fragment instanceof BackgroundsFragment) {
             ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left, R.anim.slide_in_left, R.anim.slide_out_right);
         } else {
             // Все остальные экраны выезжают снизу
             ft.setCustomAnimations(R.anim.slide_in_up, android.R.anim.fade_out, android.R.anim.fade_in, R.anim.slide_out_down);
         }
-        
+
         hideAll(ft);
 
         ft.add(containerId, fragment, "SUB_" + currentTabIndex + "_" + stack.size());
         stack.add(fragment);
-        
+
         ft.commit();
     }
 
     public boolean closeSubScreen() {
         List<Fragment> stack = subStacks.get(currentTabIndex);
-        
+
         if (stack == null || stack.isEmpty()) {
             return false;
         }
 
         FragmentTransaction ft = fm.beginTransaction();
-        
+
         Fragment topFragment = stack.get(stack.size() - 1);
-        
+
         // === Эти экраны ВСЕГДА уезжают вправо ===
-        if (topFragment instanceof OtherProfileFragment || 
-            topFragment instanceof NotificationsHistoryFragment || 
-            topFragment instanceof FollowsFragment ||
-            topFragment instanceof NotificationsFragment ||
-            topFragment instanceof ClearCacheFragment ||
-            topFragment instanceof BackgroundsFragment) { // ДОБАВЛЕНО ИСКЛЮЧЕНИЕ
+        if (topFragment instanceof OtherProfileFragment ||
+                topFragment instanceof NotificationsHistoryFragment ||
+                topFragment instanceof FollowsFragment ||
+                topFragment instanceof NotificationsFragment ||
+                topFragment instanceof ClearCacheFragment ||
+                topFragment instanceof BackgroundsFragment) {
             ft.setCustomAnimations(R.anim.slide_in_left, R.anim.slide_out_right);
         } else {
             ft.setCustomAnimations(android.R.anim.fade_in, R.anim.slide_out_down);
         }
-        
+
         stack.remove(stack.size() - 1);
-        ft.remove(topFragment); 
-        
+        ft.remove(topFragment);
+
         if (stack.isEmpty()) {
             showMainTab(currentTabIndex, ft);
         } else {
             ft.show(stack.get(stack.size() - 1));
         }
-        
+
         ft.commit();
         return true;
     }
@@ -166,11 +166,37 @@ public class AppNavigator {
 
         FragmentTransaction ft = fm.beginTransaction();
 
+        // 1) Если на текущей вкладке открыт саб — спрячем его (НЕ удаляя!) с его "родной"
+        //    exit-анимацией: вправо для right-slide субов, вниз — для bottom-slide.
+        //    Саб остаётся в subStacks и вернётся, когда юзер тапнет эту вкладку снова.
+        Fragment activeSubOnSource = null;
+        List<Fragment> sourceStack = subStacks.get(currentTabIndex);
+        if (sourceStack != null && !sourceStack.isEmpty()) {
+            Fragment top = sourceStack.get(sourceStack.size() - 1);
+            if (top != null && !top.isHidden()) {
+                activeSubOnSource = top;
+            }
+        }
+
+        if (activeSubOnSource != null) {
+            if (activeSubOnSource instanceof OtherProfileFragment ||
+                    activeSubOnSource instanceof NotificationsHistoryFragment ||
+                    activeSubOnSource instanceof FollowsFragment ||
+                    activeSubOnSource instanceof NotificationsFragment ||
+                    activeSubOnSource instanceof ClearCacheFragment ||
+                    activeSubOnSource instanceof BackgroundsFragment) {
+                ft.setCustomAnimations(0, R.anim.slide_out_right);
+            } else {
+                ft.setCustomAnimations(0, R.anim.slide_out_down);
+            }
+            ft.hide(activeSubOnSource);
+        }
+
+        // 2) Анимация смены табов (опирается на ВИЗУАЛЬНЫЙ индекс)
         if (currentTabIndex != -1) {
-            // Математика переходов опирается на ВИЗУАЛЬНЫЙ индекс
             int visualTarget = getVisualIndex(tabIndex);
             int visualCurrent = getVisualIndex(currentTabIndex);
-            
+
             if (visualTarget > visualCurrent) {
                 ft.setCustomAnimations(R.anim.slide_in_right, R.anim.slide_out_left);
             } else {
@@ -179,10 +205,13 @@ public class AppNavigator {
         }
         currentTabIndex = tabIndex;
 
-        hideAll(ft);
+        // 3) Прячем всё остальное (саб исходной вкладки уже спрятан выше — пропускаем его,
+        //    чтобы не накладывать вторую анимацию на тот же фрагмент).
+        hideAll(ft, activeSubOnSource);
 
+        // 4) Показываем то, что должно быть на целевой вкладке
         List<Fragment> stack = subStacks.get(tabIndex);
-        
+
         if (stack != null && !stack.isEmpty()) {
             ft.show(stack.get(stack.size() - 1));
         } else {
@@ -193,15 +222,19 @@ public class AppNavigator {
     }
 
     private void hideAll(FragmentTransaction ft) {
-        if (feedFragment != null) ft.hide(feedFragment);
-        if (searchFragment != null) ft.hide(searchFragment);
-        if (statsFragment != null) ft.hide(statsFragment);
-        if (profileFragment != null) ft.hide(profileFragment);
-        if (settingsFragment != null) ft.hide(settingsFragment); 
-        
+        hideAll(ft, null);
+    }
+
+    private void hideAll(FragmentTransaction ft, Fragment skip) {
+        if (feedFragment     != null && feedFragment     != skip && !feedFragment.isHidden())     ft.hide(feedFragment);
+        if (searchFragment   != null && searchFragment   != skip && !searchFragment.isHidden())   ft.hide(searchFragment);
+        if (statsFragment    != null && statsFragment    != skip && !statsFragment.isHidden())    ft.hide(statsFragment);
+        if (profileFragment  != null && profileFragment  != skip && !profileFragment.isHidden())  ft.hide(profileFragment);
+        if (settingsFragment != null && settingsFragment != skip && !settingsFragment.isHidden()) ft.hide(settingsFragment);
+
         for (List<Fragment> stack : subStacks.values()) {
             for (Fragment sub : stack) {
-                if (sub != null && !sub.isHidden()) {
+                if (sub != null && sub != skip && !sub.isHidden()) {
                     ft.hide(sub);
                 }
             }
@@ -211,25 +244,25 @@ public class AppNavigator {
     private void showMainTab(int index, FragmentTransaction ft, String uid) {
         if (index == 0) {
             if (feedFragment == null) {
-                feedFragment = new FeedFragment(); 
+                feedFragment = new FeedFragment();
                 ft.add(containerId, feedFragment, "FEED");
             }
             ft.show(feedFragment);
-        } 
+        }
         else if (index == 1) {
             if (searchFragment == null) {
                 searchFragment = new SearchFragment();
                 ft.add(containerId, searchFragment, "SEARCH");
             }
             ft.show(searchFragment);
-        } 
+        }
         else if (index == 3) {
             if (statsFragment == null) {
-                statsFragment = new StatsHostFragment(); 
+                statsFragment = new StatsHostFragment();
                 ft.add(containerId, statsFragment, "STATS");
             }
             ft.show(statsFragment);
-        } 
+        }
         else if (index == 4) {
             if (profileFragment == null) {
                 profileFragment = ProfileFragment.newInstance(uid);
@@ -245,7 +278,7 @@ public class AppNavigator {
             ft.show(settingsFragment);
         }
     }
-    
+
     private void showMainTab(int index, FragmentTransaction ft) {
         showMainTab(index, ft, null);
     }
@@ -258,11 +291,11 @@ public class AppNavigator {
     public void preloadProfile(String uid) {
         if (profileFragment == null) {
             profileFragment = ProfileFragment.newInstance(uid);
-            
+
             fm.beginTransaction()
-              .add(containerId, profileFragment, "PROFILE")
-              .commitAllowingStateLoss();
-              
+                    .add(containerId, profileFragment, "PROFILE")
+                    .commitAllowingStateLoss();
+
             new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
                 try {
                     fm.beginTransaction().hide(profileFragment).commitAllowingStateLoss();
@@ -274,11 +307,11 @@ public class AppNavigator {
     public void preloadStats() {
         if (statsFragment == null) {
             statsFragment = new StatsHostFragment();
-            
+
             fm.beginTransaction()
-              .add(containerId, statsFragment, "STATS")
-              .commitAllowingStateLoss();
-              
+                    .add(containerId, statsFragment, "STATS")
+                    .commitAllowingStateLoss();
+
             new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
                 try {
                     fm.beginTransaction().hide(statsFragment).commitAllowingStateLoss();
