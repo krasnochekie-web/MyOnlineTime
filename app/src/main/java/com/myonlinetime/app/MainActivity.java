@@ -108,7 +108,6 @@ public class MainActivity extends AppCompatActivity {
             public void onReceive(Context context, Intent intent) {
                 if ("UPDATE_BADGE_BROADCAST".equals(intent.getAction())) {
                     updateNotificationBadge();
-                    // ТИХОЕ ОБНОВЛЕНИЕ ЛИЧНЫХ СЧЕТЧИКОВ ПРИ ПУШЕ
                     syncMyProfileSilently();
                 }
             }
@@ -204,11 +203,10 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // === NAV КНОПКИ ===
-        // Закрываем sub-screen перед сменой основной табы — чтобы EditProfile/Notifications/Follows
-        // плавно уезжали в сторону, а новый таб приезжал на освободившееся место.
+        // Сабы НЕ закрываем при смене таба — AppNavigator.switchScreen сам анимированно
+        // спрячет активный саб и покажет его обратно, когда юзер вернётся на эту вкладку.
         findViewById(R.id.nav_feed).setOnClickListener(v -> {
             if (currentTab == 0) return;
-            if (navigator != null && navigator.hasSubScreen()) navigator.closeSubScreen();
             updateNavState(0);
             navigator.switchScreen(0, null);
             syncHeaderState();
@@ -216,21 +214,18 @@ public class MainActivity extends AppCompatActivity {
 
         findViewById(R.id.nav_search).setOnClickListener(v -> {
             if (currentTab == 1) return;
-            if (navigator != null && navigator.hasSubScreen()) navigator.closeSubScreen();
             updateNavState(1);
             checkAuthAndLoad(1);
         });
 
         findViewById(R.id.nav_profile).setOnClickListener(v -> {
             if (currentTab == 4) return;
-            if (navigator != null && navigator.hasSubScreen()) navigator.closeSubScreen();
             updateNavState(4);
             checkAuthAndLoad(4);
         });
 
         findViewById(R.id.nav_usage).setOnClickListener(v -> {
             if (currentTab == 3) return;
-            if (navigator != null && navigator.hasSubScreen()) navigator.closeSubScreen();
             updateNavState(3);
             navigator.switchScreen(3, null);
             syncHeaderState();
@@ -238,7 +233,6 @@ public class MainActivity extends AppCompatActivity {
 
         findViewById(R.id.nav_settings).setOnClickListener(v -> {
             if (currentTab == 5) return;
-            if (navigator != null && navigator.hasSubScreen()) navigator.closeSubScreen();
             updateNavState(5);
             navigator.switchScreen(5, null);
             syncHeaderState();
@@ -287,7 +281,6 @@ public class MainActivity extends AppCompatActivity {
         refreshGoogleAndVpsToken(true);
     }
 
-    // === ТИХАЯ ФОНОВАЯ СИНХРОНИЗАЦИЯ ЛИЧНОГО ПРОФИЛЯ ===
     public void syncMyProfileSilently() {
         if (vpsToken == null || vpsToken.isEmpty()) return;
 
@@ -569,12 +562,6 @@ public class MainActivity extends AppCompatActivity {
         parent.addView(previewImageView, insertIndex);
     }
 
-    /**
-     * Плавная подмена фоновой картинки.
-     * Грузим новое изображение в {@code target}, при этом {@code fading} остаётся видимым ВПЛОТЬ
-     * до момента, когда Glide реально сообщит, что новая картинка готова к отрисовке.
-     * Это даёт «эффект галереи» — между фрагментами ни одного пустого кадра.
-     */
     private void loadIntoSmoothly(final ImageView target, final ImageView fading, final Object src) {
         if (target == null || src == null) return;
         Glide.with(this)
@@ -584,7 +571,6 @@ public class MainActivity extends AppCompatActivity {
                 .listener(new RequestListener<Drawable>() {
                     @Override
                     public boolean onLoadFailed(GlideException e, Object model, Target<Drawable> t, boolean isFirstResource) {
-                        // Не дёргаем visibility: пусть на экране останется то, что было.
                         return false;
                     }
                     @Override
@@ -610,8 +596,6 @@ public class MainActivity extends AppCompatActivity {
         if (previewImageView == null) return;
 
         Object src = path.startsWith("http") ? (Object) path : (Object) new File(path);
-        // Грузим в previewImageView; globalImageView (если он сейчас на экране со старым фоном)
-        // остаётся видимым до момента, когда новая картинка реально готова.
         loadIntoSmoothly(previewImageView, globalImageView, src);
     }
 
@@ -622,8 +606,6 @@ public class MainActivity extends AppCompatActivity {
     public void clearPreviewBackground(boolean instant) {
         if (previewBgPath == null) return;
         previewBgPath = null;
-        // Всегда просим updateGlobalBackground(true) — он сам корректно решит,
-        // надо ли что-то показывать (с учётом тогглов в настройках).
         updateGlobalBackground(true);
     }
 
@@ -756,7 +738,6 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Уже показываем тот же путь — ничего не меняем, только подчищаем preview.
         if (targetPath.equals(currentBgPath) && globalImageView != null && globalImageView.getVisibility() == View.VISIBLE) {
             if (previewImageView != null) previewImageView.setVisibility(View.INVISIBLE);
             return;
@@ -764,8 +745,6 @@ public class MainActivity extends AppCompatActivity {
 
         currentBgPath = targetPath;
         Object src = targetPath.startsWith("http") ? (Object) targetPath : (Object) new File(targetPath);
-        // Плавная подмена: грузим новый фон в globalImageView, а previewImageView
-        // (если он показывает старую картинку) гасим только после onResourceReady.
         loadIntoSmoothly(globalImageView, previewImageView, src);
     }
 
