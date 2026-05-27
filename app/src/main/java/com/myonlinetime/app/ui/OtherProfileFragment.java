@@ -43,22 +43,20 @@ import com.myonlinetime.app.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.Set;
 
 public class OtherProfileFragment extends Fragment {
 
-    // Дефолтный лимит размера фона при предзагрузке — 5 МБ.
     private static final long DEFAULT_PRELOAD_BG_BYTES = 5L * 1024L * 1024L;
-
-    // Запас по размеру bitmap'а относительно экрана.
     private static final float BG_BITMAP_SCREEN_SCALE = 1.0f;
 
     private ImageView avatarView;
     private ImageView bgImageView;
+    private FrameLayout rootWrapper;
     private String targetUid = "";
     private String backTitle = "";
 
@@ -76,7 +74,6 @@ public class OtherProfileFragment extends Fragment {
     public static final android.util.LruCache<String, String> prefetchCountsCache = new android.util.LruCache<>(50);
     public static final android.util.LruCache<String, Boolean> prefetchFollowCache = new android.util.LruCache<>(50);
 
-    // Сырые байты фона.
     public static final android.util.LruCache<String, byte[]> prefetchBgBytesCache = new android.util.LruCache<String, byte[]>(20 * 1024 * 1024) {
         @Override
         protected int sizeOf(String key, byte[] value) {
@@ -84,7 +81,6 @@ public class OtherProfileFragment extends Fragment {
         }
     };
 
-    // Уже декодированные и downsampled под экран Bitmap'ы статичных фонов.
     public static final android.util.LruCache<String, Bitmap> prefetchBgBitmapCache = new android.util.LruCache<String, Bitmap>(40 * 1024 * 1024) {
         @Override
         protected int sizeOf(String key, Bitmap value) {
@@ -213,6 +209,9 @@ public class OtherProfileFragment extends Fragment {
 
     private String currentDisplayedBg = null;
 
+    // Защита от гонки follow: пока true — dataLoader не трогает btnFollow/follow-cache.
+    private boolean followInFlight = false;
+
     public static void prefetchProfile(String vpsToken, String uid) {
         if (vpsToken == null || uid == null || uid.isEmpty()) return;
 
@@ -221,12 +220,9 @@ public class OtherProfileFragment extends Fragment {
                 @Override
                 public void onLoaded(User user, int followers, int following, boolean isFollowing) {
                     if (user != null) {
-                        // ФИКС: дублируем counts/follow в сам User-объект, чтобы при
-                        // re-open его поля были консистентны с двумя другими кэшами.
                         user.followers = followers;
                         user.following = following;
                         user.isFollowing = isFollowing;
-
                         prefetchUserCache.put(uid, user);
                         try {
                             org.json.JSONObject countsObj = new org.json.JSONObject();
@@ -289,7 +285,10 @@ public class OtherProfileFragment extends Fragment {
 
         ensureTargetSize(activity);
 
-        // === args + кэш ===
+        // КРИТИЧНО: гасим глобальный фон MainActivity — он сейчас под нами и просвечивает.
+        // Делаем это синхронно, чтобы первый кадр уже не показывал чужой/свой глобальный фон.
+        activity.updateGlobalBackground(false);
+
         targetUid = getArguments() != null ? getArguments().getString("TARGET_UID", "") : "";
         backTitle = getArguments() != null ? getArguments().getString("BACK_TITLE", activity.getString(R.string.title_search)) : activity.getString(R.string.title_search);
 
@@ -301,6 +300,7 @@ public class OtherProfileFragment extends Fragment {
         prefetchFollowing = getArguments() != null ? getArguments().getInt("PREFETCH_FOLLOWING", 0) : 0;
         prefetchIsFollowing = getArguments() != null ? getArguments().getBoolean("PREFETCH_IS_FOLLOWING", false) : false;
 
+        // Кэш — приоритет.
         final User cachedUser = prefetchUserCache.get(targetUid);
         if (cachedUser != null) {
             if (cachedUser.nickname != null && !cachedUser.nickname.isEmpty()) argName = cachedUser.nickname;
@@ -312,12 +312,31 @@ public class OtherProfileFragment extends Fragment {
                 && cachedUser.about != null
                 && cachedUser.background != null;
 
+        // Приоритет кэша для follow-состояния и счётчиков.
+        Boolean cachedFollow = prefetchFollowCache.get(targetUid);
+        boolean effectiveIsFollowing = cachedFollow != null ? cachedFollow : prefetchIsFollowing;
+        int effectiveFollowers = prefetchFollowers;
+        int effectiveFollowing = prefetchFollowing;
+        try {
+            String countsJson = prefetchCountsCache.get(targetUid);
+            if (countsJson != null) {
+                org.json.JSONObject cobj = new org.json.JSONObject(countsJson);
+                effectiveFollowers = cobj.optInt("followers", effectiveFollowers);
+                effectiveFollowing = cobj.optInt("following", effectiveFollowing);
+            }
+        } catch (Exception ignored) {}
+
         // === Контейнер ===
         FrameLayout wrapper = new FrameLayout(activity);
         wrapper.setLayoutParams(originalView.getLayoutParams() != null
                 ? originalView.getLayoutParams()
                 : new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         originalView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // ГАРАНТИЯ непрозрачности: даже если bgImageView ещё ничего не показал —
+        // wrapper уже залит цветом темы и сквозь него ничего не видно.
+        wrapper.setBackgroundColor(ContextCompat.getColor(activity, R.color.bgDynamic));
+        rootWrapper = wrapper;
 
         // === Фон ===
         bgImageView = new ImageView(activity);
@@ -334,9 +353,7 @@ public class OtherProfileFragment extends Fragment {
             }
         }
         if (!appliedSync) {
-            // ФИКС: всегда заливаем плейсхолдер цветом app-темы, чтобы НИКОГДА
-            // не было прозрачного bgImageView (через который виден globalImageView
-            // активити = твой собственный фон).
+            // Заливаем цветом темы (а не прозрачным) — НИКОГДА не должно просвечиваться ничего постороннего.
             bgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
             currentDisplayedBg = "disabled";
         }
@@ -463,26 +480,12 @@ public class OtherProfileFragment extends Fragment {
 
         if (!argPhoto.isEmpty()) handleMediaLoading(activity, argPhoto);
 
-        // === ФИКС подписки/счётчиков: приоритет кэшу над args ===
-        Boolean cachedFollow = prefetchFollowCache.get(targetUid);
-        boolean effectiveIsFollowing = cachedFollow != null ? cachedFollow : prefetchIsFollowing;
         btnFollow.setTag(effectiveIsFollowing);
         updateFollowButton(btnFollow, effectiveIsFollowing);
         btnFollow.setVisibility(View.VISIBLE);
 
         final TextView txtFollowersCount = originalView.findViewById(R.id.txt_followers_count);
         final TextView txtFollowingCount = originalView.findViewById(R.id.txt_following_count);
-
-        int effectiveFollowers = prefetchFollowers;
-        int effectiveFollowing = prefetchFollowing;
-        try {
-            String countsJson = prefetchCountsCache.get(targetUid);
-            if (countsJson != null) {
-                org.json.JSONObject obj = new org.json.JSONObject(countsJson);
-                effectiveFollowers = obj.optInt("followers", effectiveFollowers);
-                effectiveFollowing = obj.optInt("following", effectiveFollowing);
-            }
-        } catch (Exception ignored) {}
         if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(effectiveFollowers));
         if (txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(effectiveFollowing));
 
@@ -516,63 +519,62 @@ public class OtherProfileFragment extends Fragment {
         });
 
         btnFollow.setOnClickListener(v -> {
-            if (btnFollow.getTag() == null || !btnFollow.isEnabled()) return;
-            btnFollow.setEnabled(false);
+            if (btnFollow.getTag() == null) return;
 
-            final boolean currentStatus = (boolean) btnFollow.getTag();
+            boolean currentStatus = (boolean) btnFollow.getTag();
             final boolean nextStatus = !currentStatus;
 
+            // === ОПТИМИСТИЧНЫЙ UI (мгновенно, кнопка ОСТАЁТСЯ enabled — никаких «откатов» при быстрых тапах) ===
             btnFollow.setTag(nextStatus);
             updateFollowButton(btnFollow, nextStatus);
             prefetchFollowCache.put(targetUid, nextStatus);
 
-            // Оптимистично двигаем счётчик
-            final int[] optimisticFollowers = { 0 };
+            int optimisticFollowers = effectiveFollowers;
             try {
                 if (txtFollowersCount != null) {
                     int count = Integer.parseInt(txtFollowersCount.getText().toString());
                     count = nextStatus ? count + 1 : count - 1;
                     if (count < 0) count = 0;
-                    optimisticFollowers[0] = count;
+                    optimisticFollowers = count;
                     txtFollowersCount.setText(String.valueOf(count));
                 }
-            } catch (Exception e) {}
+            } catch (Exception ignored) {}
 
-            // === ФИКС: сразу пишем актуальные значения во все три кэша ===
-            // 1) prefetchCountsCache — иначе при ре-открытии onCreateView
-            //    подтянет старое значение counts вместо свежего.
+            // Синхронизируем все три кэша.
             try {
-                String prevCountsJson = prefetchCountsCache.get(targetUid);
-                int prevFollowing = prefetchFollowing;
-                if (prevCountsJson != null) {
-                    org.json.JSONObject prev = new org.json.JSONObject(prevCountsJson);
-                    prevFollowing = prev.optInt("following", prevFollowing);
+                int curFollowing = effectiveFollowing;
+                String existing = prefetchCountsCache.get(targetUid);
+                if (existing != null) {
+                    org.json.JSONObject cobj = new org.json.JSONObject(existing);
+                    curFollowing = cobj.optInt("following", curFollowing);
                 }
                 org.json.JSONObject countsObj = new org.json.JSONObject();
-                countsObj.put("followers", optimisticFollowers[0]);
-                countsObj.put("following", prevFollowing);
+                countsObj.put("followers", optimisticFollowers);
+                countsObj.put("following", curFollowing);
                 prefetchCountsCache.put(targetUid, countsObj.toString());
             } catch (Exception ignored) {}
 
-            // 2) prefetchUserCache — поля followers/isFollowing у самого User,
-            //    чтобы повторное открытие OtherProfile из той же сессии видело актуал.
-            User cachedTarget = prefetchUserCache.get(targetUid);
-            if (cachedTarget != null) {
-                cachedTarget.followers = optimisticFollowers[0];
-                cachedTarget.isFollowing = nextStatus;
-                prefetchUserCache.put(targetUid, cachedTarget);
+            User cachedU = prefetchUserCache.get(targetUid);
+            if (cachedU != null) {
+                cachedU.followers = optimisticFollowers;
+                cachedU.isFollowing = nextStatus;
+                prefetchUserCache.put(targetUid, cachedU);
             }
+
+            // Помечаем in-flight, чтобы dataLoader не перетёр оптимистичное состояние ответом со старым isFollowing.
+            followInFlight = true;
+            final int optimisticFollowersF = optimisticFollowers;
 
             if (activity.vpsToken != null) {
                 VpsApi.setFollow(activity.vpsToken, targetUid, nextStatus, new VpsApi.Callback() {
                     @Override public void onSuccess(String s) {
                         uiHandler.post(() -> {
-                            if (isAdded() && btnFollow != null) btnFollow.setEnabled(true);
+                            followInFlight = false;
+                            if (!isAdded()) return;
 
+                            // Подкрутим свой following в кэше моего профиля (для PRofileFragment).
                             GoogleSignInAccount myAcc = GoogleSignIn.getLastSignedInAccount(activity);
                             if (myAcc != null) {
-                                // У МЕНЯ изменилось following count — инвалидируем оба кэша,
-                                // чтобы при возврате в свой профиль данные пере-загрузились с сервера.
                                 prefetchCountsCache.remove(myAcc.getId());
                                 User myCached = prefetchUserCache.get(myAcc.getId());
                                 if (myCached != null) {
@@ -585,48 +587,52 @@ public class OtherProfileFragment extends Fragment {
                     }
                     @Override public void onError(String err) {
                         uiHandler.post(() -> {
+                            followInFlight = false;
                             if (!isAdded()) return;
-                            btnFollow.setEnabled(true);
 
-                            // Откат UI
+                            // Откат: возвращаем кнопку, счётчик и все кэши обратно.
                             btnFollow.setTag(currentStatus);
                             updateFollowButton(btnFollow, currentStatus);
                             prefetchFollowCache.put(targetUid, currentStatus);
 
-                            int rollback = optimisticFollowers[0];
+                            int rollback = optimisticFollowersF + (nextStatus ? -1 : 1);
+                            if (rollback < 0) rollback = 0;
+                            if (txtFollowersCount != null) {
+                                txtFollowersCount.setText(String.valueOf(rollback));
+                            }
                             try {
-                                if (txtFollowersCount != null) {
-                                    rollback = nextStatus ? optimisticFollowers[0] - 1 : optimisticFollowers[0] + 1;
-                                    if (rollback < 0) rollback = 0;
-                                    txtFollowersCount.setText(String.valueOf(rollback));
-                                }
-                            } catch (Exception e) {}
-
-                            // Откатываем кэши тоже
-                            try {
-                                String prevCountsJson = prefetchCountsCache.get(targetUid);
-                                int prevFollowing = prefetchFollowing;
-                                if (prevCountsJson != null) {
-                                    org.json.JSONObject prev = new org.json.JSONObject(prevCountsJson);
-                                    prevFollowing = prev.optInt("following", prevFollowing);
+                                int curFollowing = effectiveFollowing;
+                                String existing = prefetchCountsCache.get(targetUid);
+                                if (existing != null) {
+                                    org.json.JSONObject cobj = new org.json.JSONObject(existing);
+                                    curFollowing = cobj.optInt("following", curFollowing);
                                 }
                                 org.json.JSONObject countsObj = new org.json.JSONObject();
                                 countsObj.put("followers", rollback);
-                                countsObj.put("following", prevFollowing);
+                                countsObj.put("following", curFollowing);
                                 prefetchCountsCache.put(targetUid, countsObj.toString());
                             } catch (Exception ignored) {}
 
-                            User cachedTarget2 = prefetchUserCache.get(targetUid);
-                            if (cachedTarget2 != null) {
-                                cachedTarget2.followers = rollback;
-                                cachedTarget2.isFollowing = currentStatus;
-                                prefetchUserCache.put(targetUid, cachedTarget2);
+                            User cachedRollback = prefetchUserCache.get(targetUid);
+                            if (cachedRollback != null) {
+                                cachedRollback.followers = rollback;
+                                cachedRollback.isFollowing = currentStatus;
+                                prefetchUserCache.put(targetUid, cachedRollback);
                             }
 
                             Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
                         });
                     }
                 });
+            } else {
+                // Нет токена — откатываем сразу.
+                followInFlight = false;
+                btnFollow.setTag(currentStatus);
+                updateFollowButton(btnFollow, currentStatus);
+                prefetchFollowCache.put(targetUid, currentStatus);
+                if (txtFollowersCount != null) {
+                    txtFollowersCount.setText(String.valueOf(Math.max(0, optimisticFollowersF + (nextStatus ? -1 : 1))));
+                }
             }
         });
 
@@ -647,12 +653,30 @@ public class OtherProfileFragment extends Fragment {
                     public void onLoaded(User user, int followers, int following, boolean isFollowing) {
                         if (!isAdded()) return;
 
-                        if (txtFollowersCount != null) {
-                            String newFollowers = String.valueOf(followers);
-                            if (!txtFollowersCount.getText().toString().equals(newFollowers)) {
-                                txtFollowersCount.setText(newFollowers);
+                        // Кнопку и follow-кэш трогаем ТОЛЬКО если юзер не в процессе клика.
+                        if (!followInFlight) {
+                            Boolean prevFollow = prefetchFollowCache.get(targetUid);
+                            prefetchFollowCache.put(targetUid, isFollowing);
+                            if (prevFollow == null || prevFollow != isFollowing) {
+                                btnFollow.setTag(isFollowing);
+                                updateFollowButton(btnFollow, isFollowing);
                             }
+
+                            if (txtFollowersCount != null) {
+                                String newFollowers = String.valueOf(followers);
+                                if (!txtFollowersCount.getText().toString().equals(newFollowers)) {
+                                    txtFollowersCount.setText(newFollowers);
+                                }
+                            }
+                            try {
+                                org.json.JSONObject countsObj = new org.json.JSONObject();
+                                countsObj.put("followers", followers);
+                                countsObj.put("following", following);
+                                prefetchCountsCache.put(targetUid, countsObj.toString());
+                            } catch (Exception ignored) {}
                         }
+
+                        // Following — не зависит от click race, можно обновить всегда.
                         if (txtFollowingCount != null) {
                             String newFollowing = String.valueOf(following);
                             if (!txtFollowingCount.getText().toString().equals(newFollowing)) {
@@ -660,25 +684,19 @@ public class OtherProfileFragment extends Fragment {
                             }
                         }
 
-                        try {
-                            org.json.JSONObject countsObj = new org.json.JSONObject();
-                            countsObj.put("followers", followers);
-                            countsObj.put("following", following);
-                            prefetchCountsCache.put(targetUid, countsObj.toString());
-                        } catch (Exception ignored) {}
-
-                        Boolean prevFollow = prefetchFollowCache.get(targetUid);
-                        prefetchFollowCache.put(targetUid, isFollowing);
-                        if (prevFollow == null || prevFollow != isFollowing) {
-                            btnFollow.setTag(isFollowing);
-                            updateFollowButton(btnFollow, isFollowing);
-                        }
-
                         if (user != null) {
-                            // ФИКС: синхронизируем все три кэша с сервером.
-                            user.followers = followers;
+                            if (!followInFlight) {
+                                user.followers = followers;
+                                user.isFollowing = isFollowing;
+                            } else {
+                                // Сохраняем in-flight оптимистичное состояние, но обновляем остальное.
+                                User existing = prefetchUserCache.get(targetUid);
+                                if (existing != null) {
+                                    user.followers = existing.followers;
+                                    user.isFollowing = existing.isFollowing;
+                                }
+                            }
                             user.following = following;
-                            user.isFollowing = isFollowing;
                             prefetchUserCache.put(targetUid, user);
 
                             if (user.nickname != null && !nameView.getText().toString().equals(user.nickname)) {
@@ -769,18 +787,16 @@ public class OtherProfileFragment extends Fragment {
         if (bgImageView == null || !isAdded()) return;
 
         if (bgUrl == null) bgUrl = "";
-        if (bgUrl.equals(currentDisplayedBg)) return;
 
         if (!bgAllowedByPrefs(activity, bgUrl)) {
-            // ФИКС: если фона нет / не разрешён — заливаем цветом app-темы,
-            // а не оставляем прозрачным (через прозрачный был виден твой фон через
-            // globalImageView Activity).
             if (!"disabled".equals(currentDisplayedBg)) {
                 currentDisplayedBg = "disabled";
                 bgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
             }
             return;
         }
+
+        if (bgUrl.equals(currentDisplayedBg)) return;
 
         final String urlF = bgUrl;
         final boolean isGif = urlF.toLowerCase().endsWith(".gif");
@@ -838,31 +854,30 @@ public class OtherProfileFragment extends Fragment {
         Glide.with(activity).load(photoUrl).circleCrop().error(R.drawable.bg_edit_circle).into(avatarView);
     }
 
-    /**
-     * ФИКС: при возврате на экран пере-применяем актуальное состояние подписки
-     * и счётчиков из кэшей. До этого использовался устаревший args.isFollowing,
-     * из-за чего кнопка возвращалась в прежнее положение, а цифры скакали.
-     */
+    /** Пере-применить follow-состояние и счётчики из кэшей. Вызываем при возврате на экран. */
     private void reapplyFollowStateFromCache() {
-        if (getView() == null || targetUid == null || targetUid.isEmpty()) return;
+        if (!isAdded() || getView() == null) return;
+        if (followInFlight) return; // ничего не трогаем, если мы в полёте
 
-        Button btnFollow = getView().findViewById(R.id.btn_follow);
-        if (btnFollow != null) {
-            Boolean cachedFollow = prefetchFollowCache.get(targetUid);
-            if (cachedFollow != null) {
-                btnFollow.setTag(cachedFollow);
-                updateFollowButton(btnFollow, cachedFollow);
-            }
+        View root = getView();
+        Button btnFollow = root.findViewById(R.id.btn_follow);
+        TextView txtFollowers = root.findViewById(R.id.txt_followers_count);
+        TextView txtFollowing = root.findViewById(R.id.txt_following_count);
+
+        Boolean cachedFollow = prefetchFollowCache.get(targetUid);
+        if (btnFollow != null && cachedFollow != null) {
+            btnFollow.setTag(cachedFollow);
+            updateFollowButton(btnFollow, cachedFollow);
         }
 
-        TextView txtFollowersCount = getView().findViewById(R.id.txt_followers_count);
-        TextView txtFollowingCount = getView().findViewById(R.id.txt_following_count);
         try {
             String countsJson = prefetchCountsCache.get(targetUid);
             if (countsJson != null) {
-                org.json.JSONObject obj = new org.json.JSONObject(countsJson);
-                if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(obj.optInt("followers", 0)));
-                if (txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(obj.optInt("following", 0)));
+                org.json.JSONObject cobj = new org.json.JSONObject(countsJson);
+                int f = cobj.optInt("followers", -1);
+                int g = cobj.optInt("following", -1);
+                if (f >= 0 && txtFollowers != null) txtFollowers.setText(String.valueOf(f));
+                if (g >= 0 && txtFollowing != null) txtFollowing.setText(String.valueOf(g));
             }
         } catch (Exception ignored) {}
     }
@@ -872,8 +887,12 @@ public class OtherProfileFragment extends Fragment {
         super.onResume();
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null && !isHidden()) {
+            // ВАЖНО: гасим глобальный фон каждый раз — иначе после возврата он может вернуться.
+            activity.updateGlobalBackground(false);
+
             User cachedUser = prefetchUserCache.get(targetUid);
             if (cachedUser != null) updateBackgroundFromPrefs(activity, cachedUser.background);
+
             reapplyFollowStateFromCache();
         }
 
@@ -895,6 +914,9 @@ public class OtherProfileFragment extends Fragment {
         if (!hidden) {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.showBackButton(backTitle, v -> activity.onBackPressed());
+
+            // Снова гасим глобальный фон — мы опять «впереди».
+            activity.updateGlobalBackground(false);
 
             User cachedUser = prefetchUserCache.get(targetUid);
             if (cachedUser != null) updateBackgroundFromPrefs(activity, cachedUser.background);
