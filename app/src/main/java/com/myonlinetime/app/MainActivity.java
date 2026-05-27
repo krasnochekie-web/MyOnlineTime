@@ -43,6 +43,7 @@ import com.bumptech.glide.signature.ObjectKey;
 
 import java.io.File;
 import org.json.JSONArray;
+import org.json.JSONObject;
 import com.myonlinetime.app.utils.Utils;
 
 public class MainActivity extends AppCompatActivity {
@@ -88,6 +89,19 @@ public class MainActivity extends AppCompatActivity {
     private final SharedPreferences.OnSharedPreferenceChangeListener notifListener = (sharedPrefs, key) -> {
         if (key != null && key.startsWith("notif_history_array_")) {
             runOnUiThread(this::updateNotificationBadge);
+        }
+    };
+
+    // === Поллинг истории уведомлений ===
+    // Нужен на случай, когда push не доехал (юзер отключил уведомления у себя,
+    // doze, протух FCM-токен, юзер сидел на другом аккаунте). Бейджик загорится
+    // максимум через NOTIF_POLL_INTERVAL_MS даже без push. Работает только пока
+    // активити в foreground (стартуем в onResume, гасим в onPause).
+    private static final long NOTIF_POLL_INTERVAL_MS = 60_000L;
+    private final Runnable notifPollRunnable = new Runnable() {
+        @Override public void run() {
+            syncNotificationsHistory();
+            bgHandler.postDelayed(this, NOTIF_POLL_INTERVAL_MS);
         }
     };
 
@@ -304,6 +318,89 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Тихо синхронизирует историю уведомлений текущего аккаунта с сервером
+     * и обновляет бейджик. Нужно, чтобы бейджик загорался даже если push
+     * не доехал (юзер отключил FCM, был на другом аккаунте, doze и т.п.).
+     *
+     * Логика merge — такая же, как в NotificationsHistoryFragment.loadHistory,
+     * плюс мы дополнительно сохраняем локальный isRead=true для тех timestamp,
+     * которые мы уже пометили прочитанными (защищает бейджик от мигания
+     * "0 → N → 0", если markNotificationsRead не успел докатиться до сервера).
+     */
+    public void syncNotificationsHistory() {
+        if (vpsToken == null || vpsToken.isEmpty()) return;
+        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+        if (account == null) return;
+
+        final String uid = account.getId();
+        final String cacheKey = "notif_history_array_" + uid;
+        final SharedPreferences appPrefs = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
+
+        VpsApi.getNotificationsHistory(vpsToken, new VpsApi.Callback() {
+            @Override
+            public void onSuccess(String result) {
+                Utils.backgroundExecutor.execute(() -> {
+                    try {
+                        JSONArray serverArray = new JSONArray(result);
+                        JSONArray localArray  = new JSONArray(appPrefs.getString(cacheKey, "[]"));
+
+                        // Снимок локально прочитанных timestamp-ов — переносим на server-копию.
+                        java.util.HashSet<Long> localReadTs = new java.util.HashSet<>();
+                        java.util.HashSet<Long> serverTs = new java.util.HashSet<>();
+                        for (int i = 0; i < localArray.length(); i++) {
+                            JSONObject lo = localArray.getJSONObject(i);
+                            if (lo.optBoolean("isRead", false)) {
+                                localReadTs.add(lo.optLong("timestamp"));
+                            }
+                        }
+                        for (int i = 0; i < serverArray.length(); i++) {
+                            serverTs.add(serverArray.getJSONObject(i).optLong("timestamp"));
+                        }
+
+                        JSONArray merged = new JSONArray();
+                        for (int i = 0; i < serverArray.length(); i++) {
+                            JSONObject so = serverArray.getJSONObject(i);
+                            if (localReadTs.contains(so.optLong("timestamp"))) {
+                                so.put("isRead", true);
+                            }
+                            merged.put(so);
+                        }
+                        // Локальные time-уведомления, которых сервер ещё не видит — оставляем.
+                        for (int i = 0; i < localArray.length(); i++) {
+                            JSONObject lo = localArray.getJSONObject(i);
+                            if ("time".equals(lo.optString("type"))
+                                    && !serverTs.contains(lo.optLong("timestamp"))) {
+                                merged.put(lo);
+                            }
+                        }
+
+                        // Сортировка по timestamp desc.
+                        java.util.List<JSONObject> list = new java.util.ArrayList<>();
+                        for (int i = 0; i < merged.length(); i++) list.add(merged.getJSONObject(i));
+                        java.util.Collections.sort(list,
+                                (a, b) -> Long.compare(b.optLong("timestamp"), a.optLong("timestamp")));
+
+                        JSONArray finalArr = new JSONArray();
+                        for (JSONObject o : list) finalArr.put(o);
+
+                        final String oldJson = appPrefs.getString(cacheKey, "[]");
+                        final String newJson = finalArr.toString();
+                        if (newJson.equals(oldJson)) return; // ничего не поменялось — UI не дёргаем
+
+                        appPrefs.edit().putString(cacheKey, newJson).apply();
+                        // notifListener сам поймает изменение и вызовет updateNotificationBadge().
+                        // Но дублируем явный вызов на случай, если listener был снят (onPause).
+                        runOnUiThread(MainActivity.this::updateNotificationBadge);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                });
+            }
+            @Override public void onError(String error) { /* тихо */ }
+        });
+    }
+
     private void checkIfNewUserAndEnforce(String uid) {
         if (vpsToken == null) return;
 
@@ -382,6 +479,7 @@ public class MainActivity extends AppCompatActivity {
                             vpsToken = ourServerToken;
                             StatsHelper.syncUserProfile(MainActivity.this);
                             syncMyProfileSilently();
+                            runOnUiThread(MainActivity.this::syncNotificationsHistory);
 
                             checkIfNewUserAndEnforce(account.getId());
 
@@ -811,6 +909,7 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
         getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
                 .unregisterOnSharedPreferenceChangeListener(notifListener);
+        bgHandler.removeCallbacks(notifPollRunnable);
     }
 
     @Override
@@ -818,6 +917,14 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         loadUserAvatarToBottomNav();
         updateNotificationBadge();
+
+        // Один синхронизирующий запрос сразу при возврате на экран,
+        // плюс периодический поллинг, пока активити в foreground. Так бейджик
+        // загорится даже если push заглушён или юзер вернулся на этот аккаунт
+        // с другого, пока тут копились непрочитанные.
+        syncNotificationsHistory();
+        bgHandler.removeCallbacks(notifPollRunnable);
+        bgHandler.postDelayed(notifPollRunnable, NOTIF_POLL_INTERVAL_MS);
 
         boolean hideGlobalBg = false;
         if (navigator != null && navigator.hasSubScreen()) {
@@ -858,6 +965,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        bgHandler.removeCallbacks(notifPollRunnable);
         if (badgeReceiver != null) {
             try {
                 androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(this).unregisterReceiver(badgeReceiver);
@@ -1152,6 +1260,7 @@ public class MainActivity extends AppCompatActivity {
                         vpsToken = ourServerToken;
                         StatsHelper.syncUserProfile(MainActivity.this);
                         syncMyProfileSilently();
+                        syncNotificationsHistory();
 
                         checkIfNewUserAndEnforce(acct.getId());
 
