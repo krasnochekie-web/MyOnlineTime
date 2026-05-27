@@ -43,20 +43,18 @@ import com.myonlinetime.app.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
 import java.util.Set;
 
 public class OtherProfileFragment extends Fragment {
 
     // Дефолтный лимит размера фона при предзагрузке — 5 МБ.
-    // Тяжёлые 4K JPG обычно 1.5–3 МБ, спокойно влезают.
     private static final long DEFAULT_PRELOAD_BG_BYTES = 5L * 1024L * 1024L;
 
-    // Запас по размеру bitmap'а относительно экрана: ровно в размер экрана,
-    // CENTER_CROP всё равно его растянет/обрежет.
+    // Запас по размеру bitmap'а относительно экрана.
     private static final float BG_BITMAP_SCREEN_SCALE = 1.0f;
 
     private ImageView avatarView;
@@ -78,7 +76,7 @@ public class OtherProfileFragment extends Fragment {
     public static final android.util.LruCache<String, String> prefetchCountsCache = new android.util.LruCache<>(50);
     public static final android.util.LruCache<String, Boolean> prefetchFollowCache = new android.util.LruCache<>(50);
 
-    // Сырые байты фона — для GIF и для последующего ленивого декода в bitmap-кэш.
+    // Сырые байты фона.
     public static final android.util.LruCache<String, byte[]> prefetchBgBytesCache = new android.util.LruCache<String, byte[]>(20 * 1024 * 1024) {
         @Override
         protected int sizeOf(String key, byte[] value) {
@@ -87,7 +85,6 @@ public class OtherProfileFragment extends Fragment {
     };
 
     // Уже декодированные и downsampled под экран Bitmap'ы статичных фонов.
-    // Отсюда UI берёт фон СИНХРОННО без декода — это убирает фриз на 4K.
     public static final android.util.LruCache<String, Bitmap> prefetchBgBitmapCache = new android.util.LruCache<String, Bitmap>(40 * 1024 * 1024) {
         @Override
         protected int sizeOf(String key, Bitmap value) {
@@ -95,7 +92,6 @@ public class OtherProfileFragment extends Fragment {
         }
     };
 
-    // Целевой размер фона (= размер экрана). Считается лениво один раз.
     private static volatile int sTargetW = 0;
     private static volatile int sTargetH = 0;
 
@@ -111,20 +107,10 @@ public class OtherProfileFragment extends Fragment {
         }
     }
 
-    /**
-     * Совместимая перегрузка со старым кодом — лимит фона по умолчанию (5 МБ).
-     */
     public static void preloadBackgrounds(List<User> users) {
         preloadBackgrounds(users, DEFAULT_PRELOAD_BG_BYTES);
     }
 
-    /**
-     * Предзагрузка фоновых картинок:
-     *  - качаем байты в {@link #prefetchBgBytesCache} (с проверкой Content-Length и лимита);
-     *  - для НЕ-GIF сразу downsample'им в Bitmap под размер экрана и кладём в {@link #prefetchBgBitmapCache},
-     *    чтобы UI взял готовый Bitmap синхронно и без фризов;
-     *  - всё в фоне, UI не трогаем.
-     */
     public static void preloadBackgrounds(List<User> users, long maxBytes) {
         if (users == null || users.isEmpty()) return;
         final long limit = maxBytes > 0 ? maxBytes : DEFAULT_PRELOAD_BG_BYTES;
@@ -150,8 +136,6 @@ public class OtherProfileFragment extends Fragment {
                     if (bytes != null) prefetchBgBytesCache.put(bgUrl, bytes);
                 }
 
-                // Для НЕ-GIF — сразу декод и downsample под экран,
-                // чтобы UI больше ничего не считал.
                 if (!isGif && bytes != null && prefetchBgBitmapCache.get(bgUrl) == null) {
                     Bitmap bmp = decodeDownsampledBitmap(bytes, sTargetW, sTargetH);
                     if (bmp != null) {
@@ -163,7 +147,6 @@ public class OtherProfileFragment extends Fragment {
         });
     }
 
-    /** Скачивает байты по URL с жёстким верхним лимитом. Возвращает null, если превышен или ошибка. */
     private static byte[] downloadBytesCapped(String urlStr, long maxBytes) {
         java.net.HttpURLConnection conn = null;
         java.io.InputStream is = null;
@@ -196,11 +179,6 @@ public class OtherProfileFragment extends Fragment {
         }
     }
 
-    /**
-     * Декодирует байты в Bitmap, уменьшенный до ≈reqW×reqH через inSampleSize.
-     * Использует RGB_565 (фон без альфы) — вдвое меньше памяти, заметно быстрее upload в GPU.
-     * Полностью безопасен для вызова из фонового потока.
-     */
     private static Bitmap decodeDownsampledBitmap(byte[] bytes, int reqW, int reqH) {
         if (bytes == null || bytes.length == 0) return null;
         if (reqW <= 0) reqW = 1080;
@@ -233,7 +211,6 @@ public class OtherProfileFragment extends Fragment {
     private int prefetchFollowing = 0;
     private boolean prefetchIsFollowing = false;
 
-    // ПРЕДОХРАНИТЕЛЬ ОТ СВЕТОМУЗЫКИ: содержит URL, который УЖЕ фактически запущен в bgImageView.
     private String currentDisplayedBg = null;
 
     public static void prefetchProfile(String vpsToken, String uid) {
@@ -244,6 +221,12 @@ public class OtherProfileFragment extends Fragment {
                 @Override
                 public void onLoaded(User user, int followers, int following, boolean isFollowing) {
                     if (user != null) {
+                        // ФИКС: дублируем counts/follow в сам User-объект, чтобы при
+                        // re-open его поля были консистентны с двумя другими кэшами.
+                        user.followers = followers;
+                        user.following = following;
+                        user.isFollowing = isFollowing;
+
                         prefetchUserCache.put(uid, user);
                         try {
                             org.json.JSONObject countsObj = new org.json.JSONObject();
@@ -253,7 +236,6 @@ public class OtherProfileFragment extends Fragment {
                         } catch (Exception ignored) {}
                         prefetchFollowCache.put(uid, isFollowing);
 
-                        // Сразу гоняем фон (байты + downsampled bitmap) — к моменту тапа всё готово.
                         if (user.background != null && user.background.startsWith("http")) {
                             List<User> one = new ArrayList<>(1);
                             one.add(user);
@@ -307,7 +289,7 @@ public class OtherProfileFragment extends Fragment {
 
         ensureTargetSize(activity);
 
-        // === Сначала читаем args + кэш, чтобы знать, что показывать с первого кадра ===
+        // === args + кэш ===
         targetUid = getArguments() != null ? getArguments().getString("TARGET_UID", "") : "";
         backTitle = getArguments() != null ? getArguments().getString("BACK_TITLE", activity.getString(R.string.title_search)) : activity.getString(R.string.title_search);
 
@@ -342,8 +324,6 @@ public class OtherProfileFragment extends Fragment {
         bgImageView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         bgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
 
-        // Синхронный путь — взять УЖЕ ДЕКОДИРОВАННЫЙ Bitmap.
-        // Никакого BitmapFactory.decodeByteArray на UI-потоке.
         boolean appliedSync = false;
         if (prefetchBg != null && !prefetchBg.isEmpty() && bgAllowedByPrefs(activity, prefetchBg)) {
             Bitmap ready = prefetchBgBitmapCache.get(prefetchBg);
@@ -354,17 +334,16 @@ public class OtherProfileFragment extends Fragment {
             }
         }
         if (!appliedSync) {
-            // Плейсхолдер цветом — мгновенно, без I/O и без decode.
+            // ФИКС: всегда заливаем плейсхолдер цветом app-темы, чтобы НИКОГДА
+            // не было прозрачного bgImageView (через который виден globalImageView
+            // активити = твой собственный фон).
             bgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
+            currentDisplayedBg = "disabled";
         }
 
         wrapper.addView(bgImageView);
         wrapper.addView(originalView);
 
-        // Если синхронно нарисовать готовым Bitmap'ом не вышло — сразу отдаём Glide.
-        // Glide сам декодит на фоне и применит на UI без рывков.
-        // Параллельно прогреваем bitmap-кэш для будущих открытий — чтобы со второго раза
-        // (и для других пользователей с тем же URL) был синхронный мгновенный кадр.
         if (!appliedSync && prefetchBg != null && !prefetchBg.isEmpty()
                 && bgAllowedByPrefs(activity, prefetchBg)) {
             final String urlF = prefetchBg;
@@ -484,14 +463,28 @@ public class OtherProfileFragment extends Fragment {
 
         if (!argPhoto.isEmpty()) handleMediaLoading(activity, argPhoto);
 
-        btnFollow.setTag(prefetchIsFollowing);
-        updateFollowButton(btnFollow, prefetchIsFollowing);
+        // === ФИКС подписки/счётчиков: приоритет кэшу над args ===
+        Boolean cachedFollow = prefetchFollowCache.get(targetUid);
+        boolean effectiveIsFollowing = cachedFollow != null ? cachedFollow : prefetchIsFollowing;
+        btnFollow.setTag(effectiveIsFollowing);
+        updateFollowButton(btnFollow, effectiveIsFollowing);
         btnFollow.setVisibility(View.VISIBLE);
 
-        TextView txtFollowersCount = originalView.findViewById(R.id.txt_followers_count);
-        TextView txtFollowingCount = originalView.findViewById(R.id.txt_following_count);
-        if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(prefetchFollowers));
-        if (txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(prefetchFollowing));
+        final TextView txtFollowersCount = originalView.findViewById(R.id.txt_followers_count);
+        final TextView txtFollowingCount = originalView.findViewById(R.id.txt_following_count);
+
+        int effectiveFollowers = prefetchFollowers;
+        int effectiveFollowing = prefetchFollowing;
+        try {
+            String countsJson = prefetchCountsCache.get(targetUid);
+            if (countsJson != null) {
+                org.json.JSONObject obj = new org.json.JSONObject(countsJson);
+                effectiveFollowers = obj.optInt("followers", effectiveFollowers);
+                effectiveFollowing = obj.optInt("following", effectiveFollowing);
+            }
+        } catch (Exception ignored) {}
+        if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(effectiveFollowers));
+        if (txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(effectiveFollowing));
 
         applyCollapseSafely(aboutView, appsContainerLocal, btnExpand, btnCollapse);
 
@@ -526,21 +519,49 @@ public class OtherProfileFragment extends Fragment {
             if (btnFollow.getTag() == null || !btnFollow.isEnabled()) return;
             btnFollow.setEnabled(false);
 
-            boolean currentStatus = (boolean) btnFollow.getTag();
-            boolean nextStatus = !currentStatus;
+            final boolean currentStatus = (boolean) btnFollow.getTag();
+            final boolean nextStatus = !currentStatus;
 
             btnFollow.setTag(nextStatus);
             updateFollowButton(btnFollow, nextStatus);
             prefetchFollowCache.put(targetUid, nextStatus);
 
+            // Оптимистично двигаем счётчик
+            final int[] optimisticFollowers = { 0 };
             try {
                 if (txtFollowersCount != null) {
                     int count = Integer.parseInt(txtFollowersCount.getText().toString());
                     count = nextStatus ? count + 1 : count - 1;
                     if (count < 0) count = 0;
+                    optimisticFollowers[0] = count;
                     txtFollowersCount.setText(String.valueOf(count));
                 }
             } catch (Exception e) {}
+
+            // === ФИКС: сразу пишем актуальные значения во все три кэша ===
+            // 1) prefetchCountsCache — иначе при ре-открытии onCreateView
+            //    подтянет старое значение counts вместо свежего.
+            try {
+                String prevCountsJson = prefetchCountsCache.get(targetUid);
+                int prevFollowing = prefetchFollowing;
+                if (prevCountsJson != null) {
+                    org.json.JSONObject prev = new org.json.JSONObject(prevCountsJson);
+                    prevFollowing = prev.optInt("following", prevFollowing);
+                }
+                org.json.JSONObject countsObj = new org.json.JSONObject();
+                countsObj.put("followers", optimisticFollowers[0]);
+                countsObj.put("following", prevFollowing);
+                prefetchCountsCache.put(targetUid, countsObj.toString());
+            } catch (Exception ignored) {}
+
+            // 2) prefetchUserCache — поля followers/isFollowing у самого User,
+            //    чтобы повторное открытие OtherProfile из той же сессии видело актуал.
+            User cachedTarget = prefetchUserCache.get(targetUid);
+            if (cachedTarget != null) {
+                cachedTarget.followers = optimisticFollowers[0];
+                cachedTarget.isFollowing = nextStatus;
+                prefetchUserCache.put(targetUid, cachedTarget);
+            }
 
             if (activity.vpsToken != null) {
                 VpsApi.setFollow(activity.vpsToken, targetUid, nextStatus, new VpsApi.Callback() {
@@ -550,28 +571,59 @@ public class OtherProfileFragment extends Fragment {
 
                             GoogleSignInAccount myAcc = GoogleSignIn.getLastSignedInAccount(activity);
                             if (myAcc != null) {
+                                // У МЕНЯ изменилось following count — инвалидируем оба кэша,
+                                // чтобы при возврате в свой профиль данные пере-загрузились с сервера.
                                 prefetchCountsCache.remove(myAcc.getId());
+                                User myCached = prefetchUserCache.get(myAcc.getId());
+                                if (myCached != null) {
+                                    myCached.following = Math.max(0, myCached.following + (nextStatus ? 1 : -1));
+                                    prefetchUserCache.put(myAcc.getId(), myCached);
+                                }
                                 activity.sendBroadcast(new Intent("ACTION_PROFILE_UPDATED").setPackage(activity.getPackageName()));
                             }
                         });
                     }
                     @Override public void onError(String err) {
                         uiHandler.post(() -> {
-                            if (isAdded()) {
-                                btnFollow.setEnabled(true);
-                                btnFollow.setTag(currentStatus);
-                                updateFollowButton(btnFollow, currentStatus);
-                                prefetchFollowCache.put(targetUid, currentStatus);
-                                try {
-                                    if (txtFollowersCount != null) {
-                                        int c = Integer.parseInt(txtFollowersCount.getText().toString());
-                                        c = currentStatus ? c + 1 : c - 1;
-                                        if (c < 0) c = 0;
-                                        txtFollowersCount.setText(String.valueOf(c));
-                                    }
-                                } catch(Exception e){}
-                                Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
+                            if (!isAdded()) return;
+                            btnFollow.setEnabled(true);
+
+                            // Откат UI
+                            btnFollow.setTag(currentStatus);
+                            updateFollowButton(btnFollow, currentStatus);
+                            prefetchFollowCache.put(targetUid, currentStatus);
+
+                            int rollback = optimisticFollowers[0];
+                            try {
+                                if (txtFollowersCount != null) {
+                                    rollback = nextStatus ? optimisticFollowers[0] - 1 : optimisticFollowers[0] + 1;
+                                    if (rollback < 0) rollback = 0;
+                                    txtFollowersCount.setText(String.valueOf(rollback));
+                                }
+                            } catch (Exception e) {}
+
+                            // Откатываем кэши тоже
+                            try {
+                                String prevCountsJson = prefetchCountsCache.get(targetUid);
+                                int prevFollowing = prefetchFollowing;
+                                if (prevCountsJson != null) {
+                                    org.json.JSONObject prev = new org.json.JSONObject(prevCountsJson);
+                                    prevFollowing = prev.optInt("following", prevFollowing);
+                                }
+                                org.json.JSONObject countsObj = new org.json.JSONObject();
+                                countsObj.put("followers", rollback);
+                                countsObj.put("following", prevFollowing);
+                                prefetchCountsCache.put(targetUid, countsObj.toString());
+                            } catch (Exception ignored) {}
+
+                            User cachedTarget2 = prefetchUserCache.get(targetUid);
+                            if (cachedTarget2 != null) {
+                                cachedTarget2.followers = rollback;
+                                cachedTarget2.isFollowing = currentStatus;
+                                prefetchUserCache.put(targetUid, cachedTarget2);
                             }
+
+                            Toast.makeText(activity, activity.getString(R.string.err_server) + err, Toast.LENGTH_LONG).show();
                         });
                     }
                 });
@@ -623,6 +675,10 @@ public class OtherProfileFragment extends Fragment {
                         }
 
                         if (user != null) {
+                            // ФИКС: синхронизируем все три кэша с сервером.
+                            user.followers = followers;
+                            user.following = following;
+                            user.isFollowing = isFollowing;
                             prefetchUserCache.put(targetUid, user);
 
                             if (user.nickname != null && !nameView.getText().toString().equals(user.nickname)) {
@@ -658,8 +714,6 @@ public class OtherProfileFragment extends Fragment {
             }
         };
 
-        // Если в кэше уже лежит полный User — не ходим в сеть сразу, ждём конца анимации,
-        // иначе синхронные апдейты setText/setVisibility/Glide добавят к открытию ещё кадров.
         if (cachedUserIsFull) {
             uiHandler.postDelayed(dataLoader, 350);
         } else {
@@ -669,15 +723,9 @@ public class OtherProfileFragment extends Fragment {
         return wrapper;
     }
 
-    /**
-     * Прогрев bitmap-кэша в фоне. UI не трогает.
-     * - Если байтов в prefetchBgBytesCache нет — попробует докачать (с лимитом DEFAULT_PRELOAD_BG_BYTES).
-     * - Декодит downsampled под экран и кладёт в prefetchBgBitmapCache.
-     * Чтобы следующее открытие этого фона было синхронным и без фризов.
-     */
     private void warmUpBitmapCacheAsync(final Context ctx, final String bgUrl) {
         if (bgUrl == null || bgUrl.isEmpty()) return;
-        if (bgUrl.toLowerCase().endsWith(".gif")) return; // GIF не статичен — не кэшируем как Bitmap
+        if (bgUrl.toLowerCase().endsWith(".gif")) return;
         if (prefetchBgBitmapCache.get(bgUrl) != null) return;
 
         final Context appCtx = ctx.getApplicationContext();
@@ -702,9 +750,6 @@ public class OtherProfileFragment extends Fragment {
         });
     }
 
-    /**
-     * Проверка SharedPreferences: разрешён ли показ фона для чужого профиля.
-     */
     private boolean bgAllowedByPrefs(Context ctx, String bgUrl) {
         if (ctx == null || bgUrl == null || bgUrl.length() < 5) return false;
         SharedPreferences appPrefs = ctx.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
@@ -724,10 +769,12 @@ public class OtherProfileFragment extends Fragment {
         if (bgImageView == null || !isAdded()) return;
 
         if (bgUrl == null) bgUrl = "";
-        // Анти-мерцающий guard: bgUrl уже ФАКТИЧЕСКИ нарисован.
         if (bgUrl.equals(currentDisplayedBg)) return;
 
         if (!bgAllowedByPrefs(activity, bgUrl)) {
+            // ФИКС: если фона нет / не разрешён — заливаем цветом app-темы,
+            // а не оставляем прозрачным (через прозрачный был виден твой фон через
+            // globalImageView Activity).
             if (!"disabled".equals(currentDisplayedBg)) {
                 currentDisplayedBg = "disabled";
                 bgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
@@ -738,7 +785,6 @@ public class OtherProfileFragment extends Fragment {
         final String urlF = bgUrl;
         final boolean isGif = urlF.toLowerCase().endsWith(".gif");
 
-        // 1) Готовый Bitmap — мгновенно, синхронно, без UI-работы.
         if (!isGif) {
             Bitmap ready = prefetchBgBitmapCache.get(urlF);
             if (ready != null) {
@@ -748,9 +794,6 @@ public class OtherProfileFragment extends Fragment {
             }
         }
 
-        // 2) Готового Bitmap'а нет — отдаём Glide. Он сам декодит на фоне и применит на UI
-        //    без рывков. currentDisplayedBg выставляем ПОСЛЕ старта запроса, чтобы анти-
-        //    мерцание корректно работало для последующих повторных вызовов.
         byte[] bytes = prefetchBgBytesCache.get(urlF);
         if (bytes != null) {
             Glide.with(activity).load(bytes).centerCrop().dontAnimate().into(bgImageView);
@@ -759,7 +802,6 @@ public class OtherProfileFragment extends Fragment {
         }
         currentDisplayedBg = urlF;
 
-        // 3) Параллельно прогреваем bitmap-кэш под следующее открытие.
         if (!isGif) warmUpBitmapCacheAsync(activity, urlF);
     }
 
@@ -796,6 +838,35 @@ public class OtherProfileFragment extends Fragment {
         Glide.with(activity).load(photoUrl).circleCrop().error(R.drawable.bg_edit_circle).into(avatarView);
     }
 
+    /**
+     * ФИКС: при возврате на экран пере-применяем актуальное состояние подписки
+     * и счётчиков из кэшей. До этого использовался устаревший args.isFollowing,
+     * из-за чего кнопка возвращалась в прежнее положение, а цифры скакали.
+     */
+    private void reapplyFollowStateFromCache() {
+        if (getView() == null || targetUid == null || targetUid.isEmpty()) return;
+
+        Button btnFollow = getView().findViewById(R.id.btn_follow);
+        if (btnFollow != null) {
+            Boolean cachedFollow = prefetchFollowCache.get(targetUid);
+            if (cachedFollow != null) {
+                btnFollow.setTag(cachedFollow);
+                updateFollowButton(btnFollow, cachedFollow);
+            }
+        }
+
+        TextView txtFollowersCount = getView().findViewById(R.id.txt_followers_count);
+        TextView txtFollowingCount = getView().findViewById(R.id.txt_following_count);
+        try {
+            String countsJson = prefetchCountsCache.get(targetUid);
+            if (countsJson != null) {
+                org.json.JSONObject obj = new org.json.JSONObject(countsJson);
+                if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(obj.optInt("followers", 0)));
+                if (txtFollowingCount != null) txtFollowingCount.setText(String.valueOf(obj.optInt("following", 0)));
+            }
+        } catch (Exception ignored) {}
+    }
+
     @Override
     public void onResume() {
         super.onResume();
@@ -803,6 +874,7 @@ public class OtherProfileFragment extends Fragment {
         if (activity != null && !isHidden()) {
             User cachedUser = prefetchUserCache.get(targetUid);
             if (cachedUser != null) updateBackgroundFromPrefs(activity, cachedUser.background);
+            reapplyFollowStateFromCache();
         }
 
         if (getView() != null) {
@@ -826,6 +898,8 @@ public class OtherProfileFragment extends Fragment {
 
             User cachedUser = prefetchUserCache.get(targetUid);
             if (cachedUser != null) updateBackgroundFromPrefs(activity, cachedUser.background);
+
+            reapplyFollowStateFromCache();
 
             if (getView() != null) {
                 TextView tabTopApps = getView().findViewById(R.id.tab_top_apps);
