@@ -46,6 +46,7 @@ import com.myonlinetime.app.VpsApi;
 import com.myonlinetime.app.models.User;
 import com.myonlinetime.app.utils.StatsHelper;
 import com.myonlinetime.app.utils.Utils;
+import com.myonlinetime.app.workers.SyncDescriptionWorker;
 
 import java.io.File;
 import java.util.HashMap;
@@ -59,16 +60,16 @@ public class ProfileFragment extends Fragment {
     private Map<String, String> localDescriptions = new HashMap<>();
     private SharedPreferences prefs;
     private final Gson gson = new Gson();
-    
+
     private ImageView avatarView;
-    private ImageView myBgImageView; 
+    private ImageView myBgImageView;
     private String myUid = "";
 
     private TextView txtFollowersCount;
     private TextView txtFollowingCount;
 
     private View profileContentView;
-    
+
     private ProgressBar listSpinner;
 
     private String currentLoadedAvatar = null;
@@ -76,7 +77,7 @@ public class ProfileFragment extends Fragment {
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
-    private Runnable fetchProfileDataRunnable; 
+    private Runnable fetchProfileDataRunnable;
 
     private final android.content.BroadcastReceiver profileUpdateReceiver = new android.content.BroadcastReceiver() {
         @Override
@@ -112,18 +113,18 @@ public class ProfileFragment extends Fragment {
 
         FrameLayout wrapper = new FrameLayout(requireContext());
         wrapper.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        
+
         myBgImageView = new ImageView(requireContext());
         myBgImageView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         myBgImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        
+
         myBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(requireContext(), R.color.bgDynamic)));
 
         final View originalView = inflater.inflate(R.layout.layout_profile, wrapper, false);
         profileContentView = originalView;
-        
-        wrapper.addView(myBgImageView, 0); 
-        wrapper.addView(originalView, 1);  
+
+        wrapper.addView(myBgImageView, 0);
+        wrapper.addView(originalView, 1);
 
         final GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
         if (account == null) return wrapper;
@@ -140,41 +141,41 @@ public class ProfileFragment extends Fragment {
         final TextView weekTimeText = originalView.findViewById(R.id.profile_week_time);
         View followersClick = originalView.findViewById(R.id.container_followers);
         View followingClick = originalView.findViewById(R.id.container_following);
-        
+
         txtFollowersCount = originalView.findViewById(R.id.txt_followers_count);
         txtFollowingCount = originalView.findViewById(R.id.txt_following_count);
 
         TextView tabTopApps = originalView.findViewById(R.id.tab_top_apps);
-        if (tabTopApps != null) tabTopApps.setSelected(true); 
-        
+        if (tabTopApps != null) tabTopApps.setSelected(true);
+
         final ImageView btnExpand = originalView.findViewById(R.id.btn_expand_apps);
         final ImageView btnCollapse = originalView.findViewById(R.id.btn_collapse_apps);
         final LinearLayout appsContainerLocal = originalView.findViewById(R.id.profile_apps_container);
-        
+
         final View appsCardParent = (View) appsContainerLocal.getParent();
 
         ViewGroup grandParent = (ViewGroup) appsCardParent.getParent();
         int cardIndex = grandParent.indexOfChild(appsCardParent);
         grandParent.removeView(appsCardParent);
-        
+
         FrameLayout listWrapper = new FrameLayout(activity);
         listWrapper.setLayoutParams(appsCardParent.getLayoutParams());
         appsCardParent.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         listWrapper.addView(appsCardParent);
-        
+
         listSpinner = new ProgressBar(activity);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             listSpinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(activity, R.color.grapefruit)));
         }
         FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(
-                (int)(50 * getResources().getDisplayMetrics().density), 
+                (int)(50 * getResources().getDisplayMetrics().density),
                 (int)(50 * getResources().getDisplayMetrics().density)
         );
         sp.gravity = Gravity.CENTER_HORIZONTAL | Gravity.TOP;
-        sp.topMargin = (int)(20 * getResources().getDisplayMetrics().density); 
+        sp.topMargin = (int)(20 * getResources().getDisplayMetrics().density);
         listSpinner.setLayoutParams(sp);
         listSpinner.setVisibility(View.GONE);
-        
+
         listWrapper.addView(listSpinner);
         grandParent.addView(listWrapper, cardIndex);
 
@@ -194,7 +195,7 @@ public class ProfileFragment extends Fragment {
             public void onChildViewAdded(View parent, View child) { updateEmptyState(); }
             @Override
             public void onChildViewRemoved(View parent, View child) { updateEmptyState(); }
-            
+
             private void updateEmptyState() {
                 uiHandler.post(() -> {
                     if (!isAdded() || getView() == null) return;
@@ -211,7 +212,7 @@ public class ProfileFragment extends Fragment {
                 });
             }
         });
-        
+
         boolean initiallyHasApps = appsContainerLocal.getChildCount() > 0;
         if (appsCardParent != null) appsCardParent.setVisibility(initiallyHasApps ? View.VISIBLE : View.GONE);
         else appsContainerLocal.setVisibility(initiallyHasApps ? View.VISIBLE : View.GONE);
@@ -266,7 +267,7 @@ public class ProfileFragment extends Fragment {
 
         fetchProfileDataRunnable = () -> {
             if (activity.vpsToken == null) return;
-            
+
             VpsApi.getAggregatedProfile(activity, activity.vpsToken, myUid, new VpsApi.AggregatedProfileCallback() {
                 @Override
                 public void onLoaded(User user, int followers, int following, boolean isFollowing) {
@@ -284,7 +285,7 @@ public class ProfileFragment extends Fragment {
                             txtFollowingCount.setText(newFollowing);
                         }
                     }
-                    
+
                     activity.prefs.edit()
                             .putInt("my_followers_count", followers)
                             .putInt("my_following_count", following)
@@ -292,7 +293,7 @@ public class ProfileFragment extends Fragment {
 
                     long activeTicket = activity.prefs.getLong("active_upload_ticket", 0);
                     if (activeTicket != 0 && (System.currentTimeMillis() - activeTicket < 60000)) {
-                        return; 
+                        return;
                     }
 
                     if (user != null) {
@@ -329,12 +330,12 @@ public class ProfileFragment extends Fragment {
                                     }
                                 }
                                 activity.prefs.edit()
-                                    .remove("custom_bg_path_" + myUid)
-                                    .remove("custom_bg_is_video_" + myUid)
-                                    .remove("synced_bg_url_" + myUid)
-                                    .remove("my_bg_base64")
-                                    .apply();
-                                
+                                        .remove("custom_bg_path_" + myUid)
+                                        .remove("custom_bg_is_video_" + myUid)
+                                        .remove("synced_bg_url_" + myUid)
+                                        .remove("my_bg_base64")
+                                        .apply();
+
                                 activity.currentBgBase64 = null;
                                 activity.runOnUiThread(() -> activity.updateGlobalBackground(true));
                             }
@@ -361,16 +362,20 @@ public class ProfileFragment extends Fragment {
                             }
                         }
                         if (user.appDescriptions != null) {
-                            if (!localDescriptions.equals(user.appDescriptions)) {
+                            // Server values + локальные pending перебивают (мы их ещё не дослали)
+                            Map<String, String> pending = readPendingDescriptions(activity, myUid);
+                            Map<String, String> merged = new HashMap<>(user.appDescriptions);
+                            merged.putAll(pending);
+                            if (!localDescriptions.equals(merged)) {
                                 localDescriptions.clear();
-                                localDescriptions.putAll(user.appDescriptions);
+                                localDescriptions.putAll(merged);
                                 prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
                                 cacheChanged = true;
                             }
                         }
 
                         updateUiFromPrefs(activity);
-                        if (cacheChanged) requestLoadMyStats(true); 
+                        if (cacheChanged) requestLoadMyStats(true);
                     }
                 }
                 @Override public void onError(String e) {}
@@ -378,12 +383,16 @@ public class ProfileFragment extends Fragment {
         };
 
         loadLocalCacheAsync(() -> {
-            if (isAdded()) requestLoadMyStats(true); 
+            if (isAdded()) requestLoadMyStats(true);
         });
 
         if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
 
-        return wrapper; 
+        // Дренируем WorkManager-очередь pending-синков описаний — на случай, если
+        // что-то осталось от прошлой сессии (kill процесса, отсутствие сети и т.п.)
+        SyncDescriptionWorker.flushPending(activity, myUid);
+
+        return wrapper;
     }
 
     private void updateUiFromPrefs(MainActivity activity) {
@@ -409,7 +418,7 @@ public class ProfileFragment extends Fragment {
 
         String bgPath = activity.prefs.getString("custom_bg_path_" + myUid, null);
         String remoteBg = activity.prefs.getString("my_bg_base64", null);
-        
+
         String targetPath = null;
         if (bgPath != null && new File(bgPath).exists()) targetPath = bgPath;
         else if (remoteBg != null && remoteBg.startsWith("http")) targetPath = remoteBg;
@@ -433,11 +442,10 @@ public class ProfileFragment extends Fragment {
 
         if (!newBgKey.equals(currentLoadedBg)) {
             currentLoadedBg = newBgKey;
-            
+
             if (!allowBg) {
                 myBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
             } else {
-                // ИСПРАВЛЕНИЕ: Создаем final переменную для безопасного использования внутри лямбды
                 final String finalTargetPath = targetPath;
                 Utils.backgroundExecutor.execute(() -> {
                     try {
@@ -445,17 +453,10 @@ public class ProfileFragment extends Fragment {
                         if (bgFile.exists()) {
                             uiHandler.post(() -> {
                                 if (!isAdded() || myBgImageView == null) return;
-                                if (bgFile.getName().toLowerCase().endsWith(".gif")) {
-                                    Glide.with(this).load(bgFile)
-                                         .diskCacheStrategy(DiskCacheStrategy.NONE)
-                                         .signature(new ObjectKey(bgFile.lastModified()))
-                                         .centerCrop().into(myBgImageView);
-                                } else {
-                                    Glide.with(this).load(bgFile)
-                                         .diskCacheStrategy(DiskCacheStrategy.NONE)
-                                         .signature(new ObjectKey(bgFile.lastModified()))
-                                         .centerCrop().into(myBgImageView);
-                                }
+                                Glide.with(this).load(bgFile)
+                                        .diskCacheStrategy(DiskCacheStrategy.NONE)
+                                        .signature(new ObjectKey(bgFile.lastModified()))
+                                        .centerCrop().into(myBgImageView);
                             });
                         } else if (remoteBg != null && remoteBg.startsWith("http")) {
                             uiHandler.post(() -> {
@@ -479,14 +480,14 @@ public class ProfileFragment extends Fragment {
         if (!isAdded() || avatarView == null) return;
 
         String customAvatarPath = useLocalFile ? activity.prefs.getString("custom_avatar_path_" + uid, null) : null;
-        
+
         String newAvatarKey;
         if (useLocalFile && customAvatarPath != null && new File(customAvatarPath).exists()) {
             newAvatarKey = uid + "_local_" + new File(customAvatarPath).lastModified();
         } else {
             newAvatarKey = uid + "_remote_" + (base64Data != null ? String.valueOf(base64Data.hashCode()) : "empty");
         }
-        
+
         if (newAvatarKey.equals(currentLoadedAvatar)) return;
         currentLoadedAvatar = newAvatarKey;
 
@@ -535,21 +536,22 @@ public class ProfileFragment extends Fragment {
             if (!isHidden()) {
                 updateUiFromPrefs(activity);
                 if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
+                SyncDescriptionWorker.flushPending(activity, myUid);
             }
         }
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
-            .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_PROFILE_UPDATED"));
+                .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_PROFILE_UPDATED"));
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
-            .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_EDIT_PROFILE_OPENED"));
+                .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_EDIT_PROFILE_OPENED"));
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
-            .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_EDIT_PROFILE_CLOSED"));
+                .registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_EDIT_PROFILE_CLOSED"));
     }
 
     @Override
     public void onPause() {
         super.onPause();
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
-            .unregisterReceiver(profileUpdateReceiver);
+                .unregisterReceiver(profileUpdateReceiver);
     }
 
     @Override
@@ -562,6 +564,7 @@ public class ProfileFragment extends Fragment {
                 activity.headerManager.resetHeader();
                 updateUiFromPrefs(activity);
                 if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
+                SyncDescriptionWorker.flushPending(activity, myUid);
             }
         }
     }
@@ -598,7 +601,7 @@ public class ProfileFragment extends Fragment {
 
         boolean isHidden = localHiddenApps.contains(pkgName);
         if (lockIcon != null) lockIcon.setVisibility(isHidden ? View.VISIBLE : View.GONE);
-        
+
         String currentDesc = localDescriptions.get(pkgName);
         if (descView != null) {
             if (currentDesc != null && !currentDesc.isEmpty()) {
@@ -665,21 +668,21 @@ public class ProfileFragment extends Fragment {
         SharedPreferences dbNames = activity.getSharedPreferences("MyOnlineTime_AppNamesDB", Context.MODE_PRIVATE);
         String appName = pkgName;
         String cachedName = dbNames.getString(pkgName, null);
-        
+
         if (cachedName != null) appName = cachedName;
         else {
             PackageManager pm = activity.getPackageManager();
             try {
                 int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
                 ApplicationInfo info;
-                try { info = pm.getApplicationInfo(pkgName, 0); } 
+                try { info = pm.getApplicationInfo(pkgName, 0); }
                 catch (PackageManager.NameNotFoundException e) { info = pm.getApplicationInfo(pkgName, flag); }
                 appName = pm.getApplicationLabel(info).toString();
-            } catch (Exception e) { 
+            } catch (Exception e) {
                 try {
                     String[] parts = pkgName.split("\\.");
-                    String name = parts[parts.length - 1]; 
-                    appName = name.substring(0, 1).toUpperCase() + name.substring(1); 
+                    String name = parts[parts.length - 1];
+                    appName = name.substring(0, 1).toUpperCase() + name.substring(1);
                 } catch (Exception ex) { appName = pkgName; }
             }
         }
@@ -693,7 +696,9 @@ public class ProfileFragment extends Fragment {
 
         btnClose.setOnClickListener(v -> dialog.dismiss());
         btnSave.setOnClickListener(v -> {
-            String newDesc = editDesc.getText().toString().trim();
+            final String newDesc = editDesc.getText().toString().trim();
+
+            // 1) Оптимистично — локальный кеш + сам item, без перерисовки всего списка
             localDescriptions.put(pkgName, newDesc);
             prefs.edit().putString("app_descriptions", gson.toJson(localDescriptions)).apply();
 
@@ -705,16 +710,28 @@ public class ProfileFragment extends Fragment {
                     descView.setVisibility(View.GONE);
                 }
             }
-            requestLoadMyStats(false);
             dialog.dismiss();
-            
-            if (activity.vpsToken != null) {
-                VpsApi.setAppDescription(activity.vpsToken, pkgName, newDesc, new VpsApi.Callback() {
-                    @Override public void onSuccess(String result) {}
-                    @Override public void onError(String error) {}
-                });
-            }
+
+            // 2) Гарантированная доставка через WorkManager.
+            // Запись попадает в PendingDescSync_<uid> и шедулится уникальный Worker
+            // c сетевым constraint и exponential backoff. Переживёт kill процесса,
+            // переключение аккаунта (досинхрон при возврате) и отсутствие сети.
+            SyncDescriptionWorker.enqueue(activity.getApplicationContext(), myUid, pkgName, newDesc);
         });
         dialog.show();
+    }
+
+    // === Read pending для слияния с серверным состоянием ===
+    private Map<String, String> readPendingDescriptions(Context ctx, String uid) {
+        if (uid == null || uid.isEmpty()) return new HashMap<>();
+        SharedPreferences p = ctx.getApplicationContext()
+                .getSharedPreferences(SyncDescriptionWorker.PENDING_DESC_PREFS_PREFIX + uid, Context.MODE_PRIVATE);
+        String json = p.getString(SyncDescriptionWorker.PENDING_DESC_KEY, "{}");
+        try {
+            Map<String, String> m = gson.fromJson(json, new TypeToken<Map<String, String>>(){}.getType());
+            return m != null ? m : new HashMap<>();
+        } catch (Exception e) {
+            return new HashMap<>();
+        }
     }
 }
