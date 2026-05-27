@@ -40,23 +40,20 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class NotificationsHistoryFragment extends Fragment {
 
     private static final String PREFS_NAME = "AppPrefs";
 
     // Лимит размера фона профиля для предзагрузки (1 МБ).
-    // Если фон тяжелее — пропускаем предзагрузку (он догрузится уже внутри OtherProfileFragment).
+    // Сохранён как public static на случай внешних ссылок.
     public static final long MAX_PRELOAD_BG_BYTES = 1024L * 1024L;
 
-    // Глобальный список UID-ов, по которым уже инициирован ПОЛНЫЙ префетч профиля (с about/background)
-    // в этом процессе. Не плодим дубликаты сетевых запросов между сессиями фрагмента.
-    private static final Set<String> prefetchedUids =
-            Collections.newSetFromMap(new ConcurrentHashMap<>());
+    // Сколько верхних follower-карточек префетчим жадно (до первого рендера),
+    // чтобы фон точно лежал в кэше к моменту тапа по тем карточкам, что юзер
+    // увидит первыми. Остальные подтягиваются лениво при attach-е.
+    private static final int EAGER_TOP_K = 5;
 
     private Runnable hideBgRunnable;
     private RecyclerView recycler;
@@ -69,6 +66,13 @@ public class NotificationsHistoryFragment extends Fragment {
 
     // Флаг для предотвращения рывков во время анимации
     private boolean isTransitioning = false;
+
+    // Текущий снимок видимых элементов — нужен per-row префетчу по позиции.
+    private List<NotificationModels.NotificationItem> currentItems = new ArrayList<>();
+
+    // Слушатель крепления карточек к экрану — стартует префетч профиля+фона
+    // только для тех уведомлений, что реально попали в видимую часть RV.
+    private RecyclerView.OnChildAttachStateChangeListener attachListener;
 
     // Срабатывает, когда кэш поменялся
     private final SharedPreferences.OnSharedPreferenceChangeListener prefsListener = (sharedPrefs, key) -> {
@@ -157,6 +161,37 @@ public class NotificationsHistoryFragment extends Fragment {
             loadHistory(true, System.currentTimeMillis());
         });
 
+        // === Ленивый префетч профиля+фона для прикреплённых follower-карточек ===
+        // prefetchProfile сам решит, нужно ли стучаться на сервер. В onLoaded он
+        // запускает preloadBackgrounds для нового background URL — байты лягут в
+        // кэш ДО тапа, и фон выезжает с профилем без подгрузки на глазах юзера.
+        attachListener = new RecyclerView.OnChildAttachStateChangeListener() {
+            @Override
+            public void onChildViewAttachedToWindow(@NonNull View view) {
+                if (recycler == null) return;
+                int pos = recycler.getChildAdapterPosition(view);
+                if (pos < 0 || pos >= currentItems.size()) return;
+
+                NotificationModels.NotificationItem item = currentItems.get(pos);
+                if (!(item instanceof NotificationModels.FollowerNotification)) return;
+                NotificationModels.FollowerNotification fn =
+                        (NotificationModels.FollowerNotification) item;
+                if (fn.uid == null || fn.uid.isEmpty()) return;
+
+                MainActivity act = (MainActivity) getActivity();
+                if (act == null || act.vpsToken == null || act.vpsToken.isEmpty()) return;
+
+                OtherProfileFragment.prefetchProfile(act.vpsToken, fn.uid);
+            }
+
+            @Override
+            public void onChildViewDetachedFromWindow(@NonNull View view) {
+                // ничего не делаем — отмена незавершённого запроса осложнит
+                // логику, а завершившийся getAggregatedProfile просто ляжет в кэш.
+            }
+        };
+        recycler.addOnChildAttachStateChangeListener(attachListener);
+
         // ИСПРАВЛЕНИЕ: Защита от рывков при первом открытии
         isTransitioning = true;
         uiHandler.postDelayed(() -> isTransitioning = false, 400); // 400 мс - время анимации
@@ -165,8 +200,7 @@ public class NotificationsHistoryFragment extends Fragment {
 
         // === РАННИЙ ПРЕФЕТЧ ИЗ КЭША ===
         // Запускаем предзагрузку профилей и фонов СРАЗУ из кэша,
-        // не дожидаясь ни ответа сервера, ни рендера ленты. Это даёт максимум
-        // времени, чтобы к моменту тапа по карточке профиль уже лежал в памяти.
+        // не дожидаясь ни ответа сервера, ни рендера ленты.
         prefetchFromCacheJsonAsync();
 
         loadHistory(false, 0);
@@ -175,8 +209,11 @@ public class NotificationsHistoryFragment extends Fragment {
     }
 
     /**
-     * Достаёт follower-объекты из кэшированного JSON-а в фоне и запускает префетч.
-     * Делается до первого рендера, чтобы выиграть время.
+     * Достаёт follower-объекты из кэшированного JSON-а в фоне и:
+     *  1) кладёт огрызки в in-memory кэши (мгновенный ник/аватар);
+     *  2) для верхних EAGER_TOP_K UID-ов сразу запускает getAggregatedProfile,
+     *     чтобы фон успел приехать ДО первого рендера ленты.
+     * Остальные UID-ы подтянутся лениво при attach (когда RV их прикрепит).
      */
     private void prefetchFromCacheJsonAsync() {
         if (getContext() == null) return;
@@ -184,6 +221,10 @@ public class NotificationsHistoryFragment extends Fragment {
         SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         final String cachedJson = prefs.getString(cacheKey, "[]");
         if (cachedJson == null || cachedJson.length() <= 5 || cachedJson.equals("[]")) return;
+
+        // Захватим токен до ухода в фон, чтобы потом не дёргать activity с bg-потока.
+        MainActivity act = (MainActivity) getActivity();
+        final String token = act != null ? act.vpsToken : null;
 
         Utils.backgroundExecutor.execute(() -> {
             try {
@@ -200,51 +241,60 @@ public class NotificationsHistoryFragment extends Fragment {
                     if (u.uid != null && !u.uid.isEmpty()) usersToCache.add(u);
                 }
                 prefetchProfiles(usersToCache);
+                eagerPrefetchTopK(token, usersToCache, EAGER_TOP_K);
             } catch (Exception ignored) {}
         });
     }
-/**
- * Лёгкое заполнение in-memory кэшей профилей — БЕЗ сетевых запросов.
- *
- * Раньше тут вызывался OtherProfileFragment.prefetchProfile(...) на каждый
- * уникальный UID — это давало N getAggregatedProfile-запросов и N bg-загрузок
- * на каждое открытие истории. Большая часть из них уходила впустую: юзер
- * тапает максимум по 1–2 уведомлениям.
- *
- * Теперь поведение такое:
- *  - ник/аватар/isFollowing уже есть в ответе getNotificationsHistory — кладём
- *    в кэши, чтобы карточка OtherProfileFragment мгновенно показала верх;
- *  - about / background / followers / following подтянет сам OtherProfileFragment
- *    своим штатным getAggregatedProfile в onCreateView (тот же путь, что
- *    отрабатывает при заходе из пуша).
- *
- * Итого: 0 сетевых запросов на открытие истории сверх самого getNotificationsHistory.
- */
-private void prefetchProfiles(List<User> users) {
-    if (users == null || users.isEmpty()) return;
 
-    for (User u : users) {
-        if (u == null || u.uid == null || u.uid.isEmpty()) continue;
+    /**
+     * Лёгкое заполнение in-memory кэшей профилей — БЕЗ сетевых запросов.
+     * Полный профиль + фон подтянет либо eagerPrefetchTopK (top-K),
+     * либо ленивый attach-листенер (для прокрученных).
+     */
+    private void prefetchProfiles(List<User> users) {
+        if (users == null || users.isEmpty()) return;
 
-        User existing = OtherProfileFragment.prefetchUserCache.get(u.uid);
-        if (existing == null) {
-            // В кэше пусто — кладём огрызок, чтобы ник/фото показались сразу.
-            // about/background останутся null — OtherProfileFragment это понимает
-            // и дозагрузит сам.
-            OtherProfileFragment.prefetchUserCache.put(u.uid, u);
-        } else {
-            // Если в кэше уже есть полный профиль — не затираем огрызком,
-            // только дополним поверхностные поля.
-            if ((existing.nickname == null || existing.nickname.isEmpty()) && u.nickname != null) {
-                existing.nickname = u.nickname;
+        for (User u : users) {
+            if (u == null || u.uid == null || u.uid.isEmpty()) continue;
+
+            User existing = OtherProfileFragment.prefetchUserCache.get(u.uid);
+            if (existing == null) {
+                // В кэше пусто — кладём огрызок, чтобы ник/фото показались сразу.
+                // about/background останутся null — OtherProfileFragment это понимает
+                // и дозагрузит сам.
+                OtherProfileFragment.prefetchUserCache.put(u.uid, u);
+            } else {
+                // Если в кэше уже есть полный профиль — не затираем огрызком,
+                // только дополним поверхностные поля.
+                if ((existing.nickname == null || existing.nickname.isEmpty()) && u.nickname != null) {
+                    existing.nickname = u.nickname;
+                }
+                if ((existing.photo == null || existing.photo.isEmpty()) && u.photo != null) {
+                    existing.photo = u.photo;
+                }
             }
-            if ((existing.photo == null || existing.photo.isEmpty()) && u.photo != null) {
-                existing.photo = u.photo;
-            }
+            OtherProfileFragment.prefetchFollowCache.put(u.uid, u.isFollowing);
         }
-        OtherProfileFragment.prefetchFollowCache.put(u.uid, u.isFollowing);
     }
-}
+
+    /**
+     * Жадный префетч профиля+фона для первых K элементов.
+     * prefetchProfile сам отфильтрует UID-ы, для которых полный профиль уже в кэше,
+     * и сам же при удачной загрузке зацепит preloadBackgrounds — байты фона лягут
+     * в prefetchBgBytesCache раньше, чем юзер успеет тапнуть.
+     */
+    private void eagerPrefetchTopK(String token, List<User> users, int k) {
+        if (token == null || token.isEmpty()) return;
+        if (users == null || users.isEmpty() || k <= 0) return;
+
+        int max = Math.min(k, users.size());
+        for (int i = 0; i < max; i++) {
+            User u = users.get(i);
+            if (u == null || u.uid == null || u.uid.isEmpty()) continue;
+            OtherProfileFragment.prefetchProfile(token, u.uid);
+        }
+    }
+
     private void loadFromCacheOnly() {
         if (swipeRefresh != null && swipeRefresh.isRefreshing()) return;
 
@@ -256,6 +306,7 @@ private void prefetchProfiles(List<User> users) {
         String cachedJson = prefs.getString(cacheKey, "[]");
 
         if (!cachedJson.equals("[]") && cachedJson.length() > 5) {
+            final String token = activity.vpsToken;
             Utils.backgroundExecutor.execute(() -> {
                 try {
                     JSONArray array = new JSONArray(cachedJson);
@@ -287,8 +338,9 @@ private void prefetchProfiles(List<User> users) {
                         }
                     }
 
-                    // Префетч по свежему кэшу — чтобы карточки от пушей тоже открывались мгновенно.
+                    // Огрызки в кэш + жадный префетч top-K.
                     prefetchProfiles(usersToCache);
+                    eagerPrefetchTopK(token, usersToCache, EAGER_TOP_K);
 
                     final boolean finalHasUnread = hasUnread;
 
@@ -302,6 +354,8 @@ private void prefetchProfiles(List<User> users) {
                             recycler.setVisibility(View.VISIBLE);
                             emptyText.setVisibility(View.GONE);
                             if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+
+                            currentItems = items;
 
                             if (adapter == null) {
                                 adapter = new NotificationsAdapter(items, activity);
@@ -435,6 +489,8 @@ private void prefetchProfiles(List<User> users) {
     }
 
     private void parseAndDisplayAsync(String jsonResult, MainActivity activity, long delayStopSpinner, boolean isFromSwipe) {
+        final String token = activity != null ? activity.vpsToken : null;
+
         Utils.backgroundExecutor.execute(() -> {
             try {
                 JSONArray array = new JSONArray(jsonResult);
@@ -472,8 +528,10 @@ private void prefetchProfiles(List<User> users) {
                     }
                 }
 
-                // Инъекция в кэш + ПОЛНЫЙ префетч профиля (с about/background) + фоны.
+                // Огрызки в кэш + жадный префетч top-K (фон+about+counts для самых
+                // верхних карточек уже стартует, пока мы ждём конец анимации).
                 prefetchProfiles(usersToCache);
+                eagerPrefetchTopK(token, usersToCache, EAGER_TOP_K);
 
                 final boolean finalHasUnread = hasUnread;
 
@@ -504,6 +562,8 @@ private void prefetchProfiles(List<User> users) {
                         recycler.setVisibility(View.VISIBLE);
                         emptyText.setVisibility(View.GONE);
 
+                        currentItems = items;
+
                         if (adapter == null) {
                             adapter = new NotificationsAdapter(items, activity);
                             recycler.setAdapter(adapter);
@@ -530,6 +590,7 @@ private void prefetchProfiles(List<User> users) {
 
     private void showEmptyState() {
         if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
+        currentItems = new ArrayList<>();
         if (adapter != null) adapter.updateItems(new ArrayList<>());
         emptyText.setVisibility(View.VISIBLE);
     }
@@ -613,6 +674,11 @@ private void prefetchProfiles(List<User> users) {
         super.onDestroyView();
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) activity.headerManager.resetHeader();
+
+        if (recycler != null && attachListener != null) {
+            recycler.removeOnChildAttachStateChangeListener(attachListener);
+        }
+        attachListener = null;
     }
 
     @Override
@@ -633,7 +699,7 @@ private void prefetchProfiles(List<User> users) {
             }
 
             // Ранний префетч из кэша при возврате на экран — пока ждём ответ сервера,
-            // профили уже едут в фоне.
+            // профили (и фон у top-K) уже едут в фоне.
             prefetchFromCacheJsonAsync();
 
             loadHistory(false, 0);
