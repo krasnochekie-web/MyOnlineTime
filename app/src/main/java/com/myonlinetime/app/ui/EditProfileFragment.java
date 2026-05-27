@@ -7,7 +7,6 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -55,27 +54,29 @@ public class EditProfileFragment extends Fragment {
     private long currentPhotoSelectionId = 0;
     private long currentBgSelectionId = 0;
 
+    // True только когда мы фактически подсветили preview-фон. Влияет на clearPreviewBackground.
+    private boolean previewWasApplied = false;
+
     private static long penaltyEndTime = 0;
     private static final java.util.LinkedList<Long> textAttemptTimes = new java.util.LinkedList<>();
     private static final java.util.LinkedList<Long> mediaAttemptTimes = new java.util.LinkedList<>();
 
     private final ActivityResultLauncher<String[]> photoPicker = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(),
-            uri -> { 
+            uri -> {
                 if (uri != null) {
                     currentPhotoSelectionId++;
-                    processMediaFile(uri, 10, true, currentPhotoSelectionId); 
+                    processMediaFile(uri, 10, true, currentPhotoSelectionId);
                 }
             }
     );
 
     private final ActivityResultLauncher<String[]> bgPicker = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(),
-            uri -> { 
+            uri -> {
                 if (uri != null) {
                     currentBgSelectionId++;
-                    // ИСПРАВЛЕНИЕ: Лимит для фона изменен с 30 до 10 МБ
-                    processMediaFile(uri, 10, false, currentBgSelectionId); 
+                    processMediaFile(uri, 10, false, currentBgSelectionId);
                 }
             }
     );
@@ -101,11 +102,11 @@ public class EditProfileFragment extends Fragment {
 
     private boolean isActionSpam(boolean isMedia) {
         long now = System.currentTimeMillis();
-        
+
         if (now < penaltyEndTime) {
-            penaltyEndTime = now + 30000; 
+            penaltyEndTime = now + 30000;
             if (getActivity() != null) Toast.makeText(getActivity(), R.string.err_wait_cooldown, Toast.LENGTH_SHORT).show();
-            return true; 
+            return true;
         }
 
         if (isMedia) {
@@ -120,7 +121,7 @@ public class EditProfileFragment extends Fragment {
         } else {
             textAttemptTimes.add(now);
             while (!textAttemptTimes.isEmpty() && now - textAttemptTimes.getFirst() > 5000) textAttemptTimes.removeFirst();
-            
+
             if (textAttemptTimes.size() > 5) {
                 penaltyEndTime = now + 30000;
                 textAttemptTimes.clear();
@@ -128,20 +129,21 @@ public class EditProfileFragment extends Fragment {
                 return true;
             }
         }
-        return false; 
+        return false;
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         final MainActivity activity = (MainActivity) getActivity();
-        
+
         if (activity != null) {
-            // ИСПРАВЛЕНИЕ: Убрали жесткое включение фона, чтобы коллаж экранов (свечение) не ломалось
             LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_EDIT_PROFILE_OPENED"));
         }
 
         final View view = inflater.inflate(R.layout.layout_edit_profile, container, false);
-        view.setBackgroundColor(Color.TRANSPARENT);
+        // Никаких опаковых фоновых заливок на корне фрагмента — иначе кадр редактирования
+        // перекроет глобальный фон при любой неувязке с прозрачностью.
+        view.setBackground(null);
 
         if (activity == null) return view;
         setupHeader(activity);
@@ -154,7 +156,7 @@ public class EditProfileFragment extends Fragment {
 
         final EditText inputName = view.findViewById(R.id.input_nickname);
         final EditText inputAbout = view.findViewById(R.id.input_about);
-        final TextView aboutCounter = view.findViewById(R.id.text_about_counter); 
+        final TextView aboutCounter = view.findViewById(R.id.text_about_counter);
         View btnChangePhoto = view.findViewById(R.id.btn_change_photo);
         View btnChangeBackground = view.findViewById(R.id.btn_change_background);
         ImageView avatarPreview = view.findViewById(R.id.edit_avatar_preview);
@@ -165,8 +167,8 @@ public class EditProfileFragment extends Fragment {
             public CharSequence filter(CharSequence source, int start, int end, Spanned dest, int dstart, int dend) {
                 for (int i = start; i < end; i++) {
                     int type = Character.getType(source.charAt(i));
-                    if (type == Character.SURROGATE || type == Character.NON_SPACING_MARK || 
-                        type == Character.CONTROL || type == Character.OTHER_SYMBOL) {
+                    if (type == Character.SURROGATE || type == Character.NON_SPACING_MARK ||
+                            type == Character.CONTROL || type == Character.OTHER_SYMBOL) {
                         return "";
                     }
                 }
@@ -194,11 +196,11 @@ public class EditProfileFragment extends Fragment {
         String customAvatarPath = activity.prefs.getString("custom_avatar_path_" + acct.getId(), null);
         if (customAvatarPath != null && new File(customAvatarPath).exists() && avatarPreview != null) {
             Glide.with(activity)
-                 .load(new File(customAvatarPath))
-                 .skipMemoryCache(true)
-                 .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
-                 .circleCrop()
-                 .into(avatarPreview);
+                    .load(new File(customAvatarPath))
+                    .skipMemoryCache(true)
+                    .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.NONE)
+                    .circleCrop()
+                    .into(avatarPreview);
         } else {
             String savedAvatar = activity.prefs.getString("my_photo_base64", null);
             if (savedAvatar != null && avatarPreview != null) {
@@ -215,9 +217,9 @@ public class EditProfileFragment extends Fragment {
 
         String[] photoMimeTypes = new String[]{"image/*"};
         String[] backgroundMimeTypes = new String[]{"image/*"};
-        
+
         View.OnClickListener photoClickListener = v -> {
-            if (isActionSpam(true)) return; 
+            if (isActionSpam(true)) return;
             photoPicker.launch(photoMimeTypes);
         };
         if (btnChangePhoto != null) btnChangePhoto.setOnClickListener(photoClickListener);
@@ -225,12 +227,12 @@ public class EditProfileFragment extends Fragment {
 
         if (btnChangeBackground != null) {
             btnChangeBackground.setOnClickListener(v -> {
-                if (isActionSpam(true)) return; 
+                if (isActionSpam(true)) return;
                 bgPicker.launch(backgroundMimeTypes);
             });
         }
 
-        btnSave.setOnClickListener(v -> { 
+        btnSave.setOnClickListener(v -> {
             if (Boolean.TRUE.equals(btnSave.getTag())) return;
 
             final String n = inputName.getText().toString().trim();
@@ -240,14 +242,14 @@ public class EditProfileFragment extends Fragment {
                 activity.navigator.closeSubScreen();
                 return;
             }
-             
+
             if (n.isEmpty()) {
                 Toast.makeText(activity, R.string.err_empty_nickname, Toast.LENGTH_SHORT).show();
                 return;
             }
 
-            if (isActionSpam(pendingPhotoFile != null || pendingBgFile != null)) return; 
-             
+            if (isActionSpam(pendingPhotoFile != null || pendingBgFile != null)) return;
+
             btnSave.setTag(true);
 
             InputMethodManager imm = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
@@ -266,7 +268,6 @@ public class EditProfileFragment extends Fragment {
             final long myUploadTicket = System.currentTimeMillis();
             activity.prefs.edit().putLong("active_upload_ticket", myUploadTicket).apply();
 
-            // ИСПРАВЛЕНИЕ: Выполняем тяжелую работу (копирование файлов) в фоне, чтобы не фризить UI
             Utils.backgroundExecutor.execute(() -> {
                 SharedPreferences.Editor editor = activity.prefs.edit();
                 editor.putString("my_nickname", n);
@@ -287,34 +288,38 @@ public class EditProfileFragment extends Fragment {
                     try { copyFile(finalPhotoFile, pPath); } catch (Exception ignored) {}
                     editor.putString("custom_avatar_path_" + currentUid, pPath.getAbsolutePath());
                 }
-                 
+
                 if (finalBgFile != null) {
                     String ext = finalBgFile.getName().endsWith(".gif") ? ".gif" : ".jpg";
                     File bPath = new File(activity.getFilesDir(), "my_bg_" + currentUid + "_" + System.currentTimeMillis() + ext);
                     try { copyFile(finalBgFile, bPath); } catch (Exception ignored) {}
                     editor.putString("custom_bg_path_" + currentUid, bPath.getAbsolutePath());
                 }
-                 
+
                 editor.apply();
 
                 EditProfileFragment.isProfileUploading = true;
                 EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
 
-                // Возвращаемся в UI-поток только для закрытия экрана и обновления картинки
                 new Handler(Looper.getMainLooper()).post(() -> {
                     if (finalPhotoFile != null) {
                         activity.mMemoryCache.remove("avatar_" + currentUid);
                         activity.updateAvatarInUI();
                     }
 
-                    activity.clearPreviewBackground();
+                    // Сначала просим Activity подгрузить новый сохранённый фон в globalImageView —
+                    // плавно, через listener: preview останется виден до момента, когда новая
+                    // картинка реально готова.
                     activity.updateGlobalBackground(true);
-                    
+                    // Только теперь сбрасываем previewBgPath (clearPreviewBackground сам решит,
+                    // что делать; globalImageView у нас уже грузится).
+                    previewWasApplied = false;
+                    activity.clearPreviewBackground();
+
                     activity.navigator.closeSubScreen();
                     LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
                 });
 
-                // Продолжаем фоновую отправку на сервер
                 File serverUploadPhoto = null;
                 File serverUploadBg = null;
 
@@ -342,7 +347,7 @@ public class EditProfileFragment extends Fragment {
                         }
                         @Override public void onError(String error) {
                             if (myGeneration != currentUploadGeneration) return;
-                            
+
                             new Handler(Looper.getMainLooper()).post(() -> {
                                 String displayError = activity.getString(R.string.err_server);
                                 try {
@@ -352,7 +357,7 @@ public class EditProfileFragment extends Fragment {
                                     } else { displayError = error; }
                                 } catch (Exception ignored) {}
                                 Toast.makeText(activity, displayError, Toast.LENGTH_LONG).show();
-                                
+
                                 if (activity.prefs.getString("my_nickname", "").equals(n)) {
                                     activity.prefs.edit().putString("my_nickname", initialName).apply();
                                     LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
@@ -372,7 +377,7 @@ public class EditProfileFragment extends Fragment {
 
     private void executeFinalUpload(String token, String targetUid, String nickname, String about, File photo, File bg, long ticket, long generation, MainActivity activity) {
         VpsApi.saveUserProfile(token, nickname, about, photo, bg, ticket, new VpsApi.Callback() {
-            @Override 
+            @Override
             public void onSuccess(String result) {
                 if (generation != currentUploadGeneration) {
                     cleanupFiles(photo, bg);
@@ -385,10 +390,10 @@ public class EditProfileFragment extends Fragment {
                         cleanupFiles(photo, bg);
                         return;
                     }
-                    
+
                     new Handler(Looper.getMainLooper()).post(() -> {
                         SharedPreferences.Editor successEditor = activity.prefs.edit();
-                        
+
                         if (photo != null) {
                             String newPhotoUrl = json.optString("photoUrl", json.optString("photo", null));
                             if (newPhotoUrl != null && !newPhotoUrl.isEmpty() && !newPhotoUrl.equals("null") && newPhotoUrl.startsWith("http")) {
@@ -403,24 +408,24 @@ public class EditProfileFragment extends Fragment {
                             if (newBgUrl != null && !newBgUrl.isEmpty() && !newBgUrl.equals("null") && newBgUrl.startsWith("http")) {
                                 if (newBgUrl.contains("?")) newBgUrl = newBgUrl.substring(0, newBgUrl.indexOf("?"));
                                 successEditor.putString("my_bg_base64", newBgUrl);
-                                successEditor.putString("synced_bg_url_" + targetUid, newBgUrl); 
+                                successEditor.putString("synced_bg_url_" + targetUid, newBgUrl);
                             }
                         }
 
                         successEditor.apply();
                         activity.prefs.edit().putLong("active_upload_ticket", System.currentTimeMillis()).apply();
-                        
+
                         EditProfileFragment.lastProfileSyncTime = System.currentTimeMillis();
                         if (generation == currentUploadGeneration) EditProfileFragment.isProfileUploading = false;
                         LocalBroadcastManager.getInstance(activity).sendBroadcast(new Intent("ACTION_PROFILE_UPDATED"));
                     });
-                } catch (Exception ignored) {} 
+                } catch (Exception ignored) {}
                 finally { cleanupFiles(photo, bg); }
             }
             @Override public void onError(String error) {
                 if (generation == currentUploadGeneration) {
                     EditProfileFragment.isProfileUploading = false;
-                    activity.prefs.edit().putLong("active_upload_ticket", System.currentTimeMillis()).apply(); 
+                    activity.prefs.edit().putLong("active_upload_ticket", System.currentTimeMillis()).apply();
                 }
                 cleanupFiles(photo, bg);
             }
@@ -463,21 +468,21 @@ public class EditProfileFragment extends Fragment {
                 long maxBytes = maxMb * 1024L * 1024L;
                 if (fileSize > maxBytes) {
                     new Handler(Looper.getMainLooper()).post(() -> Toast.makeText(activity, activity.getString(R.string.err_file_size_limit) + " " + maxMb + " MB", Toast.LENGTH_LONG).show());
-                    return; 
+                    return;
                 }
 
                 InputStream is = activity.getContentResolver().openInputStream(uri);
                 if (is == null) return;
 
                 String mimeType = activity.getContentResolver().getType(uri);
-                boolean isGif = mimeType != null && mimeType.contains("gif"); 
-                
+                boolean isGif = mimeType != null && mimeType.contains("gif");
+
                 String prefix = isPhoto ? "temp_avatar_" : "temp_bg_";
-                String extension = isGif ? ".gif" : ".jpg"; 
+                String extension = isGif ? ".gif" : ".jpg";
                 File tempFile = new File(activity.getCacheDir(), prefix + System.currentTimeMillis() + extension);
-                
+
                 FileOutputStream fos = new FileOutputStream(tempFile);
-                byte[] buffer = new byte[8192]; 
+                byte[] buffer = new byte[8192];
                 int nRead;
                 while ((nRead = is.read(buffer)) != -1) fos.write(buffer, 0, nRead);
                 fos.flush(); fos.close(); is.close();
@@ -497,6 +502,7 @@ public class EditProfileFragment extends Fragment {
                     } else {
                         pendingBgFile = tempFile;
                         activity.previewBackground(tempFile.getAbsolutePath());
+                        previewWasApplied = true;
                     }
                 });
             } catch (Exception e) {}
@@ -508,7 +514,7 @@ public class EditProfileFragment extends Fragment {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerTitle.setText(activity.getString(R.string.edit_profile_title));
             activity.headerBackBtn.setVisibility(View.VISIBLE);
-            activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow); 
+            activity.headerBackBtn.setImageResource(R.drawable.ic_math_arrow);
         }
     }
 
@@ -517,28 +523,33 @@ public class EditProfileFragment extends Fragment {
         super.onDestroyView();
         MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
-            cleanupTempCacheDir(activity); 
+            cleanupTempCacheDir(activity);
             LocalBroadcastManager.getInstance(requireContext()).sendBroadcast(new Intent("ACTION_EDIT_PROFILE_CLOSED"));
-            activity.clearPreviewBackground();
+
+            // Сбрасываем preview ТОЛЬКО если он действительно был применён.
+            // Это убирает баг «после нескольких циклов фон уходит» — мы не дёргаем
+            // глобальное состояние, если пользователь ничего не менял.
+            if (previewWasApplied) {
+                previewWasApplied = false;
+                activity.clearPreviewBackground();
+            }
+
+            // Заголовок аккуратно перезагрузим, если мы вернулись на корневой экран таба.
             if (!activity.navigator.hasSubScreen()) {
                 activity.headerManager.resetHeader();
-                
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    if (activity.navigator != null && !activity.navigator.hasSubScreen()) {
-                        activity.updateGlobalBackground(false);
-                    }
-                }, 400);
             }
+
+            // НИКАКИХ postDelayed updateGlobalBackground(false) — целевой фрагмент
+            // сам управляет своим фоном. Иначе через 400 мс мы гасим фон уже на
+            // соседнем экране, и он остаётся пустым до следующего тапа по навигации.
         }
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        if (!isHidden() && getActivity() instanceof MainActivity) {
-            MainActivity activity = (MainActivity) getActivity();
-            // ИСПРАВЛЕНИЕ: Не включаем фон жестко
-        }
+        // Жёстко включать/выключать фон здесь не надо — за это отвечает MainActivity
+        // и updateGlobalBackground через свой listener-механизм.
     }
 
     @Override
@@ -548,6 +559,11 @@ public class EditProfileFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (!hidden) {
                 setupHeader(activity);
+                // Если у нас всё ещё активен preview — снова попросим Activity
+                // его применить (плавно, без моргания).
+                if (previewWasApplied && pendingBgFile != null) {
+                    activity.previewBackground(pendingBgFile.getAbsolutePath());
+                }
             }
         }
     }
