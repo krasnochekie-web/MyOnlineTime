@@ -77,6 +77,10 @@ public class MainActivity extends AppCompatActivity {
     private ImageView previewImageView;
     private boolean isSyncingBg = false;
 
+    public ImageView getGlobalImageView() {
+    return globalImageView;
+}
+    
     private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
 
     private BroadcastReceiver badgeReceiver;
