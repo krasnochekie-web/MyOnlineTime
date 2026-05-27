@@ -78,9 +78,9 @@ public class MainActivity extends AppCompatActivity {
     private boolean isSyncingBg = false;
 
     public ImageView getGlobalImageView() {
-    return globalImageView;
-}
-    
+        return globalImageView;
+    }
+
     private final android.os.Handler bgHandler = new android.os.Handler(android.os.Looper.getMainLooper());
 
     private BroadcastReceiver badgeReceiver;
@@ -203,8 +203,12 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        // === NAV КНОПКИ ===
+        // Закрываем sub-screen перед сменой основной табы — чтобы EditProfile/Notifications/Follows
+        // плавно уезжали в сторону, а новый таб приезжал на освободившееся место.
         findViewById(R.id.nav_feed).setOnClickListener(v -> {
             if (currentTab == 0) return;
+            if (navigator != null && navigator.hasSubScreen()) navigator.closeSubScreen();
             updateNavState(0);
             navigator.switchScreen(0, null);
             syncHeaderState();
@@ -212,18 +216,21 @@ public class MainActivity extends AppCompatActivity {
 
         findViewById(R.id.nav_search).setOnClickListener(v -> {
             if (currentTab == 1) return;
+            if (navigator != null && navigator.hasSubScreen()) navigator.closeSubScreen();
             updateNavState(1);
             checkAuthAndLoad(1);
         });
 
         findViewById(R.id.nav_profile).setOnClickListener(v -> {
             if (currentTab == 4) return;
+            if (navigator != null && navigator.hasSubScreen()) navigator.closeSubScreen();
             updateNavState(4);
             checkAuthAndLoad(4);
         });
 
         findViewById(R.id.nav_usage).setOnClickListener(v -> {
             if (currentTab == 3) return;
+            if (navigator != null && navigator.hasSubScreen()) navigator.closeSubScreen();
             updateNavState(3);
             navigator.switchScreen(3, null);
             syncHeaderState();
@@ -231,6 +238,7 @@ public class MainActivity extends AppCompatActivity {
 
         findViewById(R.id.nav_settings).setOnClickListener(v -> {
             if (currentTab == 5) return;
+            if (navigator != null && navigator.hasSubScreen()) navigator.closeSubScreen();
             updateNavState(5);
             navigator.switchScreen(5, null);
             syncHeaderState();
