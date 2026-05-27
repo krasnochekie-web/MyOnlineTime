@@ -163,36 +163,32 @@ public class SearchFragment extends Fragment {
             adapter.setUsers(new ArrayList<>());
         }
     }
+private void executeSearchApi(String token, String query) {
+    VpsApi.searchUsers(token, query, new VpsApi.SearchCallback() {
+        @Override public void onFound(List<User> users) {
+            if (!isAdded()) return;
+            if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
 
-    private void executeSearchApi(String token, String query) {
-        VpsApi.searchUsers(token, query, new VpsApi.SearchCallback() {
-            @Override public void onFound(List<User> users) {
-                if (!isAdded()) return; 
-                if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-                
-                // Передаем результаты в адаптер
-                adapter.setUsers(users);
+            adapter.setUsers(users);
 
-                // === МАГИЯ КЭША: ПРЕДЗАГРУЗКА БЕЗ СЕТЕВЫХ ЗАПРОСОВ ===
-                if (users != null) {
-                    // Запускаем тихую загрузку легких фонов
-                    OtherProfileFragment.preloadBackgrounds(users);
-                    
-                    for (User u : users) {
-                        OtherProfileFragment.prefetchUserCache.put(u.uid, u);
-                        try {
-                            org.json.JSONObject countsObj = new org.json.JSONObject();
-                            countsObj.put("followers", u.followers);
-                            countsObj.put("following", u.following);
-                            OtherProfileFragment.prefetchCountsCache.put(u.uid, countsObj.toString());
-                        } catch (Exception ignored) {}
-                        OtherProfileFragment.prefetchFollowCache.put(u.uid, u.isFollowing);
-                    }
+            // === Заливаем кэши "толстыми" данными из ответа списка.
+            // Фоны тянет UserListAdapter лениво (per-row на attach), а не bulk.
+            if (users != null) {
+                for (User u : users) {
+                    if (u == null || u.uid == null) continue;
+                    OtherProfileFragment.prefetchUserCache.put(u.uid, u);
+                    try {
+                        org.json.JSONObject countsObj = new org.json.JSONObject();
+                        countsObj.put("followers", u.followers);
+                        countsObj.put("following", u.following);
+                        OtherProfileFragment.prefetchCountsCache.put(u.uid, countsObj.toString());
+                    } catch (Exception ignored) {}
+                    OtherProfileFragment.prefetchFollowCache.put(u.uid, u.isFollowing);
                 }
             }
-        });
-    }
-
+        }
+    });
+}
     @Override
     public void onResume() {
         super.onResume();
