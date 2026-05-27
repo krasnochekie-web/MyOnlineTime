@@ -33,6 +33,7 @@ dependencies {
     implementation 'com.otaliastudios:transcoder:0.10.5'
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     annotationProcessor 'com.github.bumptech.glide:compiler:4.16.0'
+    implementation "androidx.work:work-runtime:2.9.0"
     
     // Подключаем сетевую библиотеку (которую потерял VpsApi)
     implementation 'com.squareup.okhttp3:okhttp:4.10.0'
