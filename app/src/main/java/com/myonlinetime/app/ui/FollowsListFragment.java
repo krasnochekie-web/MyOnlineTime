@@ -119,47 +119,36 @@ public class FollowsListFragment extends Fragment {
             statusText.setText(getString(R.string.err_loading));
         }
     }
+private void fetchList(String token) {
+    VpsApi.getList(token, targetUid, listType, new VpsApi.SearchCallback() {
+        @Override public void onFound(List<User> users) {
+            if (!isAdded()) return;
+            if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
 
-    private void fetchList(String token) {
-        VpsApi.getList(token, targetUid, listType, new VpsApi.SearchCallback() {
-            @Override public void onFound(List<User> users) {
-                if (!isAdded()) return;
-                if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
-                
-                if (users == null || users.isEmpty()) {
-                    statusText.setVisibility(View.VISIBLE);
-                    statusText.setText(getString(R.string.empty_list));
-                } else {
-                    statusText.setVisibility(View.GONE);
-                    adapter.setUsers(users);
-                    
-                    // === МАГИЯ КЭША: ПРЕДЗАГРУЗКА БЕЗ СЕТЕВЫХ ЗАПРОСОВ ===
-                    // Мы не дергаем сервер! Мы просто берем "толстые" данные, 
-                    // которые УЖЕ пришли в списке, и кладем их в оперативную память.
-                    
-                    // Запускаем тихую загрузку легких фонов
-                    OtherProfileFragment.preloadBackgrounds(users);
+            if (users == null || users.isEmpty()) {
+                statusText.setVisibility(View.VISIBLE);
+                statusText.setText(getString(R.string.empty_list));
+            } else {
+                statusText.setVisibility(View.GONE);
+                adapter.setUsers(users);
 
-                    for (User u : users) {
-                        // 1. Кладем самого юзера (с фоном и данными)
-                        OtherProfileFragment.prefetchUserCache.put(u.uid, u);
-                        
-                        // 2. Кладем счетчики
-                        try {
-                            org.json.JSONObject countsObj = new org.json.JSONObject();
-                            countsObj.put("followers", u.followers);
-                            countsObj.put("following", u.following);
-                            OtherProfileFragment.prefetchCountsCache.put(u.uid, countsObj.toString());
-                        } catch (Exception ignored) {}
-                        
-                        // 3. Кладем статус подписки
-                        OtherProfileFragment.prefetchFollowCache.put(u.uid, u.isFollowing);
-                    }
+                // === Заливаем кэши "толстыми" данными.
+                // Фоны тянет UserListAdapter лениво (per-row на attach).
+                for (User u : users) {
+                    if (u == null || u.uid == null) continue;
+                    OtherProfileFragment.prefetchUserCache.put(u.uid, u);
+                    try {
+                        org.json.JSONObject countsObj = new org.json.JSONObject();
+                        countsObj.put("followers", u.followers);
+                        countsObj.put("following", u.following);
+                        OtherProfileFragment.prefetchCountsCache.put(u.uid, countsObj.toString());
+                    } catch (Exception ignored) {}
+                    OtherProfileFragment.prefetchFollowCache.put(u.uid, u.isFollowing);
                 }
             }
-        });
-    }
-
+        }
+    });
+}
     // НИКАКИХ onResume И updateHeader ЗДЕСЬ БОЛЬШЕ НЕТ. РАБОТАЕМ СТРОГО ВНУТРИ VIEWPAGER2.
                                 }
                                 
