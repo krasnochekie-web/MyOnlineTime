@@ -396,57 +396,91 @@ public class EditProfileFragment extends Fragment {
 
         return wrapper;
     }
+/**
+ * Грузит актуальный фон пользователя из prefs в editBgImageView.
+ * Вызывается ТОЛЬКО когда фрагмент уходит на другой таб через hide(),
+ * чтобы при slide-анимации фон ехал вместе с фрагментом.
+ *
+ * ВАЖНО про перегруженный CPU:
+ *  - сначала ставим МГНОВЕННЫЙ плейсхолдер из activity.globalImageView.getDrawable()
+ *    (этот Drawable уже отрисован Activity'ей, доступен синхронно и совпадает с фоном
+ *    Profile в этот момент) — это гарантирует, что slide-анимация поедет с непробиваемым
+ *    фоном даже если Glide ещё не успел декодить картинку.
+ *  - параллельно запускаем Glide для уточнения картинки (в большинстве случаев визуально
+ *    не отличимо от плейсхолдера, но даёт более актуальный bitmap).
+ */
+private void loadInitialBgIntoOwnView(MainActivity activity, String uid) {
+    if (editBgImageView == null) return;
 
-    /**
-     * Грузит актуальный фон пользователя из prefs в editBgImageView.
-     * Вызывается ТОЛЬКО когда фрагмент уходит на другой таб через hide(),
-     * чтобы при slide-анимации фон ехал вместе с фрагментом.
-     */
-    private void loadInitialBgIntoOwnView(MainActivity activity, String uid) {
-        if (editBgImageView == null) return;
-
-        SharedPreferences appPrefs = activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
-        boolean isGlobalEnabled = appPrefs.getBoolean("bg_global_enabled", true);
-        boolean isMyProfileEnabled = appPrefs.getBoolean("bg_my_profile_enabled", true);
-        boolean isMyImagesEnabled = appPrefs.getBoolean("bg_my_images_enabled", true);
-        boolean isMyGifsEnabled = appPrefs.getBoolean("bg_my_gifs_enabled", true);
-
-        String bgPath = activity.prefs.getString("custom_bg_path_" + uid, null);
-        String remoteBg = activity.prefs.getString("my_bg_base64", null);
-
-        String targetPath = null;
-        if (bgPath != null && new File(bgPath).exists()) targetPath = bgPath;
-        else if (remoteBg != null && remoteBg.startsWith("http")) targetPath = remoteBg;
-
-        if (!isGlobalEnabled || !isMyProfileEnabled || targetPath == null) {
-            editBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
-            return;
+    // ШАГ 1: непробиваемый мгновенный плейсхолдер.
+    // globalImageView у Activity уже содержит фон Profile-таба, прямо сейчас.
+    android.graphics.drawable.Drawable snapshot = null;
+    try {
+        if (activity.globalImageView != null) {
+            snapshot = activity.globalImageView.getDrawable();
         }
-
-        boolean isGif = targetPath.toLowerCase().endsWith(".gif");
-        if (isGif && !isMyGifsEnabled) {
-            editBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
-            return;
-        }
-        if (!isGif && !isMyImagesEnabled) {
-            editBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
-            return;
-        }
-
-        if (targetPath.startsWith("http")) {
-            Glide.with(this).load(targetPath).dontAnimate().centerCrop().into(editBgImageView);
-        } else {
-            File f = new File(targetPath);
-            Glide.with(this)
-                    .load(f)
-                    .diskCacheStrategy(DiskCacheStrategy.NONE)
-                    .signature(new ObjectKey(f.lastModified()))
-                    .dontAnimate()
-                    .centerCrop()
-                    .into(editBgImageView);
-        }
+    } catch (Throwable ignored) {}
+    if (snapshot != null) {
+        editBgImageView.setImageDrawable(snapshot);
+    } else {
+        editBgImageView.setImageDrawable(new ColorDrawable(
+                ContextCompat.getColor(activity, R.color.bgDynamic)));
     }
 
+    // ШАГ 2: уточняющая загрузка через Glide (асинхронно).
+    SharedPreferences appPrefs = activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
+    boolean isGlobalEnabled = appPrefs.getBoolean("bg_global_enabled", true);
+    boolean isMyProfileEnabled = appPrefs.getBoolean("bg_my_profile_enabled", true);
+    boolean isMyImagesEnabled = appPrefs.getBoolean("bg_my_images_enabled", true);
+    boolean isMyGifsEnabled = appPrefs.getBoolean("bg_my_gifs_enabled", true);
+
+    String bgPath = activity.prefs.getString("custom_bg_path_" + uid, null);
+    String remoteBg = activity.prefs.getString("my_bg_base64", null);
+
+    String targetPath = null;
+    if (bgPath != null && new File(bgPath).exists()) targetPath = bgPath;
+    else if (remoteBg != null && remoteBg.startsWith("http")) targetPath = remoteBg;
+
+    if (!isGlobalEnabled || !isMyProfileEnabled || targetPath == null) {
+        // Bg отключён в настройках или его нет — оставляем bgDynamic (плейсхолдер
+        // из globalImageView нас в этом случае мог обмануть, поэтому перекрываем).
+        editBgImageView.setImageDrawable(new ColorDrawable(
+                ContextCompat.getColor(activity, R.color.bgDynamic)));
+        return;
+    }
+
+    boolean isGif = targetPath.toLowerCase().endsWith(".gif");
+    if (isGif && !isMyGifsEnabled) {
+        editBgImageView.setImageDrawable(new ColorDrawable(
+                ContextCompat.getColor(activity, R.color.bgDynamic)));
+        return;
+    }
+    if (!isGif && !isMyImagesEnabled) {
+        editBgImageView.setImageDrawable(new ColorDrawable(
+                ContextCompat.getColor(activity, R.color.bgDynamic)));
+        return;
+    }
+
+    // Загружаем уточняющую картинку. Если Glide не успеет за время анимации —
+    // на экране всё равно есть плейсхолдер из globalImageView.
+    // skipMemoryCache(false) и dontAnimate() — без fade-in, чтобы не было видимой подмены.
+    if (targetPath.startsWith("http")) {
+        Glide.with(this)
+                .load(targetPath)
+                .dontAnimate()
+                .centerCrop()
+                .into(editBgImageView);
+    } else {
+        File f = new File(targetPath);
+        Glide.with(this)
+                .load(f)
+                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                .signature(new ObjectKey(f.lastModified()))
+                .dontAnimate()
+                .centerCrop()
+                .into(editBgImageView);
+    }
+}
     private void executeFinalUpload(String token, String targetUid, String nickname, String about, File photo, File bg, long ticket, long generation, MainActivity activity) {
         VpsApi.saveUserProfile(token, nickname, about, photo, bg, ticket, new VpsApi.Callback() {
             @Override
