@@ -38,7 +38,7 @@ public class SettingsFragment extends Fragment {
 
     private TextView themeAuto, themeLight, themeDark;
     private TextView regDateTxt, accountIdTxt;
-    private View btnBackgrounds; // <-- Ссылка на кнопку
+    private View btnBackgrounds;
     private SharedPreferences prefs;
 
     private static final String PREFS_NAME = "AppPrefs";
@@ -62,51 +62,48 @@ public class SettingsFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.layout_settings, container, false);
         MainActivity activity = (MainActivity) getActivity();
-        
+
         if (activity != null) {
             prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            // EditProfileFragment теперь имеет свой inline-фон → можно гасить глобальный сразу.
             activity.clearPreviewBackground();
             activity.updateGlobalBackground(false);
         }
 
         regDateTxt = view.findViewById(R.id.settings_reg_date_txt);
         accountIdTxt = view.findViewById(R.id.settings_account_id_txt);
-        btnBackgrounds = view.findViewById(R.id.btn_backgrounds); // <-- Инициализация
-        
+        btnBackgrounds = view.findViewById(R.id.btn_backgrounds);
+
         loadUserData(view);
 
-        // Кнопка вызова диалога смены почты
         View btnChangeEmail = view.findViewById(R.id.btn_change_email);
         if (btnChangeEmail != null) {
             btnChangeEmail.setOnClickListener(v -> {
-                if (activity != null) {
-                    showChangeEmailDialog(activity);
-                }
+                if (activity != null) showChangeEmailDialog(activity);
             });
         }
-        
-        // Кнопка удаления аккаунта
+
         View btnDeleteAccount = view.findViewById(R.id.btn_delete_account);
         if (btnDeleteAccount != null) {
             btnDeleteAccount.setOnClickListener(v -> {
                 if (activity != null) showDeleteAccountDialog(activity);
             });
         }
-        
+
         View btnSwitch = view.findViewById(R.id.btn_switch_account);
         if (btnSwitch != null) {
             btnSwitch.setOnClickListener(v -> {
                 if (activity != null && activity.mGoogleSignInClient != null) {
                     activity.mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
                         activity.updateGlobalBackground(false);
-                        activity.performSignOut(); 
+                        activity.performSignOut();
                         Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
-                        activity.startActivityForResult(signInIntent, 9001); 
+                        activity.startActivityForResult(signInIntent, 9001);
                     });
                 }
             });
         }
-        
+
         View btnSignOut = view.findViewById(R.id.btn_sign_out);
         if (btnSignOut != null) {
             btnSignOut.setOnClickListener(v -> {
@@ -124,7 +121,7 @@ public class SettingsFragment extends Fragment {
             btnSignInGuest.setOnClickListener(v -> {
                 if (activity != null && activity.mGoogleSignInClient != null) {
                     Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
-                    activity.startActivityForResult(signInIntent, 9001); 
+                    activity.startActivityForResult(signInIntent, 9001);
                 }
             });
         }
@@ -140,7 +137,6 @@ public class SettingsFragment extends Fragment {
             }
         });
 
-        // НОВЫЙ СЛУШАТЕЛЬ ДЛЯ ФОНОВ
         if (btnBackgrounds != null) {
             btnBackgrounds.setOnClickListener(v -> {
                 if (activity != null && activity.navigator != null) {
@@ -165,12 +161,11 @@ public class SettingsFragment extends Fragment {
         return view;
     }
 
-    // === ДИАЛОГ СМЕНЫ ПОЧТЫ ===
     private void showChangeEmailDialog(MainActivity activity) {
         currentTransferDialog = new Dialog(activity);
         currentTransferDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         currentTransferDialog.setContentView(R.layout.dialog_change_email);
-        
+
         if (currentTransferDialog.getWindow() != null) {
             currentTransferDialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             currentTransferDialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -180,7 +175,7 @@ public class SettingsFragment extends Fragment {
         ImageView btnClose = currentTransferDialog.findViewById(R.id.dialog_close_btn);
         Button btnSave = currentTransferDialog.findViewById(R.id.dialog_btn_save);
         activeEmailInput = currentTransferDialog.findViewById(R.id.dialog_email_input);
-        pendingTransferIdToken = null; 
+        pendingTransferIdToken = null;
 
         GoogleSignInAccount currentAcct = GoogleSignIn.getLastSignedInAccount(activity);
         if (currentAcct != null && currentAcct.getEmail() != null) {
@@ -200,12 +195,10 @@ public class SettingsFragment extends Fragment {
 
         btnSave.setOnClickListener(v -> {
             if (pendingTransferIdToken == null) {
-                currentTransferDialog.dismiss(); 
+                currentTransferDialog.dismiss();
                 return;
             }
-            
-            btnSave.setEnabled(false); 
-            
+            btnSave.setEnabled(false);
             VpsApi.transferAccount(activity.vpsToken, pendingTransferIdToken, new VpsApi.LoginCallback() {
                 @Override
                 public void onSuccess(String newAccessToken) {
@@ -213,8 +206,7 @@ public class SettingsFragment extends Fragment {
                         currentTransferDialog.dismiss();
                         activity.vpsToken = newAccessToken;
                         activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit()
-                            .putString("vps_access_token", newAccessToken).apply();
-                            
+                                .putString("vps_access_token", newAccessToken).apply();
                         Toast.makeText(activity, R.string.toast_email_changed, Toast.LENGTH_SHORT).show();
                         if (isAdded() && getView() != null) loadUserData(getView());
                     });
@@ -224,7 +216,6 @@ public class SettingsFragment extends Fragment {
                 public void onError(String error) {
                     activity.runOnUiThread(() -> {
                         btnSave.setEnabled(true);
-                        
                         if (error.contains("ALREADY_REGISTERED")) {
                             Toast.makeText(activity, R.string.err_account_already_registered, Toast.LENGTH_LONG).show();
                         } else if (error.contains("SAME_ACCOUNT")) {
@@ -243,7 +234,6 @@ public class SettingsFragment extends Fragment {
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        
         if (requestCode == RC_SIGN_IN_TRANSFER) {
             Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
             try {
@@ -261,9 +251,8 @@ public class SettingsFragment extends Fragment {
                         currentTransferDialog.dismiss();
                     }
                     Toast.makeText(activity, R.string.toast_transfer_canceled_restore, Toast.LENGTH_LONG).show();
-                    
                     Intent signInIntent = activity.mGoogleSignInClient.getSignInIntent();
-                    activity.startActivityForResult(signInIntent, 9001); 
+                    activity.startActivityForResult(signInIntent, 9001);
                 }
             }
         }
@@ -273,7 +262,7 @@ public class SettingsFragment extends Fragment {
         final Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         dialog.setContentView(R.layout.dialog_delete_account);
-        
+
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -289,7 +278,6 @@ public class SettingsFragment extends Fragment {
 
         btnDelete.setOnClickListener(v -> {
             btnDelete.setEnabled(false);
-            
             if (activity.vpsToken != null) {
                 VpsApi.deleteAccount(activity.vpsToken, new VpsApi.Callback() {
                     @Override
@@ -336,14 +324,11 @@ public class SettingsFragment extends Fragment {
         View guestBlock = view.findViewById(R.id.settings_guest_login_block);
 
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
-        
+
         if (account != null && activity.vpsToken != null) {
-            // АВТОРИЗОВАН
             if (userHeaderBlock != null) userHeaderBlock.setVisibility(View.VISIBLE);
             if (accountBlock != null) accountBlock.setVisibility(View.VISIBLE);
             if (guestBlock != null) guestBlock.setVisibility(View.GONE);
-            
-            // <-- ПОКАЗЫВАЕМ КНОПКУ ФОНОВ ДЛЯ АВТОРИЗОВАННОГО -->
             if (btnBackgrounds != null) btnBackgrounds.setVisibility(View.VISIBLE);
 
             ImageView avatarView = view.findViewById(R.id.settings_avatar);
@@ -360,20 +345,19 @@ public class SettingsFragment extends Fragment {
                 String createdAt = activity.prefs.getString("my_created_at", "");
                 regDateTxt.setText(getString(R.string.settings_reg_date, createdAt.isEmpty() ? "..." : createdAt));
             }
-            
+
             if (avatarView != null) {
                 String uid = account.getId();
-                
                 String customAvatarPath = activity.prefs.getString("custom_avatar_path_" + uid, null);
                 if (customAvatarPath != null) {
                     File localFile = new File(customAvatarPath);
                     if (localFile.exists()) {
                         Glide.with(this)
-                             .load(localFile)
-                             .signature(new ObjectKey(localFile.lastModified()))
-                             .circleCrop()
-                             .into(avatarView);
-                        return; 
+                                .load(localFile)
+                                .signature(new ObjectKey(localFile.lastModified()))
+                                .circleCrop()
+                                .into(avatarView);
+                        return;
                     }
                 }
 
@@ -389,7 +373,7 @@ public class SettingsFragment extends Fragment {
                             try {
                                 byte[] bytes = android.util.Base64.decode(savedAvatar, android.util.Base64.DEFAULT);
                                 Glide.with(this).load(bytes).circleCrop().into(avatarView);
-                            } catch (Exception e){}
+                            } catch (Exception e) {}
                         }
                     } else {
                         Glide.with(this).load(R.drawable.bg_edit_circle).circleCrop().into(avatarView);
@@ -397,12 +381,9 @@ public class SettingsFragment extends Fragment {
                 }
             }
         } else {
-            // ГОСТЬ
             if (userHeaderBlock != null) userHeaderBlock.setVisibility(View.GONE);
             if (accountBlock != null) accountBlock.setVisibility(View.GONE);
             if (guestBlock != null) guestBlock.setVisibility(View.VISIBLE);
-            
-            // <-- СКРЫВАЕМ КНОПКУ ФОНОВ ДЛЯ ГОСТЯ -->
             if (btnBackgrounds != null) btnBackgrounds.setVisibility(View.GONE);
         }
     }
@@ -436,13 +417,10 @@ public class SettingsFragment extends Fragment {
         if (!isHidden() && getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
             activity.clearPreviewBackground();
-            activity.updateGlobalBackground(false); 
+            activity.updateGlobalBackground(false);
         }
         LocalBroadcastManager.getInstance(requireContext()).registerReceiver(profileUpdateReceiver, new android.content.IntentFilter("ACTION_PROFILE_UPDATED"));
-        
-        if (getView() != null) {
-            loadUserData(getView());
-        }
+        if (getView() != null) loadUserData(getView());
     }
 
     @Override
@@ -455,11 +433,11 @@ public class SettingsFragment extends Fragment {
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
         if (!hidden && getView() != null) {
-            loadUserData(getView()); 
+            loadUserData(getView());
             if (getActivity() instanceof MainActivity) {
                 MainActivity activity = (MainActivity) getActivity();
                 activity.clearPreviewBackground();
-                activity.updateGlobalBackground(false); 
+                activity.updateGlobalBackground(false);
             }
         }
     }
