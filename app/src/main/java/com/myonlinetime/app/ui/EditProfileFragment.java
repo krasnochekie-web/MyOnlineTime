@@ -166,6 +166,10 @@ public class EditProfileFragment extends Fragment {
         if (activity == null) return wrapper;
         setupHeader(activity);
 
+        // КРИТИЧНО: гарантируем, что под нашим прозрачным editBgImageView точно есть глобальный фон.
+        // Если до этого юзер был в Notifications/Follows, MainActivity.onResume мог его спрятать.
+        activity.updateGlobalBackground(true);
+
         final GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
         if (acct == null) return wrapper;
         myUid = acct.getId();
@@ -334,7 +338,6 @@ public class EditProfileFragment extends Fragment {
 
                     // ВАЖНО: перед close очищаем editBg — slide-down не должен показывать
                     // выбранный preview поверх уже обновлённого фона Profile (двойное наложение).
-                    // pendingBgFile занулим, чтобы onCreateAnimation корректно очистил editBg.
                     pendingBgFile = null;
                     pendingPhotoFile = null;
                     if (editBgImageView != null) editBgImageView.setImageDrawable(null);
@@ -396,92 +399,86 @@ public class EditProfileFragment extends Fragment {
 
         return wrapper;
     }
-/**
- * Грузит актуальный фон пользователя из prefs в editBgImageView.
- * Вызывается ТОЛЬКО когда фрагмент уходит на другой таб через hide(),
- * чтобы при slide-анимации фон ехал вместе с фрагментом.
- *
- * ВАЖНО про перегруженный CPU:
- *  - сначала ставим МГНОВЕННЫЙ плейсхолдер из activity.globalImageView.getDrawable()
- *    (этот Drawable уже отрисован Activity'ей, доступен синхронно и совпадает с фоном
- *    Profile в этот момент) — это гарантирует, что slide-анимация поедет с непробиваемым
- *    фоном даже если Glide ещё не успел декодить картинку.
- *  - параллельно запускаем Glide для уточнения картинки (в большинстве случаев визуально
- *    не отличимо от плейсхолдера, но даёт более актуальный bitmap).
- */
-private void loadInitialBgIntoOwnView(MainActivity activity, String uid) {
-    if (editBgImageView == null) return;
 
-    // ШАГ 1: непробиваемый мгновенный плейсхолдер.
-    // globalImageView у Activity уже содержит фон Profile-таба, прямо сейчас.
-    android.graphics.drawable.Drawable snapshot = null;
-    try {
-ImageView gv = activity.getGlobalImageView();
-if (gv != null) {
-    snapshot = gv.getDrawable();
-}
-    } catch (Throwable ignored) {}
-    if (snapshot != null) {
-        editBgImageView.setImageDrawable(snapshot);
-    } else {
-        editBgImageView.setImageDrawable(new ColorDrawable(
-                ContextCompat.getColor(activity, R.color.bgDynamic)));
+    /**
+     * Грузит актуальный фон пользователя из prefs в editBgImageView.
+     * Вызывается ТОЛЬКО когда фрагмент уходит на другой таб через hide(),
+     * чтобы при slide-анимации фон ехал вместе с фрагментом.
+     *
+     * Логика:
+     *  1) Мгновенный плейсхолдер — drawable из activity.getGlobalImageView() (если есть).
+     *     Это даёт непробиваемый кадр на старте анимации, даже если Glide ещё не успел декодить.
+     *  2) Параллельно (или вместо плейсхолдера, если он пустой) — Glide грузит файл/URL напрямую.
+     *     После Notifications/Follows globalImageView может быть пустым — поэтому fallback
+     *     обязательно идёт через файл, а не через ColorDrawable.
+     */
+    private void loadInitialBgIntoOwnView(MainActivity activity, String uid) {
+        if (editBgImageView == null) return;
+
+        SharedPreferences appPrefs = activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
+        boolean isGlobalEnabled = appPrefs.getBoolean("bg_global_enabled", true);
+        boolean isMyProfileEnabled = appPrefs.getBoolean("bg_my_profile_enabled", true);
+        boolean isMyImagesEnabled = appPrefs.getBoolean("bg_my_images_enabled", true);
+        boolean isMyGifsEnabled = appPrefs.getBoolean("bg_my_gifs_enabled", true);
+
+        String bgPath = activity.prefs.getString("custom_bg_path_" + uid, null);
+        String remoteBg = activity.prefs.getString("my_bg_base64", null);
+
+        String targetPath = null;
+        if (bgPath != null && new File(bgPath).exists()) targetPath = bgPath;
+        else if (remoteBg != null && remoteBg.startsWith("http")) targetPath = remoteBg;
+
+        // Если фон отключён в настройках или его нет вообще — заливаем цветом темы.
+        if (!isGlobalEnabled || !isMyProfileEnabled || targetPath == null) {
+            editBgImageView.setImageDrawable(new ColorDrawable(
+                    ContextCompat.getColor(activity, R.color.bgDynamic)));
+            return;
+        }
+
+        boolean isGif = targetPath.toLowerCase().endsWith(".gif");
+        if (isGif && !isMyGifsEnabled) {
+            editBgImageView.setImageDrawable(new ColorDrawable(
+                    ContextCompat.getColor(activity, R.color.bgDynamic)));
+            return;
+        }
+        if (!isGif && !isMyImagesEnabled) {
+            editBgImageView.setImageDrawable(new ColorDrawable(
+                    ContextCompat.getColor(activity, R.color.bgDynamic)));
+            return;
+        }
+
+        // ШАГ 1: мгновенный плейсхолдер из globalImageView (если активен).
+        android.graphics.drawable.Drawable snapshot = null;
+        try {
+            ImageView gv = activity.getGlobalImageView();
+            if (gv != null && gv.getVisibility() == View.VISIBLE) {
+                snapshot = gv.getDrawable();
+            }
+        } catch (Throwable ignored) {}
+        if (snapshot != null) {
+            editBgImageView.setImageDrawable(snapshot);
+        }
+
+        // ШАГ 2: уточняющая загрузка через Glide. Если snapshot был null, это покажет
+        // фон даже когда globalImageView в этот момент скрыт (после Notifications/Follows).
+        if (targetPath.startsWith("http")) {
+            Glide.with(this)
+                    .load(targetPath)
+                    .dontAnimate()
+                    .centerCrop()
+                    .into(editBgImageView);
+        } else {
+            File f = new File(targetPath);
+            Glide.with(this)
+                    .load(f)
+                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .signature(new ObjectKey(f.lastModified()))
+                    .dontAnimate()
+                    .centerCrop()
+                    .into(editBgImageView);
+        }
     }
 
-    // ШАГ 2: уточняющая загрузка через Glide (асинхронно).
-    SharedPreferences appPrefs = activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
-    boolean isGlobalEnabled = appPrefs.getBoolean("bg_global_enabled", true);
-    boolean isMyProfileEnabled = appPrefs.getBoolean("bg_my_profile_enabled", true);
-    boolean isMyImagesEnabled = appPrefs.getBoolean("bg_my_images_enabled", true);
-    boolean isMyGifsEnabled = appPrefs.getBoolean("bg_my_gifs_enabled", true);
-
-    String bgPath = activity.prefs.getString("custom_bg_path_" + uid, null);
-    String remoteBg = activity.prefs.getString("my_bg_base64", null);
-
-    String targetPath = null;
-    if (bgPath != null && new File(bgPath).exists()) targetPath = bgPath;
-    else if (remoteBg != null && remoteBg.startsWith("http")) targetPath = remoteBg;
-
-    if (!isGlobalEnabled || !isMyProfileEnabled || targetPath == null) {
-        // Bg отключён в настройках или его нет — оставляем bgDynamic (плейсхолдер
-        // из globalImageView нас в этом случае мог обмануть, поэтому перекрываем).
-        editBgImageView.setImageDrawable(new ColorDrawable(
-                ContextCompat.getColor(activity, R.color.bgDynamic)));
-        return;
-    }
-
-    boolean isGif = targetPath.toLowerCase().endsWith(".gif");
-    if (isGif && !isMyGifsEnabled) {
-        editBgImageView.setImageDrawable(new ColorDrawable(
-                ContextCompat.getColor(activity, R.color.bgDynamic)));
-        return;
-    }
-    if (!isGif && !isMyImagesEnabled) {
-        editBgImageView.setImageDrawable(new ColorDrawable(
-                ContextCompat.getColor(activity, R.color.bgDynamic)));
-        return;
-    }
-
-    // Загружаем уточняющую картинку. Если Glide не успеет за время анимации —
-    // на экране всё равно есть плейсхолдер из globalImageView.
-    // skipMemoryCache(false) и dontAnimate() — без fade-in, чтобы не было видимой подмены.
-    if (targetPath.startsWith("http")) {
-        Glide.with(this)
-                .load(targetPath)
-                .dontAnimate()
-                .centerCrop()
-                .into(editBgImageView);
-    } else {
-        File f = new File(targetPath);
-        Glide.with(this)
-                .load(f)
-                .diskCacheStrategy(DiskCacheStrategy.NONE)
-                .signature(new ObjectKey(f.lastModified()))
-                .dontAnimate()
-                .centerCrop()
-                .into(editBgImageView);
-    }
-}
     private void executeFinalUpload(String token, String targetUid, String nickname, String about, File photo, File bg, long ticket, long generation, MainActivity activity) {
         VpsApi.saveUserProfile(token, nickname, about, photo, bg, ticket, new VpsApi.Callback() {
             @Override
@@ -693,7 +690,12 @@ if (gv != null) {
     @Override
     public void onResume() {
         super.onResume();
-        // Не трогаем глобальный фон — за inline-фон отвечаем сами, за глобальный — Activity.
+        // Гарантируем, что под нашим прозрачным editBgImageView активен глобальный фон.
+        // Если до этого юзер был в Notifications/Follows — глобальный мог быть выключен.
+        MainActivity activity = (MainActivity) getActivity();
+        if (activity != null && !isHidden()) {
+            activity.updateGlobalBackground(true);
+        }
     }
 
     @Override
@@ -715,6 +717,7 @@ if (gv != null) {
             // Под нами снова виден ProfileFragment — делаем editBg прозрачным,
             // если пользователь не выбрал новый фон.
             setupHeader(activity);
+            activity.updateGlobalBackground(true);
             if (pendingBgFile == null && editBgImageView != null) {
                 editBgImageView.setImageDrawable(null);
             }
