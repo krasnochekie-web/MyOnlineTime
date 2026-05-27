@@ -203,78 +203,48 @@ public class NotificationsHistoryFragment extends Fragment {
             } catch (Exception ignored) {}
         });
     }
+/**
+ * Лёгкое заполнение in-memory кэшей профилей — БЕЗ сетевых запросов.
+ *
+ * Раньше тут вызывался OtherProfileFragment.prefetchProfile(...) на каждый
+ * уникальный UID — это давало N getAggregatedProfile-запросов и N bg-загрузок
+ * на каждое открытие истории. Большая часть из них уходила впустую: юзер
+ * тапает максимум по 1–2 уведомлениям.
+ *
+ * Теперь поведение такое:
+ *  - ник/аватар/isFollowing уже есть в ответе getNotificationsHistory — кладём
+ *    в кэши, чтобы карточка OtherProfileFragment мгновенно показала верх;
+ *  - about / background / followers / following подтянет сам OtherProfileFragment
+ *    своим штатным getAggregatedProfile в onCreateView (тот же путь, что
+ *    отрабатывает при заходе из пуша).
+ *
+ * Итого: 0 сетевых запросов на открытие истории сверх самого getNotificationsHistory.
+ */
+private void prefetchProfiles(List<User> users) {
+    if (users == null || users.isEmpty()) return;
 
-    /**
-     * Готовит профили чужих юзеров заранее, без дублирующих сетевых запросов.
-     *
-     * Главное отличие от прошлой версии: мы НЕ затираем полностью загруженного User
-     * (с about + background) в OtherProfileFragment.prefetchUserCache огрызком из ленты.
-     * И обязательно дёргаем OtherProfileFragment.prefetchProfile(...), чтобы к моменту
-     * тапа в кэше лежал ПОЛНЫЙ профиль (с описанием и фоном) — иначе на открытии
-     * экрана будет мерцание описания и фона.
-     */
-    private void prefetchProfiles(List<User> users) {
-        if (users == null || users.isEmpty()) return;
+    for (User u : users) {
+        if (u == null || u.uid == null || u.uid.isEmpty()) continue;
 
-        MainActivity activity = (MainActivity) getActivity();
-        final String vpsToken = activity != null ? activity.vpsToken : null;
-
-        // 1) In-memory: ник/фото/isFollowing — для всех. Полного юзера НЕ затираем огрызком.
-        for (User u : users) {
-            if (u == null || u.uid == null || u.uid.isEmpty()) continue;
-
-            User existing = OtherProfileFragment.prefetchUserCache.get(u.uid);
-            if (existing == null) {
-                // В кэше ничего нет — кладём огрызок, чтобы хотя бы ник/фото были мгновенно
-                // (about/background для огрызка останутся null, OtherProfileFragment это понимает).
-                OtherProfileFragment.prefetchUserCache.put(u.uid, u);
-            } else {
-                // Кэш уже есть — только дополним недостающие поверхностные поля.
-                if ((existing.nickname == null || existing.nickname.isEmpty()) && u.nickname != null) {
-                    existing.nickname = u.nickname;
-                }
-                if ((existing.photo == null || existing.photo.isEmpty()) && u.photo != null) {
-                    existing.photo = u.photo;
-                }
+        User existing = OtherProfileFragment.prefetchUserCache.get(u.uid);
+        if (existing == null) {
+            // В кэше пусто — кладём огрызок, чтобы ник/фото показались сразу.
+            // about/background останутся null — OtherProfileFragment это понимает
+            // и дозагрузит сам.
+            OtherProfileFragment.prefetchUserCache.put(u.uid, u);
+        } else {
+            // Если в кэше уже есть полный профиль — не затираем огрызком,
+            // только дополним поверхностные поля.
+            if ((existing.nickname == null || existing.nickname.isEmpty()) && u.nickname != null) {
+                existing.nickname = u.nickname;
             }
-            OtherProfileFragment.prefetchFollowCache.put(u.uid, u.isFollowing);
+            if ((existing.photo == null || existing.photo.isEmpty()) && u.photo != null) {
+                existing.photo = u.photo;
+            }
         }
-
-        if (vpsToken == null) return;
-
-        // 2) Полный профиль (about + background) — для каждого нового UID за сессию.
-        //    OtherProfileFragment.prefetchProfile сам докинет байты фона в prefetchBgBytesCache.
-        Set<String> seenInThisCall = new HashSet<>();
-        final List<String> uidsToFetch = new ArrayList<>();
-        for (User u : users) {
-            if (u == null || u.uid == null || u.uid.isEmpty()) continue;
-            if (!seenInThisCall.add(u.uid)) continue;        // дубли внутри одного списка
-            if (!prefetchedUids.add(u.uid)) continue;        // уже префетчили в этой сессии
-            uidsToFetch.add(u.uid);
-            OtherProfileFragment.prefetchProfile(vpsToken, u.uid);
-        }
-
-        if (uidsToFetch.isEmpty()) return;
-
-        // 3) Подстраховка по фонам: через ~1.5 с подтянутся полные User'ы — прокачаем
-        //    их background в байт-кэш для тех, кому prefetchProfile его ещё не успел
-        //    положить (например, если в первый раз не успел приземлиться onLoaded).
-        Utils.backgroundExecutor.execute(() -> {
-            try { Thread.sleep(1500); } catch (InterruptedException ignored) {}
-            List<User> withBg = new ArrayList<>();
-            for (String uid : uidsToFetch) {
-                User full = OtherProfileFragment.prefetchUserCache.get(uid);
-                if (full != null && full.background != null && full.background.startsWith("http")
-                        && OtherProfileFragment.prefetchBgBytesCache.get(full.background) == null) {
-                    withBg.add(full);
-                }
-            }
-            if (!withBg.isEmpty()) {
-                OtherProfileFragment.preloadBackgrounds(withBg, MAX_PRELOAD_BG_BYTES);
-            }
-        });
+        OtherProfileFragment.prefetchFollowCache.put(u.uid, u.isFollowing);
     }
-
+}
     private void loadFromCacheOnly() {
         if (swipeRefresh != null && swipeRefresh.isRefreshing()) return;
 
