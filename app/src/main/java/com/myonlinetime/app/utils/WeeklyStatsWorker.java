@@ -57,15 +57,15 @@ public class WeeklyStatsWorker extends Worker {
 
         Calendar cal = Calendar.getInstance();
         long now = cal.getTimeInMillis();
-        
+
         cal.set(Calendar.HOUR_OF_DAY, 0);
         cal.set(Calendar.MINUTE, 0);
         cal.set(Calendar.SECOND, 0);
         cal.set(Calendar.MILLISECOND, 0);
-        
-        long startOfToday = cal.getTimeInMillis(); 
-        long startCurrentWeek = startOfToday - (6L * 86400000L); 
-        long startPrevWeek = startCurrentWeek - (7L * 86400000L); 
+
+        long startOfToday = cal.getTimeInMillis();
+        long startCurrentWeek = startOfToday - (6L * 86400000L);
+        long startPrevWeek = startCurrentWeek - (7L * 86400000L);
 
         Map<String, Long> currentWeekMap = UsageMath.getFilteredExactTimes(context, startCurrentWeek, now);
         Map<String, Long> prevWeekMap = UsageMath.getFilteredExactTimes(context, startPrevWeek, startCurrentWeek);
@@ -79,10 +79,10 @@ public class WeeklyStatsWorker extends Worker {
 
         long diff = currentWeekTime - previousWeekTime;
         long absDiff = Math.abs(diff);
-        
+
         long diffHours = absDiff / (1000 * 60 * 60);
         long diffMins = (absDiff / (1000 * 60)) % 60;
-        
+
         String timeStr = context.getString(R.string.notif_time_format, diffHours, diffMins);
         String mainText;
 
@@ -95,28 +95,55 @@ public class WeeklyStatsWorker extends Worker {
         }
 
         String actionText = context.getString(R.string.notif_action_click);
-        
+
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(context);
         String currentUid = account != null ? account.getId() : "guest";
         String cacheKey = "notif_history_array_" + currentUid;
-        
-        saveToLocalHistory(context, cacheKey, mainText, actionText);
+
+        // === СТАБИЛЬНЫЙ clientId ===
+        // Детерминированный id на 7-дневную корзину: одинаков для всех запусков
+        // воркера в пределах одной недели и для конкретного аккаунта. Локальная и
+        // серверная копии получают один и тот же clientId -> дедуп точный, дубли
+        // исключены даже при повторном срабатывании WorkManager.
+        long weekBucket = (startOfToday / 86400000L) / 7L;
+        final String clientId = "weekly_record_" + currentUid + "_" + weekBucket;
+
+        // Если запись за эту неделю для текущего аккаунта уже обработана — выходим,
+        // чтобы не показать второй системный пуш и не записать дубль на сервер.
+        String lastBucketKey = "last_weekly_record_clientId_" + currentUid;
+        if (clientId.equals(prefs.getString(lastBucketKey, ""))) {
+            return Result.success();
+        }
+
+        saveToLocalHistory(context, cacheKey, clientId, mainText, actionText);
         sendNotification(context, mainText, actionText);
 
         if (account != null) {
             final CountDownLatch latch = new CountDownLatch(1);
-            saveToServer(context, mainText, actionText, latch);
+            saveToServer(context, clientId, mainText, actionText, latch);
             try { latch.await(); } catch (InterruptedException e) {}
         }
+
+        // Помечаем неделю как обработанную.
+        prefs.edit().putString(lastBucketKey, clientId).apply();
 
         return Result.success();
     }
 
-    private void saveToLocalHistory(Context context, String cacheKey, String mainText, String actionText) {
+    private void saveToLocalHistory(Context context, String cacheKey, String clientId, String mainText, String actionText) {
         try {
             SharedPreferences prefs = context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
             String oldCache = prefs.getString(cacheKey, "[]");
             JSONArray oldArray = new JSONArray(oldCache);
+
+            // Гард от локального дубля: если запись с таким clientId уже лежит — не добавляем.
+            if (clientId != null && !clientId.isEmpty()) {
+                for (int i = 0; i < oldArray.length(); i++) {
+                    if (clientId.equals(oldArray.getJSONObject(i).optString("clientId", ""))) {
+                        return;
+                    }
+                }
+            }
 
             JSONObject newItem = new JSONObject();
             newItem.put("type", "time");
@@ -124,32 +151,33 @@ public class WeeklyStatsWorker extends Worker {
             newItem.put("isRead", false);
             newItem.put("mainText", mainText);
             newItem.put("actionText", actionText);
+            if (clientId != null) newItem.put("clientId", clientId);
 
             JSONArray newArray = new JSONArray();
             newArray.put(newItem);
-            
+
             for (int i = 0; i < oldArray.length(); i++) {
                 newArray.put(oldArray.getJSONObject(i));
             }
 
-            // ИСПРАВЛЕНИЕ 1: commit() вместо apply() для надежности
+            // commit() вместо apply() для надёжности
             prefs.edit().putString(cacheKey, newArray.toString()).commit();
-            
-            // ИСПРАВЛЕНИЕ 2: LocalBroadcastManager, чтобы экран сразу отреагировал
+
+            // LocalBroadcastManager, чтобы экран сразу отреагировал
             LocalBroadcastManager.getInstance(context).sendBroadcast(new Intent("UPDATE_BADGE_BROADCAST"));
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private void saveToServer(Context context, String mainText, String actionText, CountDownLatch latch) {
+    private void saveToServer(Context context, String clientId, String mainText, String actionText, CountDownLatch latch) {
         String freshToken = null;
         try {
             GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                     .requestIdToken("603306715003-0ptgu4fqnldcsoon9niprvi772m2ebks.apps.googleusercontent.com")
                     .requestEmail().build();
             GoogleSignInClient client = GoogleSignIn.getClient(context, gso);
-            
+
             GoogleSignInAccount account = Tasks.await(client.silentSignIn());
             freshToken = account.getIdToken();
         } catch (Exception e) {
@@ -160,7 +188,7 @@ public class WeeklyStatsWorker extends Worker {
             VpsApi.authenticateWithGoogle(context, freshToken, new VpsApi.LoginCallback() {
                 @Override
                 public void onSuccess(String token) {
-                    VpsApi.addTimeNotification(token, mainText, actionText, new VpsApi.Callback() {
+                    VpsApi.addTimeNotification(token, clientId, mainText, actionText, new VpsApi.Callback() {
                         @Override public void onSuccess(String result) { latch.countDown(); }
                         @Override public void onError(String error) { latch.countDown(); }
                     });
@@ -187,25 +215,25 @@ public class WeeklyStatsWorker extends Worker {
 
         Intent intent = new Intent(context, MainActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        intent.putExtra("open_tab", "time"); 
-        
+        intent.putExtra("open_tab", "time");
+
         int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE : PendingIntent.FLAG_UPDATE_CURRENT;
         PendingIntent pendingIntent = PendingIntent.getActivity(context, 0, intent, flags);
 
         int burgundyColor = ContextCompat.getColor(context, R.color.burgundyRed);
-        int grayColor = ContextCompat.getColor(context, R.color.textGrayDynamic); 
+        int grayColor = ContextCompat.getColor(context, R.color.textGrayDynamic);
 
         String fullText = mainText + " " + actionText;
         SpannableString spannableString = new SpannableString(fullText);
-        
+
         spannableString.setSpan(new ForegroundColorSpan(grayColor), 0, mainText.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
         spannableString.setSpan(new ForegroundColorSpan(burgundyColor), mainText.length() + 1, fullText.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_nav_time_h) 
+                .setSmallIcon(R.drawable.ic_nav_time_h)
                 .setContentText(spannableString)
-                .setStyle(new NotificationCompat.BigTextStyle().bigText(spannableString)) 
-                .setColor(burgundyColor) 
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(spannableString))
+                .setColor(burgundyColor)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true);
 
