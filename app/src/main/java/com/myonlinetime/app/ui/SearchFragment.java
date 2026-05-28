@@ -11,7 +11,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageView;
-import android.widget.ProgressBar; 
+import android.widget.ProgressBar;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -29,11 +29,16 @@ import java.util.List;
 
 public class SearchFragment extends Fragment {
 
+    // Сколько верхних карточек префетчим жадно (полный профиль + фон),
+    // чтобы фон точно лежал в кэше к моменту тапа по тем результатам,
+    // что юзер увидит первыми. prefetchProfile сам отсеивает закэшированные UID.
+    private static final int EAGER_TOP_K = 8;
+
     private String lastSearchQuery = "";
-    private RecyclerView resultsList; 
-    private UserListAdapter adapter;  
-    private ProgressBar loadingSpinner; 
-    
+    private RecyclerView resultsList;
+    private UserListAdapter adapter;
+    private ProgressBar loadingSpinner;
+
     private Handler searchHandler = new Handler(Looper.getMainLooper());
     private Runnable searchRunnable;
 
@@ -45,21 +50,21 @@ public class SearchFragment extends Fragment {
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.resetHeader();
-            
+
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
             }, 400);
         }
 
         View view = inflater.inflate(R.layout.layout_search, container, false);
-        
+
         EditText searchInput = view.findViewById(R.id.search_input);
         ImageView clearBtn = view.findViewById(R.id.search_clear_btn);
         resultsList = view.findViewById(R.id.search_results_list);
-        loadingSpinner = view.findViewById(R.id.search_loading_spinner); 
+        loadingSpinner = view.findViewById(R.id.search_loading_spinner);
 
         resultsList.setLayoutManager(new LinearLayoutManager(activity));
-        
+
         GoogleSignInAccount acct = activity != null ? GoogleSignIn.getLastSignedInAccount(activity) : null;
         final String myUid = acct != null ? acct.getId() : "";
 
@@ -70,7 +75,7 @@ public class SearchFragment extends Fragment {
                     activity.navigator.switchScreen(4, myUid);
                 } else {
                     activity.navigator.openSubScreen(OtherProfileFragment.newInstance(
-                            clickedUser.uid, 
+                            clickedUser.uid,
                             activity.getString(R.string.title_search),
                             clickedUser.nickname,
                             clickedUser.about,
@@ -83,7 +88,7 @@ public class SearchFragment extends Fragment {
                 }
             }
         });
-        
+
         resultsList.setAdapter(adapter);
         resultsList.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
@@ -128,7 +133,7 @@ public class SearchFragment extends Fragment {
         if (!hidden) {
             activity.mainHeader.setVisibility(View.VISIBLE);
             activity.headerManager.resetHeader();
-            
+
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
             }, 400);
@@ -136,7 +141,7 @@ public class SearchFragment extends Fragment {
     }
 
     private void performSearch(final String query, final MainActivity activity) {
-        if(query.trim().length() > 0) {
+        if (query.trim().length() > 0) {
             if (loadingSpinner != null) loadingSpinner.setVisibility(View.VISIBLE);
             if (activity.vpsToken != null && !activity.vpsToken.isEmpty()) {
                 executeSearchApi(activity.vpsToken, query);
@@ -149,7 +154,7 @@ public class SearchFragment extends Fragment {
                         });
                     }).addOnFailureListener(e -> {
                         GoogleSignInAccount acct = GoogleSignIn.getLastSignedInAccount(activity);
-                        if(acct != null) {
+                        if (acct != null) {
                             VpsApi.authenticateWithGoogle(activity, acct.getIdToken(), new VpsApi.LoginCallback() {
                                 @Override public void onSuccess(String token) { activity.vpsToken = token; executeSearchApi(token, query); }
                                 @Override public void onError(String ex) { if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE); }
@@ -163,32 +168,58 @@ public class SearchFragment extends Fragment {
             adapter.setUsers(new ArrayList<>());
         }
     }
-private void executeSearchApi(String token, String query) {
-    VpsApi.searchUsers(token, query, new VpsApi.SearchCallback() {
-        @Override public void onFound(List<User> users) {
-            if (!isAdded()) return;
-            if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
 
-            adapter.setUsers(users);
+    private void executeSearchApi(String token, String query) {
+        VpsApi.searchUsers(token, query, new VpsApi.SearchCallback() {
+            @Override public void onFound(List<User> users) {
+                if (!isAdded()) return;
+                if (loadingSpinner != null) loadingSpinner.setVisibility(View.GONE);
 
-            // === Заливаем кэши "толстыми" данными из ответа списка.
-            // Фоны тянет UserListAdapter лениво (per-row на attach), а не bulk.
-            if (users != null) {
-                for (User u : users) {
-                    if (u == null || u.uid == null) continue;
-                    OtherProfileFragment.prefetchUserCache.put(u.uid, u);
-                    try {
-                        org.json.JSONObject countsObj = new org.json.JSONObject();
-                        countsObj.put("followers", u.followers);
-                        countsObj.put("following", u.following);
-                        OtherProfileFragment.prefetchCountsCache.put(u.uid, countsObj.toString());
-                    } catch (Exception ignored) {}
-                    OtherProfileFragment.prefetchFollowCache.put(u.uid, u.isFollowing);
+                adapter.setUsers(users);
+
+                // === Заливаем кэши "толстыми" данными из ответа списка.
+                if (users != null) {
+                    for (User u : users) {
+                        if (u == null || u.uid == null) continue;
+                        OtherProfileFragment.prefetchUserCache.put(u.uid, u);
+                        try {
+                            org.json.JSONObject countsObj = new org.json.JSONObject();
+                            countsObj.put("followers", u.followers);
+                            countsObj.put("following", u.following);
+                            OtherProfileFragment.prefetchCountsCache.put(u.uid, countsObj.toString());
+                        } catch (Exception ignored) {}
+                        OtherProfileFragment.prefetchFollowCache.put(u.uid, u.isFollowing);
+                    }
                 }
+
+                // === ИСПРАВЛЕНИЕ ПРЕДЗАГРУЗКИ ФОНОВ ===
+                // Поисковый ответ "лёгкий": у User часто нет background-URL,
+                // поэтому ленивый per-row префетч адаптера работает вхолостую.
+                // Жадно тянем полный профиль (там есть фон) для верхних K карточек —
+                // prefetchProfile сам зацепит preloadBackgrounds, и байты фона
+                // лягут в кэш ДО тапа. prefetchProfile отсеивает уже закэшированные UID.
+                eagerPrefetchTopK(token, users, EAGER_TOP_K);
             }
+        });
+    }
+
+    /**
+     * Жадный префетч полного профиля + фона для первых K результатов поиска.
+     * prefetchProfile сам отфильтрует UID-ы, для которых полный профиль уже в кэше,
+     * и при удачной загрузке зацепит preloadBackgrounds — фон выезжает без подгрузки.
+     */
+    private void eagerPrefetchTopK(String token, List<User> users, int k) {
+        if (token == null || token.isEmpty()) return;
+        if (users == null || users.isEmpty() || k <= 0) return;
+
+        int max = Math.min(k, users.size());
+        for (int i = 0; i < max; i++) {
+            User u = users.get(i);
+            if (u == null || u.uid == null || u.uid.isEmpty()) continue;
+            OtherProfileFragment.prefetchProfile(token, u.uid);
         }
-    });
-}
+    }
+
     @Override
     public void onResume() {
         super.onResume();
@@ -199,5 +230,4 @@ private void executeSearchApi(String token, String query) {
             }, 400);
         }
     }
-                    }
-        
+}
