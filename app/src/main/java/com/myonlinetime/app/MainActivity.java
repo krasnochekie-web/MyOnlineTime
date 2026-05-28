@@ -78,6 +78,9 @@ public class MainActivity extends AppCompatActivity {
     private ImageView previewImageView;
     private boolean isSyncingBg = false;
 
+    // Окно контентного дедупа time-уведомлений (если сервер ещё не отдаёт clientId).
+    private static final long TIME_DEDUP_WINDOW_MS = 60L * 60L * 1000L; // 1 час
+
     public ImageView getGlobalImageView() {
         return globalImageView;
     }
@@ -92,11 +95,6 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    // === Поллинг истории уведомлений ===
-    // Нужен на случай, когда push не доехал (юзер отключил уведомления у себя,
-    // doze, протух FCM-токен, юзер сидел на другом аккаунте). Бейджик загорится
-    // максимум через NOTIF_POLL_INTERVAL_MS даже без push. Работает только пока
-    // активити в foreground (стартуем в onResume, гасим в onPause).
     private static final long NOTIF_POLL_INTERVAL_MS = 60_000L;
     private final Runnable notifPollRunnable = new Runnable() {
         @Override public void run() {
@@ -104,6 +102,22 @@ public class MainActivity extends AppCompatActivity {
             bgHandler.postDelayed(this, NOTIF_POLL_INTERVAL_MS);
         }
     };
+
+    // Дедуп локального time-уведомления против серверного списка.
+    private static boolean serverHasTimeItem(JSONArray serverArray, JSONObject localObj) throws org.json.JSONException {
+        String lClientId = localObj.optString("clientId", "");
+        long lts = localObj.optLong("timestamp");
+        String lMain = localObj.optString("mainText");
+        for (int j = 0; j < serverArray.length(); j++) {
+            JSONObject s = serverArray.getJSONObject(j);
+            if (!lClientId.isEmpty() && lClientId.equals(s.optString("clientId", ""))) return true;
+            if (!"time".equals(s.optString("type", "time"))) continue;
+            if (lMain.equals(s.optString("mainText"))
+                    && Math.abs(s.optLong("timestamp") - lts) <= TIME_DEDUP_WINDOW_MS) return true;
+            if (s.optLong("timestamp") == lts) return true;
+        }
+        return false;
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -216,9 +230,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // === NAV КНОПКИ ===
-        // Сабы НЕ закрываем при смене таба — AppNavigator.switchScreen сам анимированно
-        // спрячет активный саб и покажет его обратно, когда юзер вернётся на эту вкладку.
         findViewById(R.id.nav_feed).setOnClickListener(v -> {
             if (currentTab == 0) return;
             updateNavState(0);
@@ -320,13 +331,8 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * Тихо синхронизирует историю уведомлений текущего аккаунта с сервером
-     * и обновляет бейджик. Нужно, чтобы бейджик загорался даже если push
-     * не доехал (юзер отключил FCM, был на другом аккаунте, doze и т.п.).
-     *
-     * Логика merge — такая же, как в NotificationsHistoryFragment.loadHistory,
-     * плюс мы дополнительно сохраняем локальный isRead=true для тех timestamp,
-     * которые мы уже пометили прочитанными (защищает бейджик от мигания
-     * "0 → N → 0", если markNotificationsRead не успел докатиться до сервера).
+     * и обновляет бейджик. Дедуп — по clientId, затем по контенту+времени,
+     * затем по timestamp; перенос локального isRead — по clientId/timestamp.
      */
     public void syncNotificationsHistory() {
         if (vpsToken == null || vpsToken.isEmpty()) return;
@@ -345,32 +351,33 @@ public class MainActivity extends AppCompatActivity {
                         JSONArray serverArray = new JSONArray(result);
                         JSONArray localArray  = new JSONArray(appPrefs.getString(cacheKey, "[]"));
 
-                        // Снимок локально прочитанных timestamp-ов — переносим на server-копию.
+                        // Снимок локально прочитанных (по clientId и по timestamp) — переносим на server-копию.
+                        java.util.HashSet<String> localReadClientIds = new java.util.HashSet<>();
                         java.util.HashSet<Long> localReadTs = new java.util.HashSet<>();
-                        java.util.HashSet<Long> serverTs = new java.util.HashSet<>();
                         for (int i = 0; i < localArray.length(); i++) {
                             JSONObject lo = localArray.getJSONObject(i);
                             if (lo.optBoolean("isRead", false)) {
+                                String c = lo.optString("clientId", "");
+                                if (!c.isEmpty()) localReadClientIds.add(c);
                                 localReadTs.add(lo.optLong("timestamp"));
                             }
-                        }
-                        for (int i = 0; i < serverArray.length(); i++) {
-                            serverTs.add(serverArray.getJSONObject(i).optLong("timestamp"));
                         }
 
                         JSONArray merged = new JSONArray();
                         for (int i = 0; i < serverArray.length(); i++) {
                             JSONObject so = serverArray.getJSONObject(i);
-                            if (localReadTs.contains(so.optLong("timestamp"))) {
+                            String sc = so.optString("clientId", "");
+                            if ((!sc.isEmpty() && localReadClientIds.contains(sc))
+                                    || localReadTs.contains(so.optLong("timestamp"))) {
                                 so.put("isRead", true);
                             }
                             merged.put(so);
                         }
-                        // Локальные time-уведомления, которых сервер ещё не видит — оставляем.
+                        // Локальные time-уведомления, которых сервер ещё не видит — оставляем (с дедупом).
                         for (int i = 0; i < localArray.length(); i++) {
                             JSONObject lo = localArray.getJSONObject(i);
                             if ("time".equals(lo.optString("type"))
-                                    && !serverTs.contains(lo.optLong("timestamp"))) {
+                                    && !serverHasTimeItem(serverArray, lo)) {
                                 merged.put(lo);
                             }
                         }
@@ -389,8 +396,6 @@ public class MainActivity extends AppCompatActivity {
                         if (newJson.equals(oldJson)) return; // ничего не поменялось — UI не дёргаем
 
                         appPrefs.edit().putString(cacheKey, newJson).apply();
-                        // notifListener сам поймает изменение и вызовет updateNotificationBadge().
-                        // Но дублируем явный вызов на случай, если listener был снят (onPause).
                         runOnUiThread(MainActivity.this::updateNotificationBadge);
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -918,10 +923,6 @@ public class MainActivity extends AppCompatActivity {
         loadUserAvatarToBottomNav();
         updateNotificationBadge();
 
-        // Один синхронизирующий запрос сразу при возврате на экран,
-        // плюс периодический поллинг, пока активити в foreground. Так бейджик
-        // загорится даже если push заглушён или юзер вернулся на этот аккаунт
-        // с другого, пока тут копились непрочитанные.
         syncNotificationsHistory();
         bgHandler.removeCallbacks(notifPollRunnable);
         bgHandler.postDelayed(notifPollRunnable, NOTIF_POLL_INTERVAL_MS);
