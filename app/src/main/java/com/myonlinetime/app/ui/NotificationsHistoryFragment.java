@@ -46,14 +46,12 @@ public class NotificationsHistoryFragment extends Fragment {
 
     private static final String PREFS_NAME = "AppPrefs";
 
-    // Лимит размера фона профиля для предзагрузки (1 МБ).
-    // Сохранён как public static на случай внешних ссылок.
     public static final long MAX_PRELOAD_BG_BYTES = 1024L * 1024L;
 
-    // Сколько верхних follower-карточек префетчим жадно (до первого рендера),
-    // чтобы фон точно лежал в кэше к моменту тапа по тем карточкам, что юзер
-    // увидит первыми. Остальные подтягиваются лениво при attach-е.
     private static final int EAGER_TOP_K = 5;
+
+    // Окно контентного дедупа time-уведомлений (если сервер ещё не отдаёт clientId).
+    private static final long TIME_DEDUP_WINDOW_MS = 60L * 60L * 1000L; // 1 час
 
     private Runnable hideBgRunnable;
     private RecyclerView recycler;
@@ -64,17 +62,12 @@ public class NotificationsHistoryFragment extends Fragment {
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private boolean isReceiverRegistered = false;
 
-    // Флаг для предотвращения рывков во время анимации
     private boolean isTransitioning = false;
 
-    // Текущий снимок видимых элементов — нужен per-row префетчу по позиции.
     private List<NotificationModels.NotificationItem> currentItems = new ArrayList<>();
 
-    // Слушатель крепления карточек к экрану — стартует префетч профиля+фона
-    // только для тех уведомлений, что реально попали в видимую часть RV.
     private RecyclerView.OnChildAttachStateChangeListener attachListener;
 
-    // Срабатывает, когда кэш поменялся
     private final SharedPreferences.OnSharedPreferenceChangeListener prefsListener = (sharedPrefs, key) -> {
         if (key != null && key.equals(getCacheKey())) {
             uiHandler.post(() -> {
@@ -87,14 +80,12 @@ public class NotificationsHistoryFragment extends Fragment {
         }
     };
 
-    // === ЖИВЫЕ УВЕДОМЛЕНИЯ ===
     private final BroadcastReceiver pushReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             if ("UPDATE_BADGE_BROADCAST".equals(intent.getAction())) {
                 uiHandler.post(() -> {
                     if (isAdded() && !isHidden()) {
-                        // Тихо запрашиваем сервер для свежих статусов подписки (isFollowing)
                         loadHistory(false, 0);
                         MainActivity activity = (MainActivity) getActivity();
                         if (activity != null) activity.updateNotificationBadge();
@@ -108,6 +99,37 @@ public class NotificationsHistoryFragment extends Fragment {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(requireContext());
         String uid = account != null ? account.getId() : "guest";
         return "notif_history_array_" + uid;
+    }
+
+    // === Дедуп локального time-уведомления против серверного списка ===
+    // 1) точный clientId; 2) текст + близкое время; 3) legacy точный timestamp.
+    private static boolean serverHasTimeItem(JSONArray serverArray, JSONObject localObj) throws org.json.JSONException {
+        String lClientId = localObj.optString("clientId", "");
+        long lts = localObj.optLong("timestamp");
+        String lMain = localObj.optString("mainText");
+        for (int j = 0; j < serverArray.length(); j++) {
+            JSONObject s = serverArray.getJSONObject(j);
+
+            if (!lClientId.isEmpty() && lClientId.equals(s.optString("clientId", ""))) return true;
+
+            if (!"time".equals(s.optString("type", "time"))) continue;
+
+            if (lMain.equals(s.optString("mainText"))
+                    && Math.abs(s.optLong("timestamp") - lts) <= TIME_DEDUP_WINDOW_MS) return true;
+
+            if (s.optLong("timestamp") == lts) return true;
+        }
+        return false;
+    }
+
+    // Гасит глобальный фон НЕМЕДЛЕННО, отменив отложенный hide.
+    // Это убирает однократное мерцание кастомного фона при заходе на экран
+    // уведомлений сразу после профиля (фон не успевает "моргнуть").
+    private void hideGlobalBackgroundNow() {
+        MainActivity activity = (MainActivity) getActivity();
+        if (activity == null) return;
+        if (getView() != null && hideBgRunnable != null) getView().removeCallbacks(hideBgRunnable);
+        if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
     }
 
     @Override
@@ -144,7 +166,6 @@ public class NotificationsHistoryFragment extends Fragment {
         swipeRefresh.setLayoutParams(recyclerOriginalParams);
         swipeRefresh.setColorSchemeColors(ContextCompat.getColor(requireContext(), R.color.grapefruit));
 
-        // === Сдвигаем тянучку из-под шапки вниз ===
         int startOffset = (int) (70 * getResources().getDisplayMetrics().density);
         int endOffset = (int) (110 * getResources().getDisplayMetrics().density);
         swipeRefresh.setProgressViewOffset(false, startOffset, endOffset);
@@ -161,10 +182,6 @@ public class NotificationsHistoryFragment extends Fragment {
             loadHistory(true, System.currentTimeMillis());
         });
 
-        // === Ленивый префетч профиля+фона для прикреплённых follower-карточек ===
-        // prefetchProfile сам решит, нужно ли стучаться на сервер. В onLoaded он
-        // запускает preloadBackgrounds для нового background URL — байты лягут в
-        // кэш ДО тапа, и фон выезжает с профилем без подгрузки на глазах юзера.
         attachListener = new RecyclerView.OnChildAttachStateChangeListener() {
             @Override
             public void onChildViewAttachedToWindow(@NonNull View view) {
@@ -186,21 +203,15 @@ public class NotificationsHistoryFragment extends Fragment {
 
             @Override
             public void onChildViewDetachedFromWindow(@NonNull View view) {
-                // ничего не делаем — отмена незавершённого запроса осложнит
-                // логику, а завершившийся getAggregatedProfile просто ляжет в кэш.
             }
         };
         recycler.addOnChildAttachStateChangeListener(attachListener);
 
-        // ИСПРАВЛЕНИЕ: Защита от рывков при первом открытии
         isTransitioning = true;
-        uiHandler.postDelayed(() -> isTransitioning = false, 400); // 400 мс - время анимации
+        uiHandler.postDelayed(() -> isTransitioning = false, 400);
 
         if (loadingSpinner != null) loadingSpinner.setVisibility(View.VISIBLE);
 
-        // === РАННИЙ ПРЕФЕТЧ ИЗ КЭША ===
-        // Запускаем предзагрузку профилей и фонов СРАЗУ из кэша,
-        // не дожидаясь ни ответа сервера, ни рендера ленты.
         prefetchFromCacheJsonAsync();
 
         loadHistory(false, 0);
@@ -208,13 +219,6 @@ public class NotificationsHistoryFragment extends Fragment {
         return view;
     }
 
-    /**
-     * Достаёт follower-объекты из кэшированного JSON-а в фоне и:
-     *  1) кладёт огрызки в in-memory кэши (мгновенный ник/аватар);
-     *  2) для верхних EAGER_TOP_K UID-ов сразу запускает getAggregatedProfile,
-     *     чтобы фон успел приехать ДО первого рендера ленты.
-     * Остальные UID-ы подтянутся лениво при attach (когда RV их прикрепит).
-     */
     private void prefetchFromCacheJsonAsync() {
         if (getContext() == null) return;
         final String cacheKey = getCacheKey();
@@ -222,7 +226,6 @@ public class NotificationsHistoryFragment extends Fragment {
         final String cachedJson = prefs.getString(cacheKey, "[]");
         if (cachedJson == null || cachedJson.length() <= 5 || cachedJson.equals("[]")) return;
 
-        // Захватим токен до ухода в фон, чтобы потом не дёргать activity с bg-потока.
         MainActivity act = (MainActivity) getActivity();
         final String token = act != null ? act.vpsToken : null;
 
@@ -246,11 +249,6 @@ public class NotificationsHistoryFragment extends Fragment {
         });
     }
 
-    /**
-     * Лёгкое заполнение in-memory кэшей профилей — БЕЗ сетевых запросов.
-     * Полный профиль + фон подтянет либо eagerPrefetchTopK (top-K),
-     * либо ленивый attach-листенер (для прокрученных).
-     */
     private void prefetchProfiles(List<User> users) {
         if (users == null || users.isEmpty()) return;
 
@@ -259,13 +257,8 @@ public class NotificationsHistoryFragment extends Fragment {
 
             User existing = OtherProfileFragment.prefetchUserCache.get(u.uid);
             if (existing == null) {
-                // В кэше пусто — кладём огрызок, чтобы ник/фото показались сразу.
-                // about/background останутся null — OtherProfileFragment это понимает
-                // и дозагрузит сам.
                 OtherProfileFragment.prefetchUserCache.put(u.uid, u);
             } else {
-                // Если в кэше уже есть полный профиль — не затираем огрызком,
-                // только дополним поверхностные поля.
                 if ((existing.nickname == null || existing.nickname.isEmpty()) && u.nickname != null) {
                     existing.nickname = u.nickname;
                 }
@@ -277,12 +270,6 @@ public class NotificationsHistoryFragment extends Fragment {
         }
     }
 
-    /**
-     * Жадный префетч профиля+фона для первых K элементов.
-     * prefetchProfile сам отфильтрует UID-ы, для которых полный профиль уже в кэше,
-     * и сам же при удачной загрузке зацепит preloadBackgrounds — байты фона лягут
-     * в prefetchBgBytesCache раньше, чем юзер успеет тапнуть.
-     */
     private void eagerPrefetchTopK(String token, List<User> users, int k) {
         if (token == null || token.isEmpty()) return;
         if (users == null || users.isEmpty() || k <= 0) return;
@@ -338,13 +325,11 @@ public class NotificationsHistoryFragment extends Fragment {
                         }
                     }
 
-                    // Огрызки в кэш + жадный префетч top-K.
                     prefetchProfiles(usersToCache);
                     eagerPrefetchTopK(token, usersToCache, EAGER_TOP_K);
 
                     final boolean finalHasUnread = hasUnread;
 
-                    // Ожидаем завершения анимации, если она еще идет
                     long delay = isTransitioning ? 400 : 0;
 
                     uiHandler.postDelayed(() -> {
@@ -385,8 +370,6 @@ public class NotificationsHistoryFragment extends Fragment {
         boolean hasCache = !cachedJson.equals("[]") && cachedJson.length() > 5;
 
         if (hasCache) {
-            // ИСПРАВЛЕНИЕ: Не скрываем спиннер здесь! Он скроется сам в parseAndDisplayAsync,
-            // когда пройдет задержка анимации. Иначе будет черный экран на 400мс.
             if (!isSwipeRefresh) {
                 parseAndDisplayAsync(cachedJson, activity, 0, false);
             }
@@ -417,16 +400,14 @@ public class NotificationsHistoryFragment extends Fragment {
 
                         for (int i = 0; i < serverArray.length(); i++) mergedArray.put(serverArray.getJSONObject(i));
 
+                        // Локальные time-уведомления, которых ещё нет на сервере — оставляем.
+                        // Дедуп по clientId, затем по контенту+времени, затем по timestamp.
                         for (int i = 0; i < localArray.length(); i++) {
                             JSONObject localObj = localArray.getJSONObject(i);
                             if ("time".equals(localObj.optString("type"))) {
-                                boolean found = false;
-                                for (int j = 0; j < serverArray.length(); j++) {
-                                    if (serverArray.getJSONObject(j).optLong("timestamp") == localObj.optLong("timestamp")) {
-                                        found = true; break;
-                                    }
+                                if (!serverHasTimeItem(serverArray, localObj)) {
+                                    mergedArray.put(localObj);
                                 }
-                                if (!found) mergedArray.put(localObj);
                             }
                         }
 
@@ -528,17 +509,14 @@ public class NotificationsHistoryFragment extends Fragment {
                     }
                 }
 
-                // Огрызки в кэш + жадный префетч top-K (фон+about+counts для самых
-                // верхних карточек уже стартует, пока мы ждём конец анимации).
                 prefetchProfiles(usersToCache);
                 eagerPrefetchTopK(token, usersToCache, EAGER_TOP_K);
 
                 final boolean finalHasUnread = hasUnread;
 
-                // ИСПРАВЛЕНИЕ: Ждем завершения анимации, если она еще не закончилась
                 long baseDelay = delayStopSpinner;
                 if (isTransitioning) {
-                    baseDelay = Math.max(baseDelay, 400); // Принудительно откладываем рендер
+                    baseDelay = Math.max(baseDelay, 400);
                 }
                 final long finalDelay = baseDelay;
 
@@ -690,7 +668,6 @@ public class NotificationsHistoryFragment extends Fragment {
         if (!hidden) {
             setupHeader();
 
-            // ИСПРАВЛЕНИЕ: Защита от рывков при возврате на экран
             isTransitioning = true;
             uiHandler.postDelayed(() -> isTransitioning = false, 400);
 
@@ -698,19 +675,13 @@ public class NotificationsHistoryFragment extends Fragment {
                 loadingSpinner.setVisibility(View.VISIBLE);
             }
 
-            // Ранний префетч из кэша при возврате на экран — пока ждём ответ сервера,
-            // профили (и фон у top-K) уже едут в фоне.
             prefetchFromCacheJsonAsync();
 
             loadHistory(false, 0);
 
-            if (hideBgRunnable == null) {
-                hideBgRunnable = () -> {
-                    if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
-                };
-            }
-            if (getView() != null) getView().postDelayed(hideBgRunnable, 300);
-            else activity.updateGlobalBackground(false);
+            // ИСПРАВЛЕНИЕ МЕРЦАНИЯ: гасим фон сразу, без 300мс-окна,
+            // в которое успевал прорисоваться фон профиля.
+            hideGlobalBackgroundNow();
         } else {
             if (hideBgRunnable != null && getView() != null) getView().removeCallbacks(hideBgRunnable);
         }
@@ -721,13 +692,9 @@ public class NotificationsHistoryFragment extends Fragment {
         super.onResume();
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
-            if (hideBgRunnable == null) {
-                hideBgRunnable = () -> {
-                    if (isAdded() && !isHidden()) activity.updateGlobalBackground(false);
-                };
-            }
-            if (getView() != null) getView().postDelayed(hideBgRunnable, 300);
-            else activity.updateGlobalBackground(false);
+
+            // ИСПРАВЛЕНИЕ МЕРЦАНИЯ: немедленное скрытие фона.
+            hideGlobalBackgroundNow();
 
             activity.updateNotificationBadge();
         }
