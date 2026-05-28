@@ -37,27 +37,27 @@ import com.myonlinetime.app.models.User;
 
 public class VpsApi {
     private static final String BASE_URL = "https://api.krasnocraft.ru/";
-    
-    private static OkHttpClient client; 
-    
+
+    private static OkHttpClient client;
+
     private static final Gson gson = new Gson();
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
-    private static class SaveUserPayload { 
-        String nickname, about, photo, background; 
-        long totalTime; 
-        Map<String, Long> topApps; 
+    private static class SaveUserPayload {
+        String nickname, about, photo, background;
+        long totalTime;
+        Map<String, Long> topApps;
     }
     private static class FollowPayload { String targetUid; boolean isFollowing; }
     private static class CheckFollowPayload { String targetUid; }
     private static class CheckNicknamePayload { String nickname; }
-    
+
     private static class AppVisibilityPayload { String pkgName; boolean isHidden; }
     private static class AppDescriptionPayload { String pkgName; String description; }
-    
-    // Payload для отправки уведомления о времени
-    private static class TimeNotificationPayload { String mainText; String actionText; }
+
+    // Payload для отправки уведомления о времени (со стабильным clientId для дедупа)
+    private static class TimeNotificationPayload { String clientId; String mainText; String actionText; }
 
     public interface UserCallback { void onLoaded(User user); void onError(String error); }
     public interface SearchCallback { void onFound(List<User> users); }
@@ -66,17 +66,17 @@ public class VpsApi {
     public interface LoginCallback { void onSuccess(String ourServerToken); void onError(String error); }
 
     // НОВЫЙ ИНТЕРФЕЙС ДЛЯ АГРЕГИРОВАННОГО ПРОФИЛЯ
-    public interface AggregatedProfileCallback { 
-        void onLoaded(User user, int followers, int following, boolean isFollowing); 
-        void onError(String error); 
+    public interface AggregatedProfileCallback {
+        void onLoaded(User user, int followers, int following, boolean isFollowing);
+        void onError(String error);
     }
 
     // === ИНИЦИАЛИЗАЦИЯ КЛИЕНТА С ПЕРЕХВАТЧИКОМ АВТОРИЗАЦИИ ===
     public static void initClient(Context context) {
         if (client != null) return; // Инициализируем только один раз
-        
+
         OkHttpClient.Builder builder = new OkHttpClient.Builder();
-        
+
         // Расширяем горлышко бутылки для фоновых предзагрузок!
         okhttp3.Dispatcher dispatcher = new okhttp3.Dispatcher();
         dispatcher.setMaxRequests(60);
@@ -89,20 +89,20 @@ public class VpsApi {
             public Request authenticate(Route route, Response response) throws IOException {
                 // Если мы уже пытались обновить токен и снова получили 401 - сдаемся
                 if (response.priorResponse() != null) return null;
-                
+
                 String newAccessToken = refreshAccessTokenSynchronously(context);
-                
+
                 if (newAccessToken != null) {
                     // Токен обновлен! Повторяем тот же запрос, но уже с новым токеном.
                     return response.request().newBuilder()
                             .header("Authorization", "Bearer " + newAccessToken)
                             .build();
                 }
-                
+
                 return null; // Если длинный токен тоже протух, запрос упадет с ошибкой
             }
         });
-        
+
         // ФИКС ДЛЯ ANDROID 5.1 (SSL TRUST ANCHOR)
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.N) {
             try {
@@ -126,7 +126,7 @@ public class VpsApi {
                 e.printStackTrace();
             }
         }
-        
+
         client = builder.build();
     }
 
@@ -134,13 +134,13 @@ public class VpsApi {
     private static String refreshAccessTokenSynchronously(Context context) {
         SharedPreferences prefs = context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
         String refreshToken = prefs.getString("vps_refresh_token", null);
-        
+
         if (refreshToken == null) return null;
 
         try {
             org.json.JSONObject json = new org.json.JSONObject();
             json.put("refreshToken", refreshToken);
-            
+
             RequestBody body = RequestBody.create(JSON, json.toString());
             Request request = new Request.Builder()
                     .url(BASE_URL + "auth/refresh")
@@ -148,21 +148,21 @@ public class VpsApi {
                     .build();
 
             // ВАЖНО: Создаем "голый" клиент без перехватчиков
-            OkHttpClient noAuthClient = new OkHttpClient(); 
+            OkHttpClient noAuthClient = new OkHttpClient();
             Response response = noAuthClient.newCall(request).execute();
 
             if (response.isSuccessful() && response.body() != null) {
                 org.json.JSONObject resJson = new org.json.JSONObject(response.body().string());
                 String newAccessToken = resJson.getString("accessToken");
-                
+
                 // Сохраняем свежий короткий токен в память
                 prefs.edit().putString("vps_access_token", newAccessToken).apply();
-                
+
                 // Обновляем токен в живой MainActivity, чтобы UI не сломался
                 if (context instanceof MainActivity) {
                     ((MainActivity) context).vpsToken = newAccessToken;
                 }
-                
+
                 return newAccessToken;
             }
         } catch (Exception e) {
@@ -174,9 +174,9 @@ public class VpsApi {
     public static void authenticateWithGoogle(Context context, String googleIdToken, final LoginCallback callback) {
         String jsonBody = "{\"idToken\":\"" + googleIdToken + "\"}";
         RequestBody body = RequestBody.create(JSON, jsonBody);
-        
+
         Request request = new Request.Builder()
-                .url(BASE_URL + "auth/google") 
+                .url(BASE_URL + "auth/google")
                 .post(body)
                 .build();
 
@@ -190,15 +190,15 @@ public class VpsApi {
                     try {
                         String responseBody = response.body().string();
                         org.json.JSONObject result = new org.json.JSONObject(responseBody);
-                        
+
                         // === СОХРАНЯЕМ ОБА ТОКЕНА ===
                         final String accessToken = result.getString("accessToken");
                         final String refreshToken = result.getString("refreshToken");
-                        
+
                         context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit()
-                               .putString("vps_access_token", accessToken)
-                               .putString("vps_refresh_token", refreshToken)
-                               .apply();
+                                .putString("vps_access_token", accessToken)
+                                .putString("vps_refresh_token", refreshToken)
+                                .apply();
 
                         if (callback != null) {
                             mainHandler.post(new Runnable() {
@@ -251,7 +251,7 @@ public class VpsApi {
 
         if (nickname != null) builder.addFormDataPart("nickname", nickname);
         if (about != null) builder.addFormDataPart("about", about);
-        
+
         builder.addFormDataPart("ticket", String.valueOf(ticket));
 
         if (photoFile != null && photoFile.exists()) {
@@ -268,7 +268,7 @@ public class VpsApi {
                 .post(builder.build())
                 .tag("upload_profile_task")
                 .build();
-                
+
         enqueueCall(request, callback);
     }
 
@@ -277,29 +277,29 @@ public class VpsApi {
         HttpUrl url = HttpUrl.parse(BASE_URL + "api/users/profile/" + uid).newBuilder()
                 .addQueryParameter("t", String.valueOf(System.currentTimeMillis()))
                 .build();
-                
+
         Request request = createAuthedRequest(url, ourServerToken).build();
-        
+
         client.newCall(request).enqueue(new okhttp3.Callback() {
-            @Override public void onFailure(Call call, IOException e) { 
+            @Override public void onFailure(Call call, IOException e) {
                 if (call.isCanceled()) return;
-                postError(callback, e.getMessage()); 
+                postError(callback, e.getMessage());
             }
             @Override public void onResponse(Call call, Response response) throws IOException {
                 if (response.isSuccessful()) {
                     try {
                         org.json.JSONObject root = new org.json.JSONObject(response.body().string());
-                        
+
                         // Парсим профиль
                         final User user = gson.fromJson(root.getJSONObject("profile").toString(), User.class);
-                        
+
                         // Достаем социальные счетчики
                         org.json.JSONObject social = root.getJSONObject("social");
                         final int followers = social.optInt("followers", 0);
                         final int following = social.optInt("following", 0);
                         final boolean isFollowing = social.optBoolean("isFollowing", false);
-                        
-                        if(callback != null) {
+
+                        if (callback != null) {
                             mainHandler.post(new Runnable() {
                                 @Override public void run() { callback.onLoaded(user, followers, following, isFollowing); }
                             });
@@ -338,14 +338,14 @@ public class VpsApi {
                 .build();
         Request request = createAuthedRequest(url, ourServerToken).build();
         client.newCall(request).enqueue(new okhttp3.Callback() {
-            @Override public void onFailure(Call call, IOException e) { 
+            @Override public void onFailure(Call call, IOException e) {
                 if (call.isCanceled()) return;
-                postError(callback, e.getMessage()); 
+                postError(callback, e.getMessage());
             }
             @Override public void onResponse(Call call, Response response) throws IOException {
                 if (response.isSuccessful()) {
                     final User user = gson.fromJson(response.body().string(), User.class);
-                    if(callback != null) {
+                    if (callback != null) {
                         mainHandler.post(new Runnable() {
                             @Override public void run() { callback.onLoaded(user); }
                         });
@@ -364,9 +364,9 @@ public class VpsApi {
                 .build();
         Request request = createAuthedRequest(url, ourServerToken).build();
         client.newCall(request).enqueue(new okhttp3.Callback() {
-            @Override public void onFailure(Call call, IOException e) { 
+            @Override public void onFailure(Call call, IOException e) {
                 if (call.isCanceled()) return;
-                postSearchError(callback); 
+                postSearchError(callback);
             }
             @Override public void onResponse(Call call, Response response) throws IOException {
                 if (response.isSuccessful()) {
@@ -399,7 +399,7 @@ public class VpsApi {
         client.newCall(request).enqueue(new okhttp3.Callback() {
             @Override public void onFailure(Call call, IOException e) {
                 if (call.isCanceled()) return;
-                if(callback!=null) {
+                if (callback != null) {
                     mainHandler.post(new Runnable() {
                         @Override public void run() { callback.onResult(false); }
                     });
@@ -442,9 +442,9 @@ public class VpsApi {
                 .build();
         Request request = createAuthedRequest(url, ourServerToken).build();
         client.newCall(request).enqueue(new okhttp3.Callback() {
-            @Override public void onFailure(Call call, IOException e) { 
+            @Override public void onFailure(Call call, IOException e) {
                 if (call.isCanceled()) return;
-                postSearchError(callback); 
+                postSearchError(callback);
             }
             @Override public void onResponse(Call call, Response response) throws IOException {
                 if (response.isSuccessful()) {
@@ -496,8 +496,11 @@ public class VpsApi {
         enqueueCall(request, callback);
     }
 
-    public static void addTimeNotification(String ourServerToken, String mainText, String actionText, final Callback callback) {
+    // ИЗМЕНЕНО: добавлен стабильный clientId, чтобы сервер мог хранить его и
+    // возвращать в истории -> точный дедуп локальной и серверной копий.
+    public static void addTimeNotification(String ourServerToken, String clientId, String mainText, String actionText, final Callback callback) {
         TimeNotificationPayload payload = new TimeNotificationPayload();
+        payload.clientId = clientId;
         payload.mainText = mainText;
         payload.actionText = actionText;
         Request request = createAuthedRequest("add_time_notification", ourServerToken)
@@ -516,7 +519,7 @@ public class VpsApi {
         Request request = createAuthedRequest("icons/upload", ourServerToken)
                 .post(body)
                 .build();
-                
+
         client.newCall(request).enqueue(new okhttp3.Callback() {
             @Override public void onFailure(Call call, IOException e) { }
             @Override public void onResponse(Call call, Response response) throws IOException {
@@ -532,7 +535,7 @@ public class VpsApi {
         Request request = createAuthedRequest("sync_app_names", ourServerToken)
                 .post(body)
                 .build();
-                
+
         client.newCall(request).enqueue(new okhttp3.Callback() {
             @Override public void onFailure(Call call, IOException e) { }
             @Override public void onResponse(Call call, Response response) throws IOException {
@@ -549,8 +552,8 @@ public class VpsApi {
         Request request = createAuthedRequest("update_fcm_token", ourServerToken).post(body).build();
         client.newCall(request).enqueue(new okhttp3.Callback() {
             @Override public void onFailure(Call call, java.io.IOException e) {}
-            @Override public void onResponse(Call call, Response response) throws java.io.IOException { 
-                if(response.body() != null) response.body().close(); 
+            @Override public void onResponse(Call call, Response response) throws java.io.IOException {
+                if (response.body() != null) response.body().close();
             }
         });
     }
@@ -565,9 +568,9 @@ public class VpsApi {
 
     private static void enqueueCall(Request request, final Callback callback) {
         client.newCall(request).enqueue(new okhttp3.Callback() {
-            @Override public void onFailure(Call call, IOException e) { 
-                if (call.isCanceled()) return; 
-                postError(callback, e.getMessage()); 
+            @Override public void onFailure(Call call, IOException e) {
+                if (call.isCanceled()) return;
+                postError(callback, e.getMessage());
             }
             @Override public void onResponse(Call call, Response response) throws IOException {
                 if (callback == null) return;
@@ -585,7 +588,7 @@ public class VpsApi {
             }
         });
     }
-    
+
     // ИСПРАВЛЕНО ДЛЯ ПОДДЕРЖКИ НОВОГО ИНТЕРФЕЙСА
     private static void postError(final Object callback, final String message) {
         if (callback == null) return;
@@ -599,20 +602,20 @@ public class VpsApi {
             }
         });
     }
-    
+
     private static void postSearchError(final SearchCallback callback) {
-         if (callback != null) {
-             mainHandler.post(new Runnable() {
-                 @Override public void run() { callback.onFound(new ArrayList<User>()); }
-             });
-         }
+        if (callback != null) {
+            mainHandler.post(new Runnable() {
+                @Override public void run() { callback.onFound(new ArrayList<User>()); }
+            });
+        }
     }
-    
+
     public static void transferAccount(String ourServerToken, String newGoogleIdToken, final LoginCallback callback) {
         String jsonBody = "{\"newIdToken\":\"" + newGoogleIdToken + "\"}";
         RequestBody body = RequestBody.create(JSON, jsonBody);
         Request request = createAuthedRequest("transfer_account", ourServerToken).post(body).build();
-        
+
         client.newCall(request).enqueue(new okhttp3.Callback() {
             @Override public void onFailure(Call call, java.io.IOException e) {
                 if (call.isCanceled()) return;
@@ -624,7 +627,7 @@ public class VpsApi {
                         org.json.JSONObject result = new org.json.JSONObject(response.body().string());
                         final String accessToken = result.getString("accessToken");
                         final String refreshToken = result.getString("refreshToken");
-                        
+
                         mainHandler.post(() -> {
                             if (callback != null) callback.onSuccess(accessToken);
                         });
