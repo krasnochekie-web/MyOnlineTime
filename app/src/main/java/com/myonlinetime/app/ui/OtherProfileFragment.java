@@ -54,6 +54,15 @@ public class OtherProfileFragment extends Fragment {
     private static final long DEFAULT_PRELOAD_BG_BYTES = 5L * 1024L * 1024L;
     private static final float BG_BITMAP_SCREEN_SCALE = 1.0f;
 
+    // === Размеры кэшей фонов считаем от объёма кучи устройства (с потолками),
+    // чтобы недавно просмотренные профили НЕ вытеснялись после 3-4 переходов. ===
+    private static final int BG_BYTES_CACHE_BYTES = (int) Math.min(
+            48L * 1024L * 1024L,
+            Math.max(32L * 1024L * 1024L, Runtime.getRuntime().maxMemory() / 12L));
+    private static final int BG_BITMAP_CACHE_BYTES = (int) Math.min(
+            96L * 1024L * 1024L,
+            Math.max(48L * 1024L * 1024L, Runtime.getRuntime().maxMemory() / 6L));
+
     private ImageView avatarView;
     private ImageView bgImageView;
     private FrameLayout rootWrapper;
@@ -74,14 +83,14 @@ public class OtherProfileFragment extends Fragment {
     public static final android.util.LruCache<String, String> prefetchCountsCache = new android.util.LruCache<>(50);
     public static final android.util.LruCache<String, Boolean> prefetchFollowCache = new android.util.LruCache<>(50);
 
-    public static final android.util.LruCache<String, byte[]> prefetchBgBytesCache = new android.util.LruCache<String, byte[]>(20 * 1024 * 1024) {
+    public static final android.util.LruCache<String, byte[]> prefetchBgBytesCache = new android.util.LruCache<String, byte[]>(BG_BYTES_CACHE_BYTES) {
         @Override
         protected int sizeOf(String key, byte[] value) {
             return value.length;
         }
     };
 
-    public static final android.util.LruCache<String, Bitmap> prefetchBgBitmapCache = new android.util.LruCache<String, Bitmap>(40 * 1024 * 1024) {
+    public static final android.util.LruCache<String, Bitmap> prefetchBgBitmapCache = new android.util.LruCache<String, Bitmap>(BG_BITMAP_CACHE_BYTES) {
         @Override
         protected int sizeOf(String key, Bitmap value) {
             return value == null ? 0 : value.getByteCount();
@@ -785,6 +794,11 @@ public class OtherProfileFragment extends Fragment {
         return true;
     }
 
+    // === ОБНОВЛЁННАЯ ЛОГИКА УСТАНОВКИ ФОНА ===
+    // 1) тот же URL уже показан -> ничего (ноль мерцания);
+    // 2) новый фон уже в кэше (bitmap/байты) -> ставим мгновенно;
+    // 3) URL сменился, а нового в кэше ещё нет -> гасим старый "протухший" фон в пустой
+    //    фон темы и показываем новый только когда он реально докачается.
     private void updateBackgroundFromPrefs(MainActivity activity, String bgUrl) {
         if (bgImageView == null || !isAdded()) return;
 
@@ -803,6 +817,7 @@ public class OtherProfileFragment extends Fragment {
         final String urlF = bgUrl;
         final boolean isGif = urlF.toLowerCase().endsWith(".gif");
 
+        // 1) Готовый bitmap в кэше — мгновенно.
         if (!isGif) {
             Bitmap ready = prefetchBgBitmapCache.get(urlF);
             if (ready != null) {
@@ -812,12 +827,26 @@ public class OtherProfileFragment extends Fragment {
             }
         }
 
+        // 2) Готовые байты в кэше — декод через Glide без сетевого ожидания.
         byte[] bytes = prefetchBgBytesCache.get(urlF);
         if (bytes != null) {
             Glide.with(activity).load(bytes).centerCrop().dontAnimate().into(bgImageView);
-        } else {
-            Glide.with(activity).load(urlF).centerCrop().dontAnimate().into(bgImageView);
+            currentDisplayedBg = urlF;
+            if (!isGif) warmUpBitmapCacheAsync(activity, urlF);
+            return;
         }
+
+        // 3) Нового фона в кэше нет. Если до этого показывали ДРУГОЙ реальный фон —
+        //    значит фон СМЕНИЛСЯ и ещё не докачан: не держим старый на глазах,
+        //    гасим в пустой фон темы, показываем новый только по готовности.
+        boolean wasShowingRealBg = currentDisplayedBg != null
+                && !"disabled".equals(currentDisplayedBg)
+                && !currentDisplayedBg.isEmpty();
+        if (wasShowingRealBg) {
+            bgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
+        }
+
+        Glide.with(activity).load(urlF).centerCrop().dontAnimate().into(bgImageView);
         currentDisplayedBg = urlF;
 
         if (!isGif) warmUpBitmapCacheAsync(activity, urlF);
