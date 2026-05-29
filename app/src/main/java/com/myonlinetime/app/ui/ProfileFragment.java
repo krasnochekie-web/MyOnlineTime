@@ -239,7 +239,7 @@ public class ProfileFragment extends Fragment {
 
         loadMyStatsRunnable = () -> {
             if (isAdded() && appsContainerLocal != null && weekTimeText != null) {
-                StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal);
+                StatsHelper.loadStatsToProfile(activity, weekTimeText, appsContainerLocal, ProfileFragment.this);
                 uiHandler.postDelayed(() -> {
                     if (listSpinner != null) listSpinner.setVisibility(View.GONE);
                 }, 3000);
