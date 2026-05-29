@@ -43,8 +43,34 @@ public class UsageMath {
     private static volatile String cachedLauncherPkg = null;
     private static volatile long appListCacheTime = 0L;
 
+    // === Актуализация границ суток ===
+    // Границы дня кэшируются в статике. Если процесс живёт через полночь, они
+    // протухают, и окно вида [todayStartMillis, now] начинает охватывать двое
+    // суток — это и приводило к «дописыванию» данных в уже истёкший день.
+    // Метод пересчитывает границы и сбрасывает посуточные кэши при смене дня.
+    public static synchronized void refreshDayBoundariesIfNeeded() {
+        Calendar cal = Calendar.getInstance();
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        long realTodayStart = cal.getTimeInMillis();
+
+        if (realTodayStart != todayStartMillis) {
+            todayStartMillis = realTodayStart;
+            Calendar yCal = (Calendar) cal.clone();
+            yCal.add(Calendar.DAY_OF_YEAR, -1);
+            yesterdayStartMillis = yCal.getTimeInMillis();
+            // День сменился — старые «сегодня/вчера» больше не валидны.
+            todayExactCache = null;
+            yesterdayExactCache = null;
+        }
+    }
+
     public static void preloadCoreStats(final Context context) {
         Utils.backgroundExecutor.execute(() -> {
+            refreshDayBoundariesIfNeeded();
+
             Calendar cal = Calendar.getInstance();
             cal.set(Calendar.HOUR_OF_DAY, 0);
             cal.set(Calendar.MINUTE, 0);
@@ -57,10 +83,7 @@ public class UsageMath {
             yesterdayStartMillis = yCal.getTimeInMillis();
 
             todayExactCache = getFilteredExactTimes(context, todayStartMillis, System.currentTimeMillis());
-            saveToSafeCache(context, todayStartMillis, todayExactCache);
-
             yesterdayExactCache = getFilteredExactTimes(context, yesterdayStartMillis, todayStartMillis);
-            saveToSafeCache(context, yesterdayStartMillis, yesterdayExactCache);
         });
     }
 
@@ -72,19 +95,53 @@ public class UsageMath {
         Map<String, Boolean> validityCache = new HashMap<>();
 
         Map<String, Long> systemData = fetchFromAndroidSystem(context, start, end, currentInstalledApps, launcherPkg, validityCache);
-        Map<String, Long> safeData = loadFromSafeCache(context, start);
 
-        for (Map.Entry<String, Long> entry : safeData.entrySet()) {
-            String pkg = entry.getKey();
-            if (!isValidAppCached(context, pkg, currentInstalledApps, launcherPkg, validityCache)) continue;
-
-            long safeTime = entry.getValue();
-            long sysTime = systemData.containsKey(pkg) ? systemData.get(pkg) : 0L;
-            systemData.put(pkg, Math.max(safeTime, sysTime));
+        // === КЛЮЧЕВАЯ ЗАЩИТА ОТ ИЗМЕНЕНИЯ ИСТЁКШИХ ДНЕЙ ===
+        // Защитный кэш на диске хранит данные ПОСУТОЧНО (ключ = дата начала окна).
+        // Поэтому его допустимо читать/писать ТОЛЬКО для однодневного окна.
+        // Многодневные окна (неделя/год, либо устаревший todayStartMillis после
+        // полуночи) НЕ должны касаться посуточного кэша — иначе сумма за несколько
+        // суток перезапишет данные уже закрытого дня.
+        if (!isSingleDayWindow(start, end)) {
+            return systemData;
         }
 
-        saveToSafeCache(context, start, systemData);
-        return systemData;
+        if (!systemData.isEmpty()) {
+            // События за этот день ещё доступны в системе (диапазон графика — 7 дней,
+            // а система хранит события ~7–14 дней). Значит система = источник истины.
+            // Перезаписываем слот дня значением по событиям (set, НЕ max), чтобы
+            // истёкший день «замораживался» на правде и не рос со временем.
+            saveToSafeCache(context, start, systemData);
+            return systemData;
+        }
+
+        // События за этот день уже вытеснены системой (старый день вне окна
+        // хранения) — отдаём то, что успели сохранить раньше.
+        Map<String, Long> restored = new HashMap<>();
+        Map<String, Long> safeData = loadFromSafeCache(context, start);
+        for (Map.Entry<String, Long> entry : safeData.entrySet()) {
+            String pkg = entry.getKey();
+            if (isValidAppCached(context, pkg, currentInstalledApps, launcherPkg, validityCache)) {
+                restored.put(pkg, entry.getValue());
+            }
+        }
+        return restored;
+    }
+
+    // Окно считается «однодневным», если оно целиком укладывается в сутки,
+    // которым принадлежит start. Граница включительна (23:59:59.999 или ровно
+    // полночь следующего дня — как у окна «вчера» [yStart, todayStart]).
+    private static boolean isSingleDayWindow(long start, long end) {
+        if (end <= start) return false;
+        Calendar cal = Calendar.getInstance();
+        cal.setTimeInMillis(start);
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        cal.add(Calendar.DAY_OF_YEAR, 1);
+        long nextDayStart = cal.getTimeInMillis();
+        return end <= nextDayStart;
     }
 
     private static Map<String, Long> fetchFromAndroidSystem(Context context, long start, long end, Set<String> currentInstalledApps, String launcherPkg, Map<String, Boolean> validityCache) {
