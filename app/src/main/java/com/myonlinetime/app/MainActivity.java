@@ -119,6 +119,24 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
+    // ============================================================
+    // === ЕДИНАЯ СИНХРОНИЗАЦИЯ FCM-ТОКЕНА С СЕРВЕРОМ ===
+    // Вызывать после КАЖДОГО входа/смены аккаунта. На сервере токен
+    // перепривязывается к активному uid и снимается с твинков.
+    // ============================================================
+    public void syncFcmToken() {
+        final String token = vpsToken;
+        if (token == null || token.isEmpty()) return;
+        FirebaseMessaging.getInstance().getToken().addOnCompleteListener(fcmTask -> {
+            if (fcmTask.isSuccessful() && fcmTask.getResult() != null) {
+                String fcm = fcmTask.getResult();
+                getSharedPreferences("AppPrefs", MODE_PRIVATE)
+                        .edit().putString("fcm_token", fcm).apply();
+                VpsApi.updateFcmToken(token, fcm);
+            }
+        });
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         SharedPreferences appPrefs = getSharedPreferences("AppPrefs", MODE_PRIVATE);
@@ -498,11 +516,8 @@ public class MainActivity extends AppCompatActivity {
                                 } catch (Exception ignored) {}
                             });
 
-                            FirebaseMessaging.getInstance().getToken().addOnCompleteListener(fcmTask -> {
-                                if (fcmTask.isSuccessful() && fcmTask.getResult() != null) {
-                                    VpsApi.updateFcmToken(ourServerToken, fcmTask.getResult());
-                                }
-                            });
+                            // === Перепривязываем FCM-токен к этому аккаунту ===
+                            syncFcmToken();
                         }
 
                         @Override
@@ -544,6 +559,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void performSignOut() {
+        // Снимаем FCM-токен с этого аккаунта на сервере ДО сброса сессии,
+        // чтобы пуши на это устройство за вышедший аккаунт больше не уходили.
+        final String tokenBeforeSignOut = vpsToken;
+        if (tokenBeforeSignOut != null && !tokenBeforeSignOut.isEmpty()) {
+            FirebaseMessaging.getInstance().getToken().addOnCompleteListener(fcmTask -> {
+                if (fcmTask.isSuccessful() && fcmTask.getResult() != null) {
+                    VpsApi.unregisterFcmToken(tokenBeforeSignOut, fcmTask.getResult());
+                }
+            });
+        }
+
         if (mGoogleSignInClient != null) {
             mGoogleSignInClient.signOut().addOnCompleteListener(task -> {
                 resetAccountState();
@@ -1264,6 +1290,11 @@ public class MainActivity extends AppCompatActivity {
                         syncNotificationsHistory();
 
                         checkIfNewUserAndEnforce(acct.getId());
+
+                        // === КЛЮЧЕВОЙ ФИКС: перепривязываем FCM-токен к этому аккаунту ===
+                        // Именно это раньше отсутствовало в живом входе, из-за чего
+                        // при смене аккаунта пуши продолжали уходить на твинков.
+                        syncFcmToken();
 
                         runOnUiThread(() -> {
                             updateNavState(4);
