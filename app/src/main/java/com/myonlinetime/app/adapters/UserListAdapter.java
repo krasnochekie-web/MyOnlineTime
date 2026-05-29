@@ -9,6 +9,8 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.myonlinetime.app.MainActivity;
 import com.myonlinetime.app.R;
 import com.myonlinetime.app.models.User;
@@ -34,6 +36,19 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
     public void setUsers(List<User> newUsers) {
         this.users = newUsers != null ? newUsers : new ArrayList<>();
         notifyDataSetChanged();
+    }
+
+    // === Текущий uid (для блокировки перехода на свой профиль) ===
+    private String getMyUid() {
+        if (activity == null) return null;
+        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(activity);
+        return account != null ? account.getId() : null;
+    }
+
+    private boolean isMyUid(String uid) {
+        if (uid == null || uid.isEmpty()) return false;
+        String myUid = getMyUid();
+        return myUid != null && myUid.equals(uid);
     }
 
     @NonNull
@@ -62,6 +77,9 @@ public class UserListAdapter extends RecyclerView.Adapter<UserListAdapter.UserVi
         }
 
         holder.itemView.setOnClickListener(v -> {
+            // Клик по СВОЕМУ профилю в списке — игнорируем (ничего не происходит).
+            if (isMyUid(u.uid)) return;
+
             if (listener != null) {
                 listener.onUserClick(u);
             }
