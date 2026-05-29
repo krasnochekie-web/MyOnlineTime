@@ -7,6 +7,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
@@ -76,6 +78,10 @@ public class ProfileFragment extends Fragment {
     private String currentLoadedAvatar = null;
     private String currentLoadedBg = null;
 
+    // Статический кеш декодированного фона — повторные заходы мгновенные, без декода.
+    private static String sBgBitmapKey = null;
+    private static Bitmap sBgBitmap = null;
+
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
     private Runnable fetchProfileDataRunnable;
@@ -135,6 +141,12 @@ public class ProfileFragment extends Fragment {
         activity.headerManager.resetHeader();
 
         prefs = activity.getSharedPreferences("MyOnlineTime_Cache_" + myUid, Context.MODE_PRIVATE);
+
+        // === ФОН — МГНОВЕННО, ещё до первой отрисовки экрана ===
+        // applyMyBackground работает напрямую с полем myBgImageView и НЕ зависит от
+        // getView() (который в onCreateView ещё null), поэтому фон ставится сразу,
+        // до возврата из onCreateView → виден уже на первом кадре, без задержки.
+        applyMyBackground(activity);
 
         avatarView = originalView.findViewById(R.id.profile_avatar);
         final View btnEdit = originalView.findViewById(R.id.btn_edit_profile);
@@ -397,6 +409,10 @@ public class ProfileFragment extends Fragment {
     }
 
     private void updateUiFromPrefs(MainActivity activity) {
+        // Фон обновляем ВСЕГДА и ПЕРВЫМ делом — он живёт в поле myBgImageView и не
+        // зависит от getView(), поэтому работает даже на старте (когда getView() == null).
+        applyMyBackground(activity);
+
         if (getView() == null || !isAdded()) return;
         TextView nameView = getView().findViewById(R.id.profile_name);
         TextView aboutView = getView().findViewById(R.id.profile_about);
@@ -410,6 +426,11 @@ public class ProfileFragment extends Fragment {
 
         String b64 = activity.prefs.getString("my_photo_base64", null);
         handleMediaLoading(activity, b64, true, myUid);
+    }
+
+    // === ФОН СОБСТВЕННОГО ПРОФИЛЯ: мгновенно, синхронно, без асинхронного круга Glide ===
+    private void applyMyBackground(MainActivity activity) {
+        if (myBgImageView == null || activity == null || myUid == null || myUid.isEmpty()) return;
 
         SharedPreferences appPrefs = activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
         boolean isGlobalEnabled = appPrefs.getBoolean("bg_global_enabled", true);
@@ -441,36 +462,96 @@ public class ProfileFragment extends Fragment {
             newBgKey = myUid + "*remote_bg*" + (remoteBg != null ? String.valueOf(remoteBg.hashCode()) : "empty");
         }
 
-        if (!newBgKey.equals(currentLoadedBg)) {
-            currentLoadedBg = newBgKey;
+        if (newBgKey.equals(currentLoadedBg)) return;
+        currentLoadedBg = newBgKey;
 
-            if (!allowBg) {
-                myBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
-            } else {
-                // ВАЖНО: грузим фон НАПРЯМУЮ на главном потоке — без очереди
-                // Utils.backgroundExecutor, иначе на старте фон ждёт окончания
-                // расчёта статистики (отсюда была задержка 100-200 мс).
-                // exists()-проверка уже сделана выше при выборе targetPath.
-                // placeholder(keep) удерживает текущий фон до декода нового —
-                // это убирает моргание при возврате со чужого профиля.
+        if (!allowBg) {
+            myBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
+            return;
+        }
+
+        if (targetPath.equals(bgPath)) {
+            // === ЛОКАЛЬНЫЙ ФАЙЛ — показываем СИНХРОННО прямо сейчас (мгновенно) ===
+            final File bgFile = new File(bgPath);
+            final boolean isGif = bgPath.toLowerCase().endsWith(".gif");
+
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            Bitmap immediate = getInstantBgBitmap(bgPath, bgFile.lastModified(), dm.widthPixels, dm.heightPixels);
+
+            if (immediate != null) {
+                // Уже декодировано (или из статического кеша) — ставим без задержки.
+                myBgImageView.setImageBitmap(immediate);
+            }
+
+            if (isGif) {
+                // GIF: статичный первый кадр уже на экране (placeholder), Glide догоняет анимацией.
                 final Drawable keep = myBgImageView.getDrawable();
-                if (targetPath.equals(bgPath)) {
-                    final File bgFile = new File(bgPath);
-                    Glide.with(this).load(bgFile)
-                            .diskCacheStrategy(DiskCacheStrategy.NONE)
-                            .signature(new ObjectKey(bgFile.lastModified()))
-                            .placeholder(keep)
-                            .dontAnimate()
-                            .centerCrop()
-                            .into(myBgImageView);
-                } else if (remoteBg != null && remoteBg.startsWith("http")) {
-                    Glide.with(this).load(remoteBg)
-                            .placeholder(keep)
-                            .dontAnimate()
-                            .centerCrop()
-                            .into(myBgImageView);
+                Glide.with(this).load(bgFile)
+                        .diskCacheStrategy(DiskCacheStrategy.NONE)
+                        .signature(new ObjectKey(bgFile.lastModified()))
+                        .placeholder(keep)
+                        .centerCrop()
+                        .into(myBgImageView);
+            } else if (immediate == null) {
+                // Фолбэк, если синхронный декод не удался.
+                final Drawable keep = myBgImageView.getDrawable();
+                Glide.with(this).load(bgFile)
+                        .diskCacheStrategy(DiskCacheStrategy.NONE)
+                        .signature(new ObjectKey(bgFile.lastModified()))
+                        .placeholder(keep)
+                        .dontAnimate()
+                        .centerCrop()
+                        .into(myBgImageView);
+            }
+        } else if (remoteBg != null && remoteBg.startsWith("http")) {
+            // Удалённый фон синхронно показать нельзя — грузим Glide (placeholder против моргания).
+            final Drawable keep = myBgImageView.getDrawable();
+            Glide.with(this).load(remoteBg)
+                    .placeholder(keep)
+                    .dontAnimate()
+                    .centerCrop()
+                    .into(myBgImageView);
+        }
+    }
+
+    // Достаём фон из статического кеша или декодируем (с даунсемплом под экран) — синхронно.
+    private static synchronized Bitmap getInstantBgBitmap(String path, long lastModified, int reqW, int reqH) {
+        String key = path + "|" + lastModified + "|" + reqW + "x" + reqH;
+        if (key.equals(sBgBitmapKey) && sBgBitmap != null && !sBgBitmap.isRecycled()) {
+            return sBgBitmap;
+        }
+        Bitmap bm = decodeDownsampled(path, reqW, reqH);
+        if (bm != null) {
+            sBgBitmapKey = key;
+            sBgBitmap = bm;
+        }
+        return bm;
+    }
+
+    private static Bitmap decodeDownsampled(String path, int reqW, int reqH) {
+        try {
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(path, bounds);
+
+            int outW = bounds.outWidth;
+            int outH = bounds.outHeight;
+            if (outW <= 0 || outH <= 0) return null;
+
+            int inSample = 1;
+            if (reqW > 0 && reqH > 0) {
+                int halfW = outW / 2;
+                int halfH = outH / 2;
+                while ((halfW / inSample) >= reqW && (halfH / inSample) >= reqH) {
+                    inSample *= 2;
                 }
             }
+
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inSampleSize = inSample;
+            return BitmapFactory.decodeFile(path, opts);
+        } catch (Throwable t) {
+            return null;
         }
     }
 
