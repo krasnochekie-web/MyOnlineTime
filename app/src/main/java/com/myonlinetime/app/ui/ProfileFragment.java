@@ -142,10 +142,10 @@ public class ProfileFragment extends Fragment {
 
         prefs = activity.getSharedPreferences("MyOnlineTime_Cache_" + myUid, Context.MODE_PRIVATE);
 
-        // === ФОН — МГНОВЕННО, ещё до первой отрисовки экрана ===
+        // === ФОН — мгновенно из кеша, тяжёлый декод — в фоне (без лагов UI) ===
         // applyMyBackground работает напрямую с полем myBgImageView и НЕ зависит от
-        // getView() (который в onCreateView ещё null), поэтому фон ставится сразу,
-        // до возврата из onCreateView → виден уже на первом кадре, без задержки.
+        // getView() (который в onCreateView ещё null). Если bitmap уже в статическом
+        // кеше — ставится сразу; иначе декод уходит в фон и не блокирует первый кадр.
         applyMyBackground(activity);
 
         avatarView = originalView.findViewById(R.id.profile_avatar);
@@ -428,7 +428,7 @@ public class ProfileFragment extends Fragment {
         handleMediaLoading(activity, b64, true, myUid);
     }
 
-    // === ФОН СОБСТВЕННОГО ПРОФИЛЯ: мгновенно, синхронно, без асинхронного круга Glide ===
+    // === ФОН СОБСТВЕННОГО ПРОФИЛЯ: мгновенно из кеша, тяжёлый декод — в фоне ===
     private void applyMyBackground(MainActivity activity) {
         if (myBgImageView == null || activity == null || myUid == null || myUid.isEmpty()) return;
 
@@ -457,9 +457,9 @@ public class ProfileFragment extends Fragment {
         if (!allowBg) {
             newBgKey = "disabled";
         } else if (targetPath.equals(bgPath)) {
-            newBgKey = myUid + "*local_bg*" + new File(bgPath).lastModified();
+            newBgKey = myUid + "|local_bg|" + new File(bgPath).lastModified();
         } else {
-            newBgKey = myUid + "*remote_bg*" + (remoteBg != null ? String.valueOf(remoteBg.hashCode()) : "empty");
+            newBgKey = myUid + "|remote_bg|" + (remoteBg != null ? String.valueOf(remoteBg.hashCode()) : "empty");
         }
 
         if (newBgKey.equals(currentLoadedBg)) return;
@@ -471,38 +471,60 @@ public class ProfileFragment extends Fragment {
         }
 
         if (targetPath.equals(bgPath)) {
-            // === ЛОКАЛЬНЫЙ ФАЙЛ — показываем СИНХРОННО прямо сейчас (мгновенно) ===
-            final File bgFile = new File(bgPath);
-            final boolean isGif = bgPath.toLowerCase().endsWith(".gif");
-
-            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
-            Bitmap immediate = getInstantBgBitmap(bgPath, bgFile.lastModified(), dm.widthPixels, dm.heightPixels);
-
-            if (immediate != null) {
-                // Уже декодировано (или из статического кеша) — ставим без задержки.
-                myBgImageView.setImageBitmap(immediate);
-            }
+            final String localPath = bgPath;
+            final File bgFile = new File(localPath);
+            final long lastModified = bgFile.lastModified();
+            final boolean isGif = localPath.toLowerCase().endsWith(".gif");
 
             if (isGif) {
-                // GIF: статичный первый кадр уже на экране (placeholder), Glide догоняет анимацией.
+                // GIF анимируется через Glide (асинхронно). Placeholder — текущая картинка (без морганий).
                 final Drawable keep = myBgImageView.getDrawable();
                 Glide.with(this).load(bgFile)
                         .diskCacheStrategy(DiskCacheStrategy.NONE)
-                        .signature(new ObjectKey(bgFile.lastModified()))
+                        .signature(new ObjectKey(lastModified))
                         .placeholder(keep)
                         .centerCrop()
                         .into(myBgImageView);
-            } else if (immediate == null) {
-                // Фолбэк, если синхронный декод не удался.
-                final Drawable keep = myBgImageView.getDrawable();
-                Glide.with(this).load(bgFile)
-                        .diskCacheStrategy(DiskCacheStrategy.NONE)
-                        .signature(new ObjectKey(bgFile.lastModified()))
-                        .placeholder(keep)
-                        .dontAnimate()
-                        .centerCrop()
-                        .into(myBgImageView);
+                return;
             }
+
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            final int reqW = dm.widthPixels;
+            final int reqH = dm.heightPixels;
+
+            // 1) Быстрый путь: bitmap уже в статическом кеше — ставим синхронно.
+            // Декода НЕТ → нет лага. Это случай повторного захода на экран.
+            Bitmap cached = getCachedBgBitmap(localPath, lastModified, reqW, reqH);
+            if (cached != null) {
+                myBgImageView.setImageBitmap(cached);
+                return;
+            }
+
+            // 2) Кеш-промах: тяжёлый декод уходит В ФОН — главный поток не блокируется.
+            // До готовности на экране остаётся текущий фон/плейсхолдер (без фризов).
+            final String keyForThisRequest = newBgKey;
+            Utils.backgroundExecutor.execute(() -> {
+                Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+                final Bitmap decoded = getInstantBgBitmap(localPath, lastModified, reqW, reqH);
+                uiHandler.post(() -> {
+                    if (!isAdded() || myBgImageView == null) return;
+                    // Запрос устарел (фон сменился / ушли с экрана) — не применяем.
+                    if (!keyForThisRequest.equals(currentLoadedBg)) return;
+                    if (decoded != null) {
+                        myBgImageView.setImageBitmap(decoded);
+                    } else {
+                        // Фолбэк: пусть Glide попробует сам (тоже асинхронно).
+                        final Drawable keep = myBgImageView.getDrawable();
+                        Glide.with(ProfileFragment.this).load(bgFile)
+                                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                                .signature(new ObjectKey(lastModified))
+                                .placeholder(keep)
+                                .dontAnimate()
+                                .centerCrop()
+                                .into(myBgImageView);
+                    }
+                });
+            });
         } else if (remoteBg != null && remoteBg.startsWith("http")) {
             // Удалённый фон синхронно показать нельзя — грузим Glide (placeholder против моргания).
             final Drawable keep = myBgImageView.getDrawable();
@@ -514,7 +536,17 @@ public class ProfileFragment extends Fragment {
         }
     }
 
-    // Достаём фон из статического кеша или декодируем (с даунсемплом под экран) — синхронно.
+    // Только проверка статического кеша — БЕЗ декода. Дёшево, безопасно для главного потока.
+    private static synchronized Bitmap getCachedBgBitmap(String path, long lastModified, int reqW, int reqH) {
+        String key = path + "|" + lastModified + "|" + reqW + "x" + reqH;
+        if (key.equals(sBgBitmapKey) && sBgBitmap != null && !sBgBitmap.isRecycled()) {
+            return sBgBitmap;
+        }
+        return null;
+    }
+
+    // Достаёт из кеша или ДЕКОДИРУЕТ (с даунсемплом под экран). Тяжёлая операция —
+    // вызывать ТОЛЬКО из фонового потока.
     private static synchronized Bitmap getInstantBgBitmap(String path, long lastModified, int reqW, int reqH) {
         String key = path + "|" + lastModified + "|" + reqW + "x" + reqH;
         if (key.equals(sBgBitmapKey) && sBgBitmap != null && !sBgBitmap.isRecycled()) {
@@ -568,9 +600,9 @@ public class ProfileFragment extends Fragment {
 
         String newAvatarKey;
         if (useLocalFile && customAvatarPath != null && new File(customAvatarPath).exists()) {
-            newAvatarKey = uid + "*local*" + new File(customAvatarPath).lastModified();
+            newAvatarKey = uid + "|local|" + new File(customAvatarPath).lastModified();
         } else {
-            newAvatarKey = uid + "*remote*" + (base64Data != null ? String.valueOf(base64Data.hashCode()) : "empty");
+            newAvatarKey = uid + "|remote|" + (base64Data != null ? String.valueOf(base64Data.hashCode()) : "empty");
         }
 
         if (newAvatarKey.equals(currentLoadedAvatar)) return;
