@@ -43,9 +43,9 @@ public class NotificationsAdapter extends RecyclerView.Adapter<RecyclerView.View
         this.items.addAll(initialItems);
         this.activity = activity;
         this.sdf = new SimpleDateFormat(activity.getString(R.string.date_format), Locale.getDefault());
-        
+
         // === ВАЖНО: Включаем стабильные ID для плавной анимации и скролла ===
-        setHasStableIds(true); 
+        setHasStableIds(true);
     }
 
     public void updateItems(List<NotificationModels.NotificationItem> newItems) {
@@ -86,7 +86,7 @@ public class NotificationsAdapter extends RecyclerView.Adapter<RecyclerView.View
     @Override
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         NotificationModels.NotificationItem item = items.get(position);
-        
+
         if (holder instanceof FollowerViewHolder) {
             ((FollowerViewHolder) holder).bind((NotificationModels.FollowerNotification) item, activity, sdf);
         } else if (holder instanceof TimeViewHolder) {
@@ -155,55 +155,63 @@ public class NotificationsAdapter extends RecyclerView.Adapter<RecyclerView.View
             updateFollowButtonUI(btnFollow, item.isFollowing, activity);
 
             followerUserCard.setOnClickListener(v -> {
-                if (activity != null && activity.navigator != null) {
-                    String bg = "";
-                    String about = "";
-                    int followers = 0;
-                    int following = 0;
-                    boolean currentFollowStatus = item.isFollowing; 
+                if (activity == null || activity.navigator == null) return;
 
-                    // 1. Ищем фон и ОПИСАНИЕ в кэше юзеров
-                    com.myonlinetime.app.models.User cachedUser = com.myonlinetime.app.ui.OtherProfileFragment.prefetchUserCache.get(item.uid);
-                    if (cachedUser != null) {
-                        bg = cachedUser.background != null ? cachedUser.background : "";
-                        about = cachedUser.about != null ? cachedUser.about : "";
-                    }
-
-                    // 2. Ищем актуальные счетчики в кэше
-                    String cachedCounts = com.myonlinetime.app.ui.OtherProfileFragment.prefetchCountsCache.get(item.uid);
-                    if (cachedCounts != null) {
-                        try {
-                            org.json.JSONObject countsObj = new org.json.JSONObject(cachedCounts);
-                            followers = countsObj.optInt("followers", 0);
-                            following = countsObj.optInt("following", 0);
-                        } catch (Exception ignored) {}
-                    }
-
-                    // 3. Ищем самый свежий статус подписки
-                    Boolean cachedFollowStatus = com.myonlinetime.app.ui.OtherProfileFragment.prefetchFollowCache.get(item.uid);
-                    if (cachedFollowStatus != null) {
-                        currentFollowStatus = cachedFollowStatus;
-                    }
-
-                    // 4. Открываем профиль "Толстым" объектом
-                    activity.navigator.openSubScreen(OtherProfileFragment.newInstance(
-                            item.uid, 
-                            activity.getString(R.string.title_notifications), 
-                            item.nickname, 
-                            about, // <-- ПЕРЕДАЕМ ОПИСАНИЕ ИЗ КЭША!
-                            item.photo,
-                            bg,
-                            followers,
-                            following,
-                            currentFollowStatus
-                    ));
+                // === ЗАПРЕТ ПЕРЕХОДА НА СВОЙ ПРОФИЛЬ ИЗ ИСТОРИИ УВЕДОМЛЕНИЙ ===
+                // По тапу на свой профиль ничего не открываем — это бессмысленно.
+                GoogleSignInAccount me = GoogleSignIn.getLastSignedInAccount(activity);
+                String myUid = me != null ? me.getId() : "";
+                if (item.uid != null && !myUid.isEmpty() && item.uid.equals(myUid)) {
+                    return;
                 }
+
+                String bg = "";
+                String about = "";
+                int followers = 0;
+                int following = 0;
+                boolean currentFollowStatus = item.isFollowing;
+
+                // 1. Ищем фон и ОПИСАНИЕ в кэше юзеров
+                com.myonlinetime.app.models.User cachedUser = com.myonlinetime.app.ui.OtherProfileFragment.prefetchUserCache.get(item.uid);
+                if (cachedUser != null) {
+                    bg = cachedUser.background != null ? cachedUser.background : "";
+                    about = cachedUser.about != null ? cachedUser.about : "";
+                }
+
+                // 2. Ищем актуальные счетчики в кэше
+                String cachedCounts = com.myonlinetime.app.ui.OtherProfileFragment.prefetchCountsCache.get(item.uid);
+                if (cachedCounts != null) {
+                    try {
+                        org.json.JSONObject countsObj = new org.json.JSONObject(cachedCounts);
+                        followers = countsObj.optInt("followers", 0);
+                        following = countsObj.optInt("following", 0);
+                    } catch (Exception ignored) {}
+                }
+
+                // 3. Ищем самый свежий статус подписки
+                Boolean cachedFollowStatus = com.myonlinetime.app.ui.OtherProfileFragment.prefetchFollowCache.get(item.uid);
+                if (cachedFollowStatus != null) {
+                    currentFollowStatus = cachedFollowStatus;
+                }
+
+                // 4. Открываем профиль "Толстым" объектом
+                activity.navigator.openSubScreen(OtherProfileFragment.newInstance(
+                        item.uid,
+                        activity.getString(R.string.title_notifications),
+                        item.nickname,
+                        about, // <-- ПЕРЕДАЕМ ОПИСАНИЕ ИЗ КЭША!
+                        item.photo,
+                        bg,
+                        followers,
+                        following,
+                        currentFollowStatus
+                ));
             });
 
             btnFollow.setOnClickListener(v -> {
                 if (!btnFollow.isEnabled()) return;
                 btnFollow.setEnabled(false);
-                
+
                 boolean nextStatus = !item.isFollowing;
                 item.isFollowing = nextStatus;
                 updateFollowButtonUI(btnFollow, nextStatus, activity);
