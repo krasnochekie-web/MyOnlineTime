@@ -55,11 +55,18 @@ public class MyFcmService extends FirebaseMessagingService {
             String photo = data.get("photo");
             String ownerUid = data.get("owner_uid");
 
-            // === МАРШРУТИЗАЦИЯ ПО АККАУНТУ ===
+            boolean ownerKnown = ownerUid != null && !ownerUid.isEmpty();
+
             // Кому логически адресован пуш: если сервер прислал owner_uid — туда;
-            // иначе считаем, что текущему аккаунту.
-            String targetUid = (ownerUid != null && !ownerUid.isEmpty()) ? ownerUid : currentUid;
+            // иначе считаем, что текущему аккаунту (для маршрутизации истории).
+            String targetUid = ownerKnown ? ownerUid : currentUid;
             boolean isForActiveAccount = targetUid.equals(currentUid);
+
+            // === СТРОГОЕ ПРАВИЛО ДЛЯ СИСТЕМНОГО ПУША ===
+            // Показываем системный пуш ТОЛЬКО если точно знаем владельца (owner_uid)
+            // и он равен активному аккаунту. Если owner_uid не пришёл — пуш НЕ
+            // показываем, чтобы исключить протечку уведомлений с твинков.
+            boolean canShowPush = ownerKnown && ownerUid.equals(currentUid);
 
             // Защита от self-уведомления.
             if (followerUid != null && followerUid.equals(targetUid)) {
@@ -68,15 +75,16 @@ public class MyFcmService extends FirebaseMessagingService {
 
             if ("follower".equals(type)) {
                 // Всегда сохраняем в историю ЦЕЛЕВОГО аккаунта.
-                // Если аккаунт не активен — тихо (без системного пуша): бейджик
-                // загорится при следующем переходе на этот аккаунт.
+                // Если аккаунт не активен — тихо (без системного пуша).
                 saveToLocalHistory(type, followerUid, nickname, photo, targetUid, !isForActiveAccount);
 
-                // Системный пуш + живое обновление UI — ТОЛЬКО для активного аккаунта.
+                // Системный пуш — только если уверены, что он для активного аккаунта.
+                if (canShowPush && prefs.getBoolean("notif_followers_enabled", true)) {
+                    sendFollowerPush(nickname, followerUid);
+                }
+
+                // Живое обновление бейджа — только для активного аккаунта.
                 if (isForActiveAccount) {
-                    if (prefs.getBoolean("notif_followers_enabled", true)) {
-                        sendFollowerPush(nickname, followerUid);
-                    }
                     Intent updateIntent = new Intent("UPDATE_BADGE_BROADCAST");
                     LocalBroadcastManager.getInstance(this).sendBroadcast(updateIntent);
                 }
