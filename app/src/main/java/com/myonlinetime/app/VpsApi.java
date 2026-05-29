@@ -546,10 +546,28 @@ public class VpsApi {
         });
     }
 
+    // Привязать FCM-токен к активному аккаунту. На сервере /update_fcm_token
+    // снимает этот токен со всех ДРУГИХ аккаунтов (NOT uid) и ставит текущему.
     public static void updateFcmToken(String ourServerToken, String fcmToken) {
         String jsonBody = "{\"fcmToken\":\"" + fcmToken + "\"}";
         RequestBody body = RequestBody.create(JSON, jsonBody);
         Request request = createAuthedRequest("update_fcm_token", ourServerToken).post(body).build();
+        client.newCall(request).enqueue(new okhttp3.Callback() {
+            @Override public void onFailure(Call call, java.io.IOException e) {}
+            @Override public void onResponse(Call call, Response response) throws java.io.IOException {
+                if (response.body() != null) response.body().close();
+            }
+        });
+    }
+
+    // НОВЫЙ МЕТОД: отвязать FCM-токен от аккаунта при выходе.
+    // На сервере /unregister_fcm_token обнуляет fcmToken у текущего uid,
+    // если он совпадает с переданным (чтобы пуши на это устройство
+    // за вышедший аккаунт больше не уходили).
+    public static void unregisterFcmToken(String ourServerToken, String fcmToken) {
+        String jsonBody = "{\"fcmToken\":\"" + fcmToken + "\"}";
+        RequestBody body = RequestBody.create(JSON, jsonBody);
+        Request request = createAuthedRequest("unregister_fcm_token", ourServerToken).post(body).build();
         client.newCall(request).enqueue(new okhttp3.Callback() {
             @Override public void onFailure(Call call, java.io.IOException e) {}
             @Override public void onResponse(Call call, Response response) throws java.io.IOException {
