@@ -94,6 +94,10 @@ public class UsageMath {
 
         UsageEvents events = usm.queryEvents(start, end);
         Map<String, Long> openTimes = new HashMap<>();
+        // Пакеты, для которых мы уже видели хотя бы одно событие в окне.
+        // Нужно, чтобы корректно учесть сессию, начавшуюся ДО начала периода
+        // (первое событие пакета — PAUSE/STOP без предшествующего RESUME).
+        Set<String> seenPkg = new HashSet<>();
         UsageEvents.Event event = new UsageEvents.Event();
 
         while (events.hasNextEvent()) {
@@ -101,11 +105,15 @@ public class UsageMath {
             if (event.getPackageName() == null) continue;
 
             String pkg = stripWhitespace(event.getPackageName());
+            int type = event.getEventType();
 
-            if (event.getEventType() == UsageEvents.Event.ACTIVITY_RESUMED) {
+            boolean firstForPkg = !seenPkg.contains(pkg);
+            seenPkg.add(pkg);
+
+            if (type == UsageEvents.Event.ACTIVITY_RESUMED) {
                 openTimes.put(pkg, event.getTimeStamp());
-            } else if (event.getEventType() == UsageEvents.Event.ACTIVITY_PAUSED ||
-                    event.getEventType() == UsageEvents.Event.ACTIVITY_STOPPED) {
+            } else if (type == UsageEvents.Event.ACTIVITY_PAUSED ||
+                       type == UsageEvents.Event.ACTIVITY_STOPPED) {
                 if (openTimes.containsKey(pkg)) {
                     long duration = event.getTimeStamp() - openTimes.get(pkg);
                     if (duration > 0 && isValidAppCached(context, pkg, currentInstalledApps, launcherPkg, validityCache)) {
@@ -113,6 +121,15 @@ public class UsageMath {
                         results.put(pkg, (current == null ? 0L : current) + duration);
                     }
                     openTimes.remove(pkg);
+                } else if (firstForPkg) {
+                    // Первое событие пакета в окне — PAUSE/STOP, значит приложение было
+                    // на переднем плане ещё до начала периода. Считаем от начала окна.
+                    // Это убирает занижение за день и за неделю на стыке полуночи/границы.
+                    long duration = event.getTimeStamp() - start;
+                    if (duration > 0 && isValidAppCached(context, pkg, currentInstalledApps, launcherPkg, validityCache)) {
+                        Long current = results.get(pkg);
+                        results.put(pkg, (current == null ? 0L : current) + duration);
+                    }
                 }
             }
         }
@@ -148,8 +165,17 @@ public class UsageMath {
         String launcherPkg = getDefaultLauncherCached(context);
         Map<String, Boolean> validityCache = new HashMap<>();
 
+        // ФИКС ЗАВЫШЕНИЯ ЗА ГОД: INTERVAL_YEARLY отдаёт огромные перекрывающиеся
+        // корзины с раздутым totalTimeInForeground → суммирование даёт перебор.
+        // Берём месячные корзины (как месяц берёт недельные): перекрытий нет,
+        // погрешность на краю — такая же, как у корректно считающегося месяца.
+        int effectiveInterval = interval;
+        if (interval == UsageStatsManager.INTERVAL_YEARLY) {
+            effectiveInterval = UsageStatsManager.INTERVAL_MONTHLY;
+        }
+
         // Получаем сырые корзины вместо кривого агрегатора
-        List<UsageStats> statsList = usm.queryUsageStats(interval, start, end);
+        List<UsageStats> statsList = usm.queryUsageStats(effectiveInterval, start, end);
         if (statsList != null) {
             for (UsageStats stats : statsList) {
                 if (stats == null) continue;
