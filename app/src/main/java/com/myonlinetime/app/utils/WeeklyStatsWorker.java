@@ -47,6 +47,13 @@ public class WeeklyStatsWorker extends Worker {
     public Result doWork() {
         Context context = getApplicationContext();
 
+        // === ФИКСАЦИЯ ЗАКРЫТЫХ ДНЕЙ ===
+        // Делаем снимок последних завершённых суток в посуточный защитный кэш,
+        // пока их события ещё доступны в системе. Это закрывает «край» недельного
+        // графика на устройствах с коротким хранением событий. Выполняем ДО проверки
+        // настроек уведомлений: сохранность данных не должна зависеть от пушей.
+        snapshotRecentDays(context);
+
         SharedPreferences prefs = context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE);
         boolean isGeneralEnabled = prefs.getBoolean("notif_general_enabled", true);
         boolean isRecordsEnabled = prefs.getBoolean("notif_records_enabled", true);
@@ -106,11 +113,11 @@ public class WeeklyStatsWorker extends Worker {
         // серверная копии получают один и тот же clientId -> дедуп точный, дубли
         // исключены даже при повторном срабатывании WorkManager.
         long weekBucket = (startOfToday / 86400000L) / 7L;
-        final String clientId = "weekly_record_" + currentUid + "_" + weekBucket;
+        final String clientId = "weekly_record_" + currentUid + "*" + weekBucket;
 
         // Если запись за эту неделю для текущего аккаунта уже обработана — выходим,
         // чтобы не показать второй системный пуш и не записать дубль на сервер.
-        String lastBucketKey = "last_weekly_record_clientId_" + currentUid;
+        String lastBucketKey = "last_weekly_record_clientId*" + currentUid;
         if (clientId.equals(prefs.getString(lastBucketKey, ""))) {
             return Result.success();
         }
@@ -128,6 +135,32 @@ public class WeeklyStatsWorker extends Worker {
         prefs.edit().putString(lastBucketKey, clientId).apply();
 
         return Result.success();
+    }
+
+    // Фиксирует последние завершённые сутки в посуточном защитном кэше.
+    // getFilteredExactTimes для однодневного окна сам перезапишет слот дня
+    // истинным значением (set, не max), пока события дня доступны в системе.
+    // Поэтому данные истёкших дней не завышаются, а лишь замораживаются на правде.
+    private void snapshotRecentDays(Context context) {
+        try {
+            // Берём с запасом 8 суток к 7-дневному графику.
+            for (int back = 1; back <= 8; back++) {
+                Calendar dayCal = Calendar.getInstance();
+                dayCal.set(Calendar.HOUR_OF_DAY, 0);
+                dayCal.set(Calendar.MINUTE, 0);
+                dayCal.set(Calendar.SECOND, 0);
+                dayCal.set(Calendar.MILLISECOND, 0);
+                dayCal.add(Calendar.DAY_OF_YEAR, -back);
+                long dayStart = dayCal.getTimeInMillis();
+
+                // Конец = начало следующих суток (DST-корректно). Ровно граница
+                // «однодневного» окна, поэтому снимок пишется в слот именно этого дня.
+                dayCal.add(Calendar.DAY_OF_YEAR, 1);
+                long dayEnd = dayCal.getTimeInMillis();
+
+                UsageMath.getFilteredExactTimes(context, dayStart, dayEnd);
+            }
+        } catch (Exception ignored) { }
     }
 
     private void saveToLocalHistory(Context context, String cacheKey, String clientId, String mainText, String actionText) {
