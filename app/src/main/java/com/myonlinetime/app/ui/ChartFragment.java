@@ -34,6 +34,7 @@ import com.myonlinetime.app.utils.Utils;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -44,13 +45,13 @@ public class ChartFragment extends Fragment {
     private ImageView btnPrev, btnNext;
     private RecyclerView recyclerView;
     private AppsAdapter adapter;
-    
+
     private FrameLayout loadingOverlay;
     private Dialog howItWorksDialog;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
     private final List<DayData> weeklyData = new ArrayList<>();
-    private int currentIndex = 6; 
+    private int currentIndex = 6;
 
     private boolean isDataReady = false;
     private boolean isAnimated = false;
@@ -95,21 +96,21 @@ public class ChartFragment extends Fragment {
 
         loadingOverlay = new FrameLayout(activity);
         loadingOverlay.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        loadingOverlay.setClickable(true);  
+        loadingOverlay.setClickable(true);
         loadingOverlay.setFocusable(true);
-        loadingOverlay.setBackgroundColor(Color.TRANSPARENT); 
-        
+        loadingOverlay.setBackgroundColor(Color.TRANSPARENT);
+
         ProgressBar spinner = new ProgressBar(activity);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(ContextCompat.getColor(activity, R.color.grapefruit)));
         }
         FrameLayout.LayoutParams spinnerParams = new FrameLayout.LayoutParams(
-                (int)(50 * getResources().getDisplayMetrics().density), 
+                (int)(50 * getResources().getDisplayMetrics().density),
                 (int)(50 * getResources().getDisplayMetrics().density)
         );
         spinnerParams.gravity = android.view.Gravity.CENTER;
         loadingOverlay.addView(spinner, spinnerParams);
-        
+
         ((ViewGroup) view).addView(loadingOverlay);
 
         uiHandler.postDelayed(this::loadWeeklyData, 200);
@@ -128,7 +129,7 @@ public class ChartFragment extends Fragment {
         howItWorksDialog = new Dialog(requireContext());
         howItWorksDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         howItWorksDialog.setContentView(R.layout.dialog_how_it_works);
-        
+
         if (howItWorksDialog.getWindow() != null) {
             howItWorksDialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             howItWorksDialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -137,7 +138,7 @@ public class ChartFragment extends Fragment {
 
         TextView descText = howItWorksDialog.findViewById(R.id.dialog_description_text);
         Button btnOk = howItWorksDialog.findViewById(R.id.dialog_ok_btn);
-        
+
         descText.setText(getString(isAllTime ? R.string.dialog_how_it_works_all_time : R.string.dialog_how_it_works_charts));
         btnOk.setOnClickListener(v -> howItWorksDialog.dismiss());
         howItWorksDialog.show();
@@ -164,6 +165,10 @@ public class ChartFragment extends Fragment {
             MainActivity activity = (MainActivity) getActivity();
             if (activity == null || !isAdded()) return;
 
+            // Если процесс пережил полночь — актуализируем границы суток и сбрасываем
+            // протухшие посуточные кэши, чтобы не нарисовать данные не того дня.
+            UsageMath.refreshDayBoundariesIfNeeded();
+
             String[] daysArray = getResources().getStringArray(R.array.days_short);
             String[] monthsArray = getResources().getStringArray(R.array.months_custom);
 
@@ -173,13 +178,13 @@ public class ChartFragment extends Fragment {
 
             for (int i = 0; i < 7; i++) {
                 Calendar cal = Calendar.getInstance();
-                cal.add(Calendar.DAY_OF_YEAR, -(6 - i)); 
-                
-                cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); 
+                cal.add(Calendar.DAY_OF_YEAR, -(6 - i));
+
+                cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0);
                 cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
                 long dayStart = cal.getTimeInMillis();
 
-                cal.set(Calendar.HOUR_OF_DAY, 23); cal.set(Calendar.MINUTE, 59); 
+                cal.set(Calendar.HOUR_OF_DAY, 23); cal.set(Calendar.MINUTE, 59);
                 cal.set(Calendar.SECOND, 59); cal.set(Calendar.MILLISECOND, 999);
                 long dayEnd = cal.getTimeInMillis();
 
@@ -190,23 +195,30 @@ public class ChartFragment extends Fragment {
 
                 Map<String, Long> times;
 
-                if (i == 6 && UsageMath.todayExactCache != null) {
+                // Статический кэш используем ТОЛЬКО если его дата реально совпадает
+                // с рисуемым днём — иначе (например, после полуночи) считаем заново
+                // корректным однодневным окном, без подмешивания чужого дня.
+                if (i == 6 && UsageMath.todayExactCache != null && dayStart == UsageMath.todayStartMillis) {
                     times = UsageMath.todayExactCache;
-                } else if (i == 5 && UsageMath.yesterdayExactCache != null) {
+                } else if (i == 5 && UsageMath.yesterdayExactCache != null && dayStart == UsageMath.yesterdayStartMillis) {
                     times = UsageMath.yesterdayExactCache;
                 } else {
                     times = UsageMath.getFilteredExactTimes(activity, dayStart, dayEnd);
                 }
-                
+
                 long dailyTotal = UsageMath.sumMap(times);
 
+                // Защита от аномалий: больше 24ч в сутках быть не может.
+                // НЕ чистим возможный общий статический кэш (times.clear() мог его обнулить),
+                // а просто отвязываемся в новую коллекцию.
                 if (dailyTotal > 86400000L) {
                     dailyTotal = 0;
-                    times.clear();
+                    times = new HashMap<>();
                 }
-                
+
                 List<String> apps = new ArrayList<>(times.keySet());
-                Collections.sort(apps, (left, right) -> Long.compare(times.get(right), times.get(left)));
+                final Map<String, Long> finalTimes = times;
+                Collections.sort(apps, (left, right) -> Long.compare(finalTimes.get(right), finalTimes.get(left)));
 
                 DayData dayData = new DayData();
                 dayData.totalMillis = dailyTotal;
@@ -215,8 +227,8 @@ public class ChartFragment extends Fragment {
                 dayData.dateMiddleStr = getString(R.string.format_date_middle, dayShort, dayNum, monthStr);
                 dayData.appList = apps;
                 dayData.appTimes = times;
-                
-                weeklyData.add(dayData); 
+
+                weeklyData.add(dayData);
                 barMillis[i] = dailyTotal;
                 dayLabels[i] = dayShort;
             }
@@ -225,8 +237,8 @@ public class ChartFragment extends Fragment {
             for (DayData day : weeklyData) {
                 for (String pkgName : day.appList) {
                     try {
-                        int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
-                                   PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
+                        int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ?
+                                PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
                         pm.getApplicationInfo(pkgName, flag);
                     } catch (Exception ignored) { }
                 }
@@ -250,6 +262,6 @@ public class ChartFragment extends Fragment {
     private void runChartAnimation() {
         isAnimated = true;
         barChart.setData(cachedBarMillis, cachedDayLabels);
-        selectDay(6); 
+        selectDay(6);
     }
 }
