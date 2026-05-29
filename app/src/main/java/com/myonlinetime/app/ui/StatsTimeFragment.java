@@ -44,31 +44,34 @@ public class StatsTimeFragment extends Fragment {
             this.list = l; this.times = t; this.totalMillis = tm;
         }
     }
-    
+
     private static final Map<Integer, CachedStats> statsCache = new HashMap<>();
     private static long cachedWeek = -1;
     private static long cachedMonth = -1;
     private static long cachedYear = -1;
-    
+
+    // Прогрев соседних периодов (неделя/год) для тёплого кэша иконок делаем один раз.
+    private static boolean neighborsPreloaded = false;
+
     private TextView totalTimeText;
     private AppsAdapter adapter;
     private View listFooterCard;
     private View dividerShowMore;
     private TextView btnShowMore;
-    private ProgressBar loadingSpinner; 
-    
-    private boolean isFirstLoad = true; 
-    
+    private ProgressBar loadingSpinner;
+
+    private boolean isFirstLoad = true;
+
     // === ТРЕКЕР ВЫБОРА ===
     // Запоминает, какую именно статистику пользователь хочет видеть прямо сейчас
-    private int currentRequestedPosition = 0; 
+    private int currentRequestedPosition = 0;
 
     public StatsTimeFragment() {}
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        final View originalView = inflater.inflate(R.layout.layout_time_tab, container, false); 
-        
+        final View originalView = inflater.inflate(R.layout.layout_time_tab, container, false);
+
         final MainActivity activity = (MainActivity) getActivity();
         if (activity != null) {
             activity.mainHeader.setVisibility(View.VISIBLE);
@@ -82,30 +85,30 @@ public class StatsTimeFragment extends Fragment {
         loadingSpinner = new ProgressBar(activity);
         int spinnerSize = (int) (60 * getResources().getDisplayMetrics().density);
         FrameLayout.LayoutParams spinnerParams = new FrameLayout.LayoutParams(spinnerSize, spinnerSize);
-        spinnerParams.gravity = android.view.Gravity.CENTER; 
+        spinnerParams.gravity = android.view.Gravity.CENTER;
         loadingSpinner.setLayoutParams(spinnerParams);
         loadingSpinner.setVisibility(View.GONE);
-        
+
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
             loadingSpinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#3EA6FF")));
         }
-        
+
         rootWrapper.addView(loadingSpinner);
 
         final RecyclerView recyclerView = originalView.findViewById(R.id.apps_list);
         recyclerView.setLayoutManager(new LinearLayoutManager(activity));
         recyclerView.setItemViewCacheSize(25);
-        
+
         final View headerView = inflater.inflate(R.layout.layout_time_header, recyclerView, false);
         final View footerView = inflater.inflate(R.layout.layout_time_footer, recyclerView, false);
-        
+
         final Spinner spinner = headerView.findViewById(R.id.spinner_period);
         totalTimeText = headerView.findViewById(R.id.text_total_time_sum);
-        
+
         listFooterCard = footerView.findViewById(R.id.list_footer_card);
         dividerShowMore = footerView.findViewById(R.id.divider_show_more);
         btnShowMore = footerView.findViewById(R.id.btn_show_more);
-        
+
         final TextView textWeek = footerView.findViewById(R.id.text_time_week);
         final TextView textMonth = footerView.findViewById(R.id.text_time_month);
         final TextView textYear = footerView.findViewById(R.id.text_time_year);
@@ -130,7 +133,7 @@ public class StatsTimeFragment extends Fragment {
             if (adapter.isFullyExpanded()) {
                 adapter.collapse();
                 btnShowMore.setText(R.string.show_more);
-                recyclerView.smoothScrollToPosition(0); 
+                recyclerView.smoothScrollToPosition(0);
             } else {
                 boolean reachedEnd = adapter.loadMoreChunk();
                 if (reachedEnd) {
@@ -147,7 +150,7 @@ public class StatsTimeFragment extends Fragment {
             public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
                 super.onScrolled(rv, dx, dy);
                 if (adapter.hasStartedExpanding() && !adapter.isFullyExpanded()) {
-                    if (!rv.canScrollVertically(1)) { 
+                    if (!rv.canScrollVertically(1)) {
                         boolean reachedEnd = adapter.loadMoreChunk();
                         if (reachedEnd) {
                             btnShowMore.setText(R.string.show_less);
@@ -170,13 +173,13 @@ public class StatsTimeFragment extends Fragment {
             public void onItemSelected(AdapterView<?> parent, View v, final int position, long id) {
                 if (isFirstLoad) {
                     isFirstLoad = false;
-                    return; 
+                    return;
                 }
                 currentRequestedPosition = position; // Запоминаем выбор пользователя!
                 fetchAndApplyData(position, activity);
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
-        }); 
+        });
 
         // Инициализация при первом запуске
         currentRequestedPosition = 0;
@@ -191,18 +194,18 @@ public class StatsTimeFragment extends Fragment {
             // === ЗАЩИТА ===
             // Если пока мы считали/грузили, юзер переключил спиннер на другой период — прерываем отрисовку!
             if (position != currentRequestedPosition) return;
-            
-            loadingSpinner.setVisibility(View.GONE); 
-            
+
+            loadingSpinner.setVisibility(View.GONE);
+
             CachedStats cached = statsCache.get(position);
             if (cached == null || !isAdded()) return;
-            
+
             totalTimeText.setText(Utils.formatTime(activity, cached.totalMillis));
             adapter.updateData(cached.list, cached.times);
-            
+
             adapter.collapse();
             btnShowMore.setText(R.string.show_more);
-            
+
             if (cached.list.size() > 3) {
                 listFooterCard.setVisibility(View.VISIBLE);
                 btnShowMore.setVisibility(View.VISIBLE);
@@ -214,17 +217,17 @@ public class StatsTimeFragment extends Fragment {
 
         if (statsCache.containsKey(position)) {
             new Handler(Looper.getMainLooper()).post(updateUI);
-            return; 
+            return;
         }
 
         if (!isAdded()) return;
-        
+
         // Показываем лоадер только если данные еще актуальны
         if (position == currentRequestedPosition) {
             totalTimeText.setText(activity.getString(R.string.loading));
-            loadingSpinner.setVisibility(View.VISIBLE); 
+            loadingSpinner.setVisibility(View.VISIBLE);
         }
-        
+
         Utils.backgroundExecutor.execute(() -> {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
 
@@ -239,8 +242,8 @@ public class StatsTimeFragment extends Fragment {
 
             long endTime = System.currentTimeMillis();
             Map<String, Long> exactTimes = null;
-            Calendar cal = Calendar.getInstance(); 
-            
+            Calendar cal = Calendar.getInstance();
+
             switch (position) {
                 case 0: exactTimes = UsageMath.todayExactCache != null ? UsageMath.todayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.todayStartMillis, endTime); break;
                 case 1: exactTimes = UsageMath.yesterdayExactCache != null ? UsageMath.yesterdayExactCache : UsageMath.getFilteredExactTimes(activity, UsageMath.yesterdayStartMillis, UsageMath.todayStartMillis); break;
@@ -249,57 +252,59 @@ public class StatsTimeFragment extends Fragment {
                 default: cal.add(Calendar.YEAR, -1); exactTimes = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, cal.getTimeInMillis(), endTime); break;
             }
 
-            final Map<String, Long> finalExactTimes = exactTimes;
+            final Map<String, Long> finalExactTimes = exactTimes != null ? exactTimes : new HashMap<>();
             final List<String> finalList = new ArrayList<>(finalExactTimes.keySet());
-            
+
             Collections.sort(finalList, (left, right) -> Long.compare(finalExactTimes.get(right), finalExactTimes.get(left)));
             final long finalTotalMillis = UsageMath.sumMap(finalExactTimes);
-            
-            PackageManager pm = activity.getPackageManager();
-            Set<String> allPackagesToPreload = new HashSet<>(finalList);
 
-            if (position == 0 && statsCache.isEmpty()) {
-                try {
-                    Calendar wCal = Calendar.getInstance(); wCal.add(Calendar.DAY_OF_YEAR, -7);
-                    Map<String, Long> wStats = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, wCal.getTimeInMillis(), endTime);
-                    if (wStats != null) {
-                        allPackagesToPreload.addAll(wStats.keySet());
-                    }
-                    
-                    Calendar yCal = Calendar.getInstance(); yCal.add(Calendar.YEAR, -1);
-                    Map<String, Long> yStats = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, yCal.getTimeInMillis(), endTime);
-                    if (yStats != null) {
-                        allPackagesToPreload.addAll(yStats.keySet());
-                    }
-                } catch (Exception ignored) {}
-            }
-
-            for (String pkg : allPackagesToPreload) {
-                try {
-                    int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ? 
-                               PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
-                    
-                    android.content.pm.ApplicationInfo info;
-                    try {
-                        info = pm.getApplicationInfo(pkg, 0); 
-                    } catch (PackageManager.NameNotFoundException e) {
-                        info = pm.getApplicationInfo(pkg, flag); 
-                    }
-
-                    pm.getApplicationLabel(info); 
-                    pm.getApplicationIcon(info);  
-                } catch (Exception ignored) { }
-            }
-
+            // === ШАГ 1: МГНОВЕННО отдаём данные в UI ===
+            // Кэшируем и рисуем СРАЗУ, не дожидаясь тяжёлого прогрева иконок —
+            // именно ожидание прогрева раньше и создавало лаг при входе.
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (isAdded()) {
-                    // Кэшируем результаты в любом случае (труд не должен пропадать зря)
                     statsCache.put(position, new CachedStats(finalList, finalExactTimes, finalTotalMillis));
-                    // Но отрисовываем только если это то, что сейчас ждет пользователь
                     updateUI.run();
                 }
             });
-        }); 
+
+            // === ШАГ 2: ПОСЛЕ отрисовки — фоновый прогрев кэша ярлыков/иконок ===
+            // Делается на том же фоновом потоке, на UI больше не влияет.
+            try {
+                PackageManager pm = activity.getPackageManager();
+                Set<String> allPackagesToPreload = new HashSet<>(finalList);
+
+                if (position == 0 && !neighborsPreloaded) {
+                    neighborsPreloaded = true;
+                    try {
+                        Calendar wCal = Calendar.getInstance(); wCal.add(Calendar.DAY_OF_YEAR, -7);
+                        Map<String, Long> wStats = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_DAILY, wCal.getTimeInMillis(), endTime);
+                        if (wStats != null) allPackagesToPreload.addAll(wStats.keySet());
+
+                        Calendar yCal = Calendar.getInstance(); yCal.add(Calendar.YEAR, -1);
+                        Map<String, Long> yStats = UsageMath.getFilteredStats(activity, UsageStatsManager.INTERVAL_YEARLY, yCal.getTimeInMillis(), endTime);
+                        if (yStats != null) allPackagesToPreload.addAll(yStats.keySet());
+                    } catch (Exception ignored) {}
+                }
+
+                for (String pkg : allPackagesToPreload) {
+                    try {
+                        int flag = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N ?
+                                PackageManager.MATCH_UNINSTALLED_PACKAGES : PackageManager.GET_UNINSTALLED_PACKAGES;
+
+                        android.content.pm.ApplicationInfo info;
+                        try {
+                            info = pm.getApplicationInfo(pkg, 0);
+                        } catch (PackageManager.NameNotFoundException e) {
+                            info = pm.getApplicationInfo(pkg, flag);
+                        }
+
+                        pm.getApplicationLabel(info);
+                        pm.getApplicationIcon(info);
+                    } catch (Exception ignored) { }
+                }
+            } catch (Exception ignored) {}
+        });
     }
 
     private void loadBottomCardsData(Context context, TextView txtWeek, TextView txtMonth, TextView txtYear) {
@@ -314,7 +319,7 @@ public class StatsTimeFragment extends Fragment {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
 
             long now = System.currentTimeMillis();
-            
+
             Calendar calW = Calendar.getInstance(); calW.add(Calendar.DAY_OF_YEAR, -7);
             long weekTotal = UsageMath.sumMap(UsageMath.getFilteredStats(context, UsageStatsManager.INTERVAL_DAILY, calW.getTimeInMillis(), now));
 
