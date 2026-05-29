@@ -70,23 +70,25 @@ public class SearchFragment extends Fragment {
 
         // === ИСПРАВЛЕНИЕ: ПЕРЕДАЕМ ВЕСЬ БАГАЖ (ТОЛСТЫЙ СПИСОК) ===
         adapter = new UserListAdapter(activity, clickedUser -> {
-            if (activity != null && activity.navigator != null) {
-                if (clickedUser.uid != null && clickedUser.uid.equals(myUid)) {
-                    activity.navigator.switchScreen(4, myUid);
-                } else {
-                    activity.navigator.openSubScreen(OtherProfileFragment.newInstance(
-                            clickedUser.uid,
-                            activity.getString(R.string.title_search),
-                            clickedUser.nickname,
-                            clickedUser.about,
-                            clickedUser.photo,
-                            clickedUser.background,    // <-- Передаем фон
-                            clickedUser.followers,     // <-- Передаем подписчиков
-                            clickedUser.following,     // <-- Передаем подписки
-                            clickedUser.isFollowing    // <-- Передаем статус "подписан ли я"
-                    ));
-                }
+            if (activity == null || activity.navigator == null) return;
+
+            // === ЗАПРЕТ ПЕРЕХОДА НА СВОЙ ПРОФИЛЬ ИЗ ПОИСКА ===
+            // Свой профиль из поиска открывать нет смысла — по тапу ничего не делаем.
+            if (clickedUser.uid != null && !myUid.isEmpty() && clickedUser.uid.equals(myUid)) {
+                return;
             }
+
+            activity.navigator.openSubScreen(OtherProfileFragment.newInstance(
+                    clickedUser.uid,
+                    activity.getString(R.string.title_search),
+                    clickedUser.nickname,
+                    clickedUser.about,
+                    clickedUser.photo,
+                    clickedUser.background,    // <-- Передаем фон
+                    clickedUser.followers,     // <-- Передаем подписчиков
+                    clickedUser.following,     // <-- Передаем подписки
+                    clickedUser.isFollowing    // <-- Передаем статус "подписан ли я"
+            ));
         });
 
         resultsList.setAdapter(adapter);
@@ -193,11 +195,6 @@ public class SearchFragment extends Fragment {
                 }
 
                 // === ИСПРАВЛЕНИЕ ПРЕДЗАГРУЗКИ ФОНОВ ===
-                // Поисковый ответ "лёгкий": у User часто нет background-URL,
-                // поэтому ленивый per-row префетч адаптера работает вхолостую.
-                // Жадно тянем полный профиль (там есть фон) для верхних K карточек —
-                // prefetchProfile сам зацепит preloadBackgrounds, и байты фона
-                // лягут в кэш ДО тапа. prefetchProfile отсеивает уже закэшированные UID.
                 eagerPrefetchTopK(token, users, EAGER_TOP_K);
             }
         });
@@ -205,8 +202,6 @@ public class SearchFragment extends Fragment {
 
     /**
      * Жадный префетч полного профиля + фона для первых K результатов поиска.
-     * prefetchProfile сам отфильтрует UID-ы, для которых полный профиль уже в кэше,
-     * и при удачной загрузке зацепит preloadBackgrounds — фон выезжает без подгрузки.
      */
     private void eagerPrefetchTopK(String token, List<User> users, int k) {
         if (token == null || token.isEmpty()) return;
