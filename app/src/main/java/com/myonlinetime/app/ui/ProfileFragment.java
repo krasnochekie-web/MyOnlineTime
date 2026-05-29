@@ -76,9 +76,6 @@ public class ProfileFragment extends Fragment {
     private String currentLoadedAvatar = null;
     private String currentLoadedBg = null;
 
-    // Троттлинг повторного дёрганья сети профиля (onCreateView + onResume на старте).
-    private long lastProfileFetchMs = 0;
-
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
     private Runnable fetchProfileDataRunnable;
@@ -263,7 +260,6 @@ public class ProfileFragment extends Fragment {
             ));
         });
 
-        // === ПРЕДЗАГРУЗКА ЦИФР: мгновенно из prefs, до ответа сервера. ===
         int savedFollowers = activity.prefs.getInt("my_followers_count", 0);
         int savedFollowing = activity.prefs.getInt("my_following_count", 0);
         if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(savedFollowers));
@@ -272,11 +268,6 @@ public class ProfileFragment extends Fragment {
 
         fetchProfileDataRunnable = () -> {
             if (activity.vpsToken == null) return;
-
-            // Троттлинг: не дёргаем сеть чаще раза в 800мс (onCreateView + onResume на старте).
-            long now = System.currentTimeMillis();
-            if (now - lastProfileFetchMs < 800) return;
-            lastProfileFetchMs = now;
 
             VpsApi.getAggregatedProfile(activity, activity.vpsToken, myUid, new VpsApi.AggregatedProfileCallback() {
                 @Override
@@ -392,21 +383,15 @@ public class ProfileFragment extends Fragment {
             });
         };
 
-        // === Оптимизация холодного старта ===
-        // Стартовые IO/сеть выносим за пределы первого кадра, чтобы вью отрисовалось
-        // без фриза. Предзагрузка цифр и фона уже выполнена выше (синхронно из prefs).
-        uiHandler.post(() -> {
-            if (!isAdded()) return;
-            loadLocalCacheAsync(() -> {
-                if (isAdded()) requestLoadMyStats(true);
-            });
-
-            if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
-
-            // Дренируем WorkManager-очередь pending-синков описаний — на случай, если
-            // что-то осталось от прошлой сессии (kill процесса, отсутствие сети и т.п.)
-            SyncDescriptionWorker.flushPending(activity, myUid);
+        loadLocalCacheAsync(() -> {
+            if (isAdded()) requestLoadMyStats(true);
         });
+
+        if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
+
+        // Дренируем WorkManager-очередь pending-синков описаний — на случай, если
+        // что-то осталось от прошлой сессии (kill процесса, отсутствие сети и т.п.)
+        SyncDescriptionWorker.flushPending(activity, myUid);
 
         return wrapper;
     }
@@ -433,7 +418,7 @@ public class ProfileFragment extends Fragment {
         boolean isMyGifsEnabled = appPrefs.getBoolean("bg_my_gifs_enabled", true);
 
         String bgPath = activity.prefs.getString("custom_bg_path_" + myUid, null);
-        final String remoteBg = activity.prefs.getString("my_bg_base64", null);
+        String remoteBg = activity.prefs.getString("my_bg_base64", null);
 
         String targetPath = null;
         if (bgPath != null && new File(bgPath).exists()) targetPath = bgPath;
@@ -462,34 +447,29 @@ public class ProfileFragment extends Fragment {
             if (!allowBg) {
                 myBgImageView.setImageDrawable(new ColorDrawable(ContextCompat.getColor(activity, R.color.bgDynamic)));
             } else {
-                final String finalTargetPath = targetPath;
-                Utils.backgroundExecutor.execute(() -> {
-                    try {
-                        final File bgFile = new File(finalTargetPath);
-                        if (bgFile.exists()) {
-                            uiHandler.post(() -> {
-                                if (!isAdded() || myBgImageView == null) return;
-                                // АНТИ-МИГАНИЕ: держим текущий фон как placeholder, пока
-                                // новый декодируется. Так фон не исчезает ни на кадр.
-                                Drawable keep = myBgImageView.getDrawable();
-                                Glide.with(this).load(bgFile)
-                                        .diskCacheStrategy(DiskCacheStrategy.NONE)
-                                        .signature(new ObjectKey(bgFile.lastModified()))
-                                        .placeholder(keep)
-                                        .dontAnimate()
-                                        .centerCrop().into(myBgImageView);
-                            });
-                        } else if (remoteBg != null && remoteBg.startsWith("http")) {
-                            uiHandler.post(() -> {
-                                if (!isAdded() || myBgImageView == null) return;
-                                Drawable keep = myBgImageView.getDrawable();
-                                Glide.with(this).load(remoteBg)
-                                        .placeholder(keep)
-                                        .dontAnimate().centerCrop().into(myBgImageView);
-                            });
-                        }
-                    } catch (Exception e) {}
-                });
+                // ВАЖНО: грузим фон НАПРЯМУЮ на главном потоке — без очереди
+                // Utils.backgroundExecutor, иначе на старте фон ждёт окончания
+                // расчёта статистики (отсюда была задержка 100-200 мс).
+                // exists()-проверка уже сделана выше при выборе targetPath.
+                // placeholder(keep) удерживает текущий фон до декода нового —
+                // это убирает моргание при возврате со чужого профиля.
+                final Drawable keep = myBgImageView.getDrawable();
+                if (targetPath.equals(bgPath)) {
+                    final File bgFile = new File(bgPath);
+                    Glide.with(this).load(bgFile)
+                            .diskCacheStrategy(DiskCacheStrategy.NONE)
+                            .signature(new ObjectKey(bgFile.lastModified()))
+                            .placeholder(keep)
+                            .dontAnimate()
+                            .centerCrop()
+                            .into(myBgImageView);
+                } else if (remoteBg != null && remoteBg.startsWith("http")) {
+                    Glide.with(this).load(remoteBg)
+                            .placeholder(keep)
+                            .dontAnimate()
+                            .centerCrop()
+                            .into(myBgImageView);
+                }
             }
         }
     }
