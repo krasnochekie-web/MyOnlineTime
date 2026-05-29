@@ -207,6 +207,10 @@ public class SettingsFragment extends Fragment {
                         activity.vpsToken = newAccessToken;
                         activity.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE).edit()
                                 .putString("vps_access_token", newAccessToken).apply();
+
+                        // === Перепривязываем FCM-токен к новому (перенесённому) аккаунту ===
+                        activity.syncFcmToken();
+
                         Toast.makeText(activity, R.string.toast_email_changed, Toast.LENGTH_SHORT).show();
                         if (isAdded() && getView() != null) loadUserData(getView());
                     });
