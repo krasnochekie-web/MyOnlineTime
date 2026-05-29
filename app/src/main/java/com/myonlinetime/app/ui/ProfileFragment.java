@@ -9,6 +9,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -74,6 +75,9 @@ public class ProfileFragment extends Fragment {
 
     private String currentLoadedAvatar = null;
     private String currentLoadedBg = null;
+
+    // Троттлинг повторного дёрганья сети профиля (onCreateView + onResume на старте).
+    private long lastProfileFetchMs = 0;
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
@@ -259,6 +263,7 @@ public class ProfileFragment extends Fragment {
             ));
         });
 
+        // === ПРЕДЗАГРУЗКА ЦИФР: мгновенно из prefs, до ответа сервера. ===
         int savedFollowers = activity.prefs.getInt("my_followers_count", 0);
         int savedFollowing = activity.prefs.getInt("my_following_count", 0);
         if (txtFollowersCount != null) txtFollowersCount.setText(String.valueOf(savedFollowers));
@@ -267,6 +272,11 @@ public class ProfileFragment extends Fragment {
 
         fetchProfileDataRunnable = () -> {
             if (activity.vpsToken == null) return;
+
+            // Троттлинг: не дёргаем сеть чаще раза в 800мс (onCreateView + onResume на старте).
+            long now = System.currentTimeMillis();
+            if (now - lastProfileFetchMs < 800) return;
+            lastProfileFetchMs = now;
 
             VpsApi.getAggregatedProfile(activity, activity.vpsToken, myUid, new VpsApi.AggregatedProfileCallback() {
                 @Override
@@ -382,15 +392,21 @@ public class ProfileFragment extends Fragment {
             });
         };
 
-        loadLocalCacheAsync(() -> {
-            if (isAdded()) requestLoadMyStats(true);
+        // === Оптимизация холодного старта ===
+        // Стартовые IO/сеть выносим за пределы первого кадра, чтобы вью отрисовалось
+        // без фриза. Предзагрузка цифр и фона уже выполнена выше (синхронно из prefs).
+        uiHandler.post(() -> {
+            if (!isAdded()) return;
+            loadLocalCacheAsync(() -> {
+                if (isAdded()) requestLoadMyStats(true);
+            });
+
+            if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
+
+            // Дренируем WorkManager-очередь pending-синков описаний — на случай, если
+            // что-то осталось от прошлой сессии (kill процесса, отсутствие сети и т.п.)
+            SyncDescriptionWorker.flushPending(activity, myUid);
         });
-
-        if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
-
-        // Дренируем WorkManager-очередь pending-синков описаний — на случай, если
-        // что-то осталось от прошлой сессии (kill процесса, отсутствие сети и т.п.)
-        SyncDescriptionWorker.flushPending(activity, myUid);
 
         return wrapper;
     }
@@ -417,7 +433,7 @@ public class ProfileFragment extends Fragment {
         boolean isMyGifsEnabled = appPrefs.getBoolean("bg_my_gifs_enabled", true);
 
         String bgPath = activity.prefs.getString("custom_bg_path_" + myUid, null);
-        String remoteBg = activity.prefs.getString("my_bg_base64", null);
+        final String remoteBg = activity.prefs.getString("my_bg_base64", null);
 
         String targetPath = null;
         if (bgPath != null && new File(bgPath).exists()) targetPath = bgPath;
@@ -435,9 +451,9 @@ public class ProfileFragment extends Fragment {
         if (!allowBg) {
             newBgKey = "disabled";
         } else if (targetPath.equals(bgPath)) {
-            newBgKey = myUid + "_local_bg_" + new File(bgPath).lastModified();
+            newBgKey = myUid + "*local_bg*" + new File(bgPath).lastModified();
         } else {
-            newBgKey = myUid + "_remote_bg_" + (remoteBg != null ? String.valueOf(remoteBg.hashCode()) : "empty");
+            newBgKey = myUid + "*remote_bg*" + (remoteBg != null ? String.valueOf(remoteBg.hashCode()) : "empty");
         }
 
         if (!newBgKey.equals(currentLoadedBg)) {
@@ -453,15 +469,23 @@ public class ProfileFragment extends Fragment {
                         if (bgFile.exists()) {
                             uiHandler.post(() -> {
                                 if (!isAdded() || myBgImageView == null) return;
+                                // АНТИ-МИГАНИЕ: держим текущий фон как placeholder, пока
+                                // новый декодируется. Так фон не исчезает ни на кадр.
+                                Drawable keep = myBgImageView.getDrawable();
                                 Glide.with(this).load(bgFile)
                                         .diskCacheStrategy(DiskCacheStrategy.NONE)
                                         .signature(new ObjectKey(bgFile.lastModified()))
+                                        .placeholder(keep)
+                                        .dontAnimate()
                                         .centerCrop().into(myBgImageView);
                             });
                         } else if (remoteBg != null && remoteBg.startsWith("http")) {
                             uiHandler.post(() -> {
                                 if (!isAdded() || myBgImageView == null) return;
-                                Glide.with(this).load(remoteBg).dontAnimate().centerCrop().into(myBgImageView);
+                                Drawable keep = myBgImageView.getDrawable();
+                                Glide.with(this).load(remoteBg)
+                                        .placeholder(keep)
+                                        .dontAnimate().centerCrop().into(myBgImageView);
                             });
                         }
                     } catch (Exception e) {}
@@ -483,9 +507,9 @@ public class ProfileFragment extends Fragment {
 
         String newAvatarKey;
         if (useLocalFile && customAvatarPath != null && new File(customAvatarPath).exists()) {
-            newAvatarKey = uid + "_local_" + new File(customAvatarPath).lastModified();
+            newAvatarKey = uid + "*local*" + new File(customAvatarPath).lastModified();
         } else {
-            newAvatarKey = uid + "_remote_" + (base64Data != null ? String.valueOf(base64Data.hashCode()) : "empty");
+            newAvatarKey = uid + "*remote*" + (base64Data != null ? String.valueOf(base64Data.hashCode()) : "empty");
         }
 
         if (newAvatarKey.equals(currentLoadedAvatar)) return;
