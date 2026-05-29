@@ -132,7 +132,28 @@ public class StatsHelper {
         });
     }
 
+    // === Находит ИМЕННО видимый ProfileFragment (а не первый попавшийся) ===
+    // Когда свой профиль открыт сабэкраном поверх чужого, в активити висят два
+    // ProfileFragment. Нам нужен видимый — иначе кнопки разворота применяются
+    // не к тому инстансу и не появляются на экране.
+    private static ProfileFragment findVisibleProfileFragment(MainActivity activity) {
+        if (activity == null || activity.getSupportFragmentManager() == null) return null;
+        ProfileFragment fallback = null;
+        for (Fragment f : activity.getSupportFragmentManager().getFragments()) {
+            if (f instanceof ProfileFragment) {
+                if (f.isVisible() && !f.isHidden()) return (ProfileFragment) f;
+                if (fallback == null) fallback = (ProfileFragment) f;
+            }
+        }
+        return fallback;
+    }
+
+    // Старая сигнатура — оставлена для совместимости. Сама подбирает видимый фрагмент.
     public static void loadStatsToProfile(final MainActivity activity, final TextView weekTimeText, final LinearLayout appsContainer) {
+        loadStatsToProfile(activity, weekTimeText, appsContainer, findVisibleProfileFragment(activity));
+    }
+
+    public static void loadStatsToProfile(final MainActivity activity, final TextView weekTimeText, final LinearLayout appsContainer, final ProfileFragment ownerFragment) {
         Utils.backgroundExecutor.execute(() -> {
             long now = System.currentTimeMillis();
             Calendar cal = Calendar.getInstance();
@@ -222,17 +243,6 @@ public class StatsHelper {
                     weekTimeText.setText(timeStr);
                 }
 
-                // Ищем ProfileFragment ОДИН раз, а не на каждое приложение.
-                ProfileFragment ownerFragment = null;
-                if (activity.getSupportFragmentManager() != null) {
-                    for (Fragment f : activity.getSupportFragmentManager().getFragments()) {
-                        if (f instanceof ProfileFragment) {
-                            ownerFragment = (ProfileFragment) f;
-                            break;
-                        }
-                    }
-                }
-
                 // Все строки добавляются и сворачиваются В ОДНОМ кадре — поэтому
                 // развёрнутый топ-10 не успевает мелькнуть, список сразу свёрнутый.
                 for (AppData data : preloadedData) {
@@ -268,10 +278,25 @@ public class StatsHelper {
                     }
                 }
 
-                // === ПРИМЕНЕНИЕ ГЛОБАЛЬНОЙ ЛОГИКИ СВОРАЧИВАНИЯ ===
-                TextView aboutView = activity.findViewById(R.id.profile_about);
-                ImageView btnExpand = activity.findViewById(R.id.btn_expand_apps);
-                ImageView btnCollapse = activity.findViewById(R.id.btn_collapse_apps);
+                // === ПРИМЕНЕНИЕ ЛОГИКИ СВОРАЧИВАНИЯ К КОНКРЕТНОМУ ФРАГМЕНТУ ===
+                // Берём кнопки из вьюхи именно этого ownerFragment, а НЕ через
+                // activity.findViewById — иначе при двух ProfileFragment кнопка
+                // разворота вешается не на тот (скрытый) экран.
+                TextView aboutView = null;
+                ImageView btnExpand = null;
+                ImageView btnCollapse = null;
+
+                View root = ownerFragment != null ? ownerFragment.getView() : null;
+                if (root != null) {
+                    aboutView = root.findViewById(R.id.profile_about);
+                    btnExpand = root.findViewById(R.id.btn_expand_apps);
+                    btnCollapse = root.findViewById(R.id.btn_collapse_apps);
+                }
+                // Фолбэк, если по какой-то причине вьюха фрагмента недоступна.
+                if (aboutView == null) aboutView = activity.findViewById(R.id.profile_about);
+                if (btnExpand == null) btnExpand = activity.findViewById(R.id.btn_expand_apps);
+                if (btnCollapse == null) btnCollapse = activity.findViewById(R.id.btn_collapse_apps);
+
                 applyCollapseLogic(aboutView, appsContainer, btnExpand, btnCollapse);
             });
         });
