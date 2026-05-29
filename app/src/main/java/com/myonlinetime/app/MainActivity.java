@@ -319,6 +319,20 @@ public class MainActivity extends AppCompatActivity {
                 weeklyWorkRequest
         );
 
+        // === ЕЖЕДНЕВНАЯ ФИКСАЦИЯ ЗАКРЫТЫХ ДНЕЙ ===
+        // Лёгкий воркер (без пушей/сети) замораживает закрытые сутки в посуточный
+        // кэш, пока их события живы в системе. Это закрывает "край" недельного
+        // графика на устройствах с коротким хранением событий. KEEP не плодит дубли.
+        androidx.work.PeriodicWorkRequest dailySnapshotRequest = new androidx.work.PeriodicWorkRequest.Builder(
+                com.myonlinetime.app.utils.DailySnapshotWorker.class, 1, java.util.concurrent.TimeUnit.DAYS)
+                .build();
+
+        androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                "daily_snapshot",
+                androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                dailySnapshotRequest
+        );
+
         handleNotificationIntent(getIntent());
 
         refreshGoogleAndVpsToken(true);
