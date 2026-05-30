@@ -153,6 +153,40 @@ public class StatsHelper {
         loadStatsToProfile(activity, weekTimeText, appsContainer, findVisibleProfileFragment(activity));
     }
 
+    // === Привязка данных к ОДНОЙ строке (используется и для новых, и для переиспользуемых вью) ===
+    // Вынесено отдельно, чтобы при перезагрузке списка не инфлейтить layout заново,
+    // а лишь перезаписать содержимое уже существующей строки — это и убирает рывки.
+    private static void bindAppRow(final MainActivity activity, final View view, final AppData data, final ProfileFragment ownerFragment) {
+        ImageView iconView = view.findViewById(R.id.app_icon);
+        TextView nameView = view.findViewById(R.id.app_name);
+        TextView timeView = view.findViewById(R.id.app_time);
+        ImageView iconDeleted = view.findViewById(R.id.icon_deleted);
+
+        nameView.setText(data.appName);
+        if (data.icon != null) {
+            iconView.setImageDrawable(data.icon);
+        } else {
+            iconView.setImageResource(android.R.drawable.sym_def_app_icon);
+        }
+        timeView.setText(Utils.formatTime(activity, data.time));
+
+        if (iconDeleted != null) {
+            if (data.isDeleted) {
+                iconDeleted.setVisibility(View.VISIBLE);
+                iconDeleted.setOnClickListener(v -> Toast.makeText(activity, R.string.toast_app_deleted, Toast.LENGTH_SHORT).show());
+            } else {
+                iconDeleted.setVisibility(View.GONE);
+                iconDeleted.setOnClickListener(null);
+            }
+        }
+
+        // Перепривязываем owner-взаимодействия (скрытие/описание) под актуальный пакет.
+        // Это сбрасывает старые слушатели строки, если её переиспользовали под другое приложение.
+        if (ownerFragment != null) {
+            ownerFragment.setupOwnerAppInteractions(activity, view, data.pkgName);
+        }
+    }
+
     public static void loadStatsToProfile(final MainActivity activity, final TextView weekTimeText, final LinearLayout appsContainer, final ProfileFragment ownerFragment) {
         Utils.backgroundExecutor.execute(() -> {
             long now = System.currentTimeMillis();
@@ -228,9 +262,7 @@ public class StatsHelper {
             new Handler(Looper.getMainLooper()).post(() -> {
                 if (activity.isDestroyed() || activity.isFinishing() || appsContainer == null) return;
 
-                // === ИСПРАВЛЕНИЕ ДУБЛИКАТОВ ===
                 appsContainer.setLayoutTransition(null);
-                appsContainer.removeAllViews();
 
                 long minutes = finalTotalMillis / 1000 / 60;
                 long hours = minutes / 60;
@@ -243,39 +275,35 @@ public class StatsHelper {
                     weekTimeText.setText(timeStr);
                 }
 
-                // Все строки добавляются и сворачиваются В ОДНОМ кадре — поэтому
+                // === ПЕРЕИСПОЛЬЗОВАНИЕ СТРОК ВМЕСТО removeAllViews() + повторного inflate ===
+                // Если число приложений не изменилось — НИЧЕГО не инфлейтим, только
+                // перезаписываем данные в существующие строки. Инфляция — лишь для
+                // недостающих строк, снятие — лишь для лишних. Это убирает рывок при
+                // перезагрузке списка во время пользования и не плодит дубликаты.
+                final int needed = preloadedData.size();
+                int existing = appsContainer.getChildCount();
+
+                // Снимаем лишние строки (приложений стало меньше).
+                if (existing > needed) {
+                    appsContainer.removeViews(needed, existing - needed);
+                }
+
+                // Все строки готовятся и сворачиваются В ОДНОМ кадре — поэтому
                 // развёрнутый топ-10 не успевает мелькнуть, список сразу свёрнутый.
-                for (AppData data : preloadedData) {
-                    View view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, appsContainer, false);
-
-                    ImageView iconView = view.findViewById(R.id.app_icon);
-                    TextView nameView = view.findViewById(R.id.app_name);
-                    TextView timeView = view.findViewById(R.id.app_time);
-                    ImageView iconDeleted = view.findViewById(R.id.icon_deleted);
-
-                    nameView.setText(data.appName);
-                    if (data.icon != null) {
-                        iconView.setImageDrawable(data.icon);
+                for (int i = 0; i < needed; i++) {
+                    View view;
+                    if (i < appsContainer.getChildCount()) {
+                        // Переиспользуем уже существующую строку — без inflate.
+                        view = appsContainer.getChildAt(i);
                     } else {
-                        iconView.setImageResource(android.R.drawable.sym_def_app_icon);
+                        // Недостающую строку инфлейтим один раз.
+                        view = LayoutInflater.from(activity).inflate(R.layout.item_app_usage, appsContainer, false);
+                        appsContainer.addView(view);
                     }
-                    timeView.setText(Utils.formatTime(activity, data.time));
-
-                    if (iconDeleted != null) {
-                        if (data.isDeleted) {
-                            iconDeleted.setVisibility(View.VISIBLE);
-                            iconDeleted.setOnClickListener(v -> Toast.makeText(activity, R.string.toast_app_deleted, Toast.LENGTH_SHORT).show());
-                        } else {
-                            iconDeleted.setVisibility(View.GONE);
-                            iconDeleted.setOnClickListener(null);
-                        }
-                    }
-
-                    appsContainer.addView(view);
-
-                    if (ownerFragment != null) {
-                        ownerFragment.setupOwnerAppInteractions(activity, view, data.pkgName);
-                    }
+                    // Сбрасываем видимость (могла остаться GONE от прошлого свёрнутого
+                    // состояния); финальную видимость расставит applyCollapseLogic.
+                    view.setVisibility(View.VISIBLE);
+                    bindAppRow(activity, view, preloadedData.get(i), ownerFragment);
                 }
 
                 // === ПРИМЕНЕНИЕ ЛОГИКИ СВОРАЧИВАНИЯ К КОНКРЕТНОМУ ФРАГМЕНТУ ===
