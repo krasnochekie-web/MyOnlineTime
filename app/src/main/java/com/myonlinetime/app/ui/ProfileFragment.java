@@ -85,6 +85,9 @@ public class ProfileFragment extends Fragment {
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Runnable loadMyStatsRunnable;
     private Runnable fetchProfileDataRunnable;
+    // Отложенный «тяжёлый» рефреш (сеть + WorkManager) — запускается ПОСЛЕ анимации
+    // перехода на вкладку, чтобы не было фризов при перелистывании между экранами.
+    private Runnable deferredRefreshRunnable;
 
     private final android.content.BroadcastReceiver profileUpdateReceiver = new android.content.BroadcastReceiver() {
         @Override
@@ -395,10 +398,21 @@ public class ProfileFragment extends Fragment {
             });
         };
 
+        // Тяжёлый рефреш одним пакетом — его мы откладываем за анимацию перехода.
+        deferredRefreshRunnable = () -> {
+            if (!isAdded()) return;
+            MainActivity act = (MainActivity) getActivity();
+            if (act == null) return;
+            if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
+            SyncDescriptionWorker.flushPending(act, myUid);
+        };
+
         loadLocalCacheAsync(() -> {
             if (isAdded()) requestLoadMyStats(true);
         });
 
+        // Первичный вход на экран: данные тянем сразу (вход не анимируется так,
+        // как перелистывание вкладок). Сглаживание касается именно переключений.
         if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
 
         // Дренируем WorkManager-очередь pending-синков описаний — на случай, если
@@ -426,6 +440,15 @@ public class ProfileFragment extends Fragment {
 
         String b64 = activity.prefs.getString("my_photo_base64", null);
         handleMediaLoading(activity, b64, true, myUid);
+    }
+
+    // Откладываем сеть + WorkManager за пределы анимации перехода на вкладку.
+    // Предыдущий отложенный вызов снимаем — это и убирает фриз, и гасит дребезг
+    // при быстром перелистывании туда-сюда.
+    private void scheduleDeferredRefresh() {
+        if (deferredRefreshRunnable == null) return;
+        uiHandler.removeCallbacks(deferredRefreshRunnable);
+        uiHandler.postDelayed(deferredRefreshRunnable, 300);
     }
 
     // === ФОН СОБСТВЕННОГО ПРОФИЛЯ ===
@@ -651,9 +674,9 @@ public class ProfileFragment extends Fragment {
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
             if (!isHidden()) {
+                // Кэшированный UI — мгновенно. Сеть/WorkManager — после анимации.
                 updateUiFromPrefs(activity);
-                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
-                SyncDescriptionWorker.flushPending(activity, myUid);
+                scheduleDeferredRefresh();
             }
         }
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
@@ -667,6 +690,8 @@ public class ProfileFragment extends Fragment {
     @Override
     public void onPause() {
         super.onPause();
+        // Снимаем отложенный рефреш — он не должен стрелять после ухода с экрана.
+        if (deferredRefreshRunnable != null) uiHandler.removeCallbacks(deferredRefreshRunnable);
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
                 .unregisterReceiver(profileUpdateReceiver);
     }
@@ -679,9 +704,12 @@ public class ProfileFragment extends Fragment {
             if (!hidden) {
                 activity.mainHeader.setVisibility(View.VISIBLE);
                 activity.headerManager.resetHeader();
+                // Кэшированный UI — мгновенно. Сеть/WorkManager — после анимации.
                 updateUiFromPrefs(activity);
-                if (fetchProfileDataRunnable != null) fetchProfileDataRunnable.run();
-                SyncDescriptionWorker.flushPending(activity, myUid);
+                scheduleDeferredRefresh();
+            } else {
+                // Уходим со вкладки — снимаем отложенный рефреш.
+                if (deferredRefreshRunnable != null) uiHandler.removeCallbacks(deferredRefreshRunnable);
             }
         }
     }
