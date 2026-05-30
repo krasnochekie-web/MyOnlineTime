@@ -39,6 +39,10 @@ public class UsageMath {
     private static volatile String cachedLauncherPkg = null;
     private static volatile long appListCacheTime = 0L;
 
+    // Запас «до окна» для событий: ловим сессию, начавшуюся до start
+    // (например, приложение, открытое через полночь), чтобы обрезать её до start.
+    private static final long EVENT_LOOKBACK_MS = 12L * 60L * 60L * 1000L;
+
     // === Актуализация границ суток ===
     public static synchronized void refreshDayBoundariesIfNeeded() {
         Calendar cal = Calendar.getInstance();
@@ -128,37 +132,91 @@ public class UsageMath {
         return end <= nextDayStart;
     }
 
-    // === ИСПРАВЛЕНО: точное время за окно берём из getTotalTimeInForeground ===
-    // Раньше время реконструировалось вручную из событий RESUMED/PAUSED/STOPPED, и
-    // при переходах между экранами ОДНОГО приложения событие STOPPED старого экрана
-    // приходило ПОСЛЕ RESUMED нового и закрывало его сессию (пакет один) — время
-    // нового экрана терялось, отсюда занижение ~30%. Теперь используем тот же
-    // системный механизм, на котором корректно работает «Месяц»:
-    // queryAndAggregateUsageStats() возвращает агрегированный foreground-таймер за
-    // окно [start, end] — он совпадает с Digital Wellbeing и со вкладкой «Месяц».
+    // === ИСПРАВЛЕНО: точное время за окно считаем из событий по модели «один передний слот» ===
+    // queryAndAggregateUsageStats() суммирует getTotalTimeInForeground() по ДНЕВНЫМ
+    // корзинам Android, границы которых НЕ выровнены по локальной полуночи. На
+    // однодневном окне в сумму затекает «хвост» соседней корзины → завышение ~30%
+    // (на неделе/месяце эта краевая доля мала, поэтому там было незаметно).
+    //
+    // Теперь идём по событиям queryEvents(start, end):
+    //  - в каждый момент на переднем плане ровно одно приложение (currentPkg);
+    //  - RESUMED/FOREGROUND другого пакета закрывает текущий слот и открывает новый;
+    //  - PAUSED/STOPPED/BACKGROUND закрывает слот ТОЛЬКО если уходит именно текущий
+    //    пакет; протухший STOPPED старого экрана при уже активном новом игнорируется
+    //    (это убирает старое занижение ~30% при навигации внутри одного приложения);
+    //  - каждый отрезок обрезается по [start, end] → нет «нахлёста» корзин и завышения;
+    //  - события берём с запасом EVENT_LOOKBACK_MS до start, чтобы поймать сессию,
+    //    начавшуюся до окна, и корректно обрезать её до start.
     private static Map<String, Long> fetchFromAndroidSystem(Context context, long start, long end, Set<String> currentInstalledApps, String launcherPkg, Map<String, Boolean> validityCache) {
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
         if (usm == null) return results;
 
-        Map<String, UsageStats> aggregated = usm.queryAndAggregateUsageStats(start, end);
-        if (aggregated == null) return results;
+        long queryStart = start - EVENT_LOOKBACK_MS;
+        if (queryStart < 0) queryStart = 0;
 
-        for (Map.Entry<String, UsageStats> entry : aggregated.entrySet()) {
-            UsageStats stats = entry.getValue();
-            if (stats == null) continue;
+        UsageEvents events = usm.queryEvents(queryStart, end);
+        if (events == null) return results;
 
-            String pkg = entry.getKey();
-            if (pkg == null) continue;
-            pkg = stripWhitespace(pkg);
+        String currentPkg = null;
+        long currentStart = 0L;
 
-            long time = stats.getTotalTimeInForeground();
-            if (time > 0 && isValidAppCached(context, pkg, currentInstalledApps, launcherPkg, validityCache)) {
-                Long current = results.get(pkg);
-                results.put(pkg, (current == null ? 0L : current) + time);
+        UsageEvents.Event event = new UsageEvents.Event();
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event);
+
+            int type = event.getEventType();
+            long ts = event.getTimeStamp();
+            String pkg = event.getPackageName();
+            if (pkg != null) pkg = stripWhitespace(pkg);
+
+            boolean isForeground = (type == UsageEvents.Event.MOVE_TO_FOREGROUND)
+                    || (type == UsageEvents.Event.ACTIVITY_RESUMED);
+            boolean isBackground = (type == UsageEvents.Event.MOVE_TO_BACKGROUND)
+                    || (type == UsageEvents.Event.ACTIVITY_PAUSED)
+                    || (type == UsageEvents.Event.ACTIVITY_STOPPED);
+
+            if (isForeground) {
+                // Закрываем предыдущий передний слот, если он был.
+                if (currentPkg != null) {
+                    creditSegment(results, currentPkg, currentStart, ts, start, end,
+                            context, currentInstalledApps, launcherPkg, validityCache);
+                }
+                currentPkg = pkg;
+                currentStart = ts;
+            } else if (isBackground) {
+                // Закрываем слот ТОЛЬКО если в фон уходит именно текущий пакет.
+                if (currentPkg != null && currentPkg.equals(pkg)) {
+                    creditSegment(results, currentPkg, currentStart, ts, start, end,
+                            context, currentInstalledApps, launcherPkg, validityCache);
+                    currentPkg = null;
+                    currentStart = 0L;
+                }
             }
         }
+
+        // Если на конце окна слот всё ещё открыт — начисляем до end.
+        if (currentPkg != null) {
+            creditSegment(results, currentPkg, currentStart, end, start, end,
+                    context, currentInstalledApps, launcherPkg, validityCache);
+        }
+
         return results;
+    }
+
+    // Начисляет один foreground-отрезок пакету, обрезая его по границам окна [windowStart, windowEnd].
+    private static void creditSegment(Map<String, Long> results, String pkg, long segStart, long segEnd,
+                                      long windowStart, long windowEnd, Context context,
+                                      Set<String> installedApps, String launcherPkg,
+                                      Map<String, Boolean> validityCache) {
+        if (pkg == null) return;
+        long s = Math.max(segStart, windowStart);
+        long e = Math.min(segEnd, windowEnd);
+        long delta = e - s;
+        if (delta <= 0) return;
+        if (!isValidAppCached(context, pkg, installedApps, launcherPkg, validityCache)) return;
+        Long current = results.get(pkg);
+        results.put(pkg, (current == null ? 0L : current) + delta);
     }
 
     // === Месяц и Год: системные корзины, собираемые вручную ===
