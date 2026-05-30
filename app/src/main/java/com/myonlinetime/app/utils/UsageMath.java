@@ -168,9 +168,16 @@ public class UsageMath {
             seenPkg.add(pkg);
 
             if (type == UsageEvents.Event.ACTIVITY_RESUMED) {
-                openTimes.put(pkg, event.getTimeStamp());
+                // ВАЖНО: не перезаписываем уже открытую сессию. При переходах между
+                // активностями/экранами ОДНОГО приложения RESUMED приходит повторно
+                // без промежуточного PAUSED. Если перезаписать openTimes более поздним
+                // таймштампом — начало сессии теряется и время ЗАНИЖАЕТСЯ. Поэтому
+                // храним САМЫЙ РАННИЙ resume и закрываем сессию только по PAUSE/STOP.
+                if (!openTimes.containsKey(pkg)) {
+                    openTimes.put(pkg, event.getTimeStamp());
+                }
             } else if (type == UsageEvents.Event.ACTIVITY_PAUSED ||
-                       type == UsageEvents.Event.ACTIVITY_STOPPED) {
+                    type == UsageEvents.Event.ACTIVITY_STOPPED) {
                 if (openTimes.containsKey(pkg)) {
                     long duration = event.getTimeStamp() - openTimes.get(pkg);
                     if (duration > 0 && isValidAppCached(context, pkg, currentInstalledApps, launcherPkg, validityCache)) {
@@ -203,7 +210,7 @@ public class UsageMath {
         return results;
     }
 
-    // === ИСПРАВЛЕНИЕ: УМНАЯ АГРЕГАЦИЯ БЕЗ ЗАВЫШЕНИЙ ===
+    // === ИСПРАВЛЕНИЕ: УМНАЯ АГРЕГАЦИЯ БЕЗ ЗАВЫШЕНИЙ И БЕЗ ЗАНИЖЕНИЙ ===
     public static Map<String, Long> getFilteredStats(Context context, int interval, long start, long end) {
         long durationDays = (end - start) / (1000 * 60 * 60 * 24);
 
@@ -222,13 +229,14 @@ public class UsageMath {
         String launcherPkg = getDefaultLauncherCached(context);
         Map<String, Boolean> validityCache = new HashMap<>();
 
-        // ФИКС ЗАВЫШЕНИЯ ЗА ГОД: INTERVAL_YEARLY отдаёт огромные перекрывающиеся
-        // корзины с раздутым totalTimeInForeground → суммирование даёт перебор.
-        // Берём месячные корзины (как месяц берёт недельные): перекрытий нет,
-        // погрешность на краю — такая же, как у корректно считающегося месяца.
+        // ФИКС ГОДА (занижение в ~2.5 раза): INTERVAL_YEARLY давал перекрывающиеся
+        // раздутые корзины → завышение, а INTERVAL_MONTHLY — слишком грубый, система
+        // теряет в нём foreground-время → сильное занижение. Берём НЕДЕЛЬНЫЕ корзины,
+        // ровно как считается корректно работающий «Месяц»: они не перекрываются и
+        // достаточно мелкие, чтобы не терять время. Год выравнивается по месяцу.
         int effectiveInterval = interval;
         if (interval == UsageStatsManager.INTERVAL_YEARLY) {
-            effectiveInterval = UsageStatsManager.INTERVAL_MONTHLY;
+            effectiveInterval = UsageStatsManager.INTERVAL_WEEKLY;
         }
 
         // Получаем сырые корзины вместо кривого агрегатора
