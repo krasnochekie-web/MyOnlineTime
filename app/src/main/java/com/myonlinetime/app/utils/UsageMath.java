@@ -34,20 +34,12 @@ public class UsageMath {
     public static long yesterdayStartMillis = 0;
 
     // === Короткоживущий кэш дорогих IPC-запросов к PackageManager ===
-    // getInstalledApps()/getDefaultLauncher() — это binder-вызовы. При старте они
-    // дёргаются несколько раз подряд (preloadCoreStats + профиль), поэтому кэшируем
-    // на короткое время. TTL маленький, чтобы свежеустановленные приложения
-    // подхватывались почти сразу.
     private static final long APP_LIST_TTL_MS = 15_000L;
     private static volatile Set<String> cachedInstalledApps = null;
     private static volatile String cachedLauncherPkg = null;
     private static volatile long appListCacheTime = 0L;
 
     // === Актуализация границ суток ===
-    // Границы дня кэшируются в статике. Если процесс живёт через полночь, они
-    // протухают, и окно вида [todayStartMillis, now] начинает охватывать двое
-    // суток — это и приводило к «дописыванию» данных в уже истёкший день.
-    // Метод пересчитывает границы и сбрасывает посуточные кэши при смене дня.
     public static synchronized void refreshDayBoundariesIfNeeded() {
         Calendar cal = Calendar.getInstance();
         cal.set(Calendar.HOUR_OF_DAY, 0);
@@ -61,7 +53,6 @@ public class UsageMath {
             Calendar yCal = (Calendar) cal.clone();
             yCal.add(Calendar.DAY_OF_YEAR, -1);
             yesterdayStartMillis = yCal.getTimeInMillis();
-            // День сменился — старые «сегодня/вчера» больше не валидны.
             todayExactCache = null;
             yesterdayExactCache = null;
         }
@@ -99,24 +90,19 @@ public class UsageMath {
         // === КЛЮЧЕВАЯ ЗАЩИТА ОТ ИЗМЕНЕНИЯ ИСТЁКШИХ ДНЕЙ ===
         // Защитный кэш на диске хранит данные ПОСУТОЧНО (ключ = дата начала окна).
         // Поэтому его допустимо читать/писать ТОЛЬКО для однодневного окна.
-        // Многодневные окна (неделя/год, либо устаревший todayStartMillis после
-        // полуночи) НЕ должны касаться посуточного кэша — иначе сумма за несколько
-        // суток перезапишет данные уже закрытого дня.
         if (!isSingleDayWindow(start, end)) {
             return systemData;
         }
 
         if (!systemData.isEmpty()) {
-            // События за этот день ещё доступны в системе (диапазон графика — 7 дней,
-            // а система хранит события ~7–14 дней). Значит система = источник истины.
-            // Перезаписываем слот дня значением по событиям (set, НЕ max), чтобы
-            // истёкший день «замораживался» на правде и не рос со временем.
+            // Данные за этот день ещё доступны в системе → система = источник истины.
+            // Перезаписываем слот дня (set, НЕ max), чтобы истёкший день
+            // «замораживался» на правде и не рос со временем.
             saveToSafeCache(context, start, systemData);
             return systemData;
         }
 
-        // События за этот день уже вытеснены системой (старый день вне окна
-        // хранения) — отдаём то, что успели сохранить раньше.
+        // Данные за этот день уже вытеснены системой — отдаём то, что сохранили раньше.
         Map<String, Long> restored = new HashMap<>();
         Map<String, Long> safeData = loadFromSafeCache(context, start);
         for (Map.Entry<String, Long> entry : safeData.entrySet()) {
@@ -128,9 +114,7 @@ public class UsageMath {
         return restored;
     }
 
-    // Окно считается «однодневным», если оно целиком укладывается в сутки,
-    // которым принадлежит start. Граница включительна (23:59:59.999 или ровно
-    // полночь следующего дня — как у окна «вчера» [yStart, todayStart]).
+    // Окно «однодневное», если целиком укладывается в сутки start (граница включительна).
     private static boolean isSingleDayWindow(long start, long end) {
         if (end <= start) return false;
         Calendar cal = Calendar.getInstance();
@@ -144,83 +128,48 @@ public class UsageMath {
         return end <= nextDayStart;
     }
 
+    // === ИСПРАВЛЕНО: точное время за окно берём из getTotalTimeInForeground ===
+    // Раньше время реконструировалось вручную из событий RESUMED/PAUSED/STOPPED, и
+    // при переходах между экранами ОДНОГО приложения событие STOPPED старого экрана
+    // приходило ПОСЛЕ RESUMED нового и закрывало его сессию (пакет один) — время
+    // нового экрана терялось, отсюда занижение ~30%. Теперь используем тот же
+    // системный механизм, на котором корректно работает «Месяц»:
+    // queryAndAggregateUsageStats() возвращает агрегированный foreground-таймер за
+    // окно [start, end] — он совпадает с Digital Wellbeing и со вкладкой «Месяц».
     private static Map<String, Long> fetchFromAndroidSystem(Context context, long start, long end, Set<String> currentInstalledApps, String launcherPkg, Map<String, Boolean> validityCache) {
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
         if (usm == null) return results;
 
-        UsageEvents events = usm.queryEvents(start, end);
-        Map<String, Long> openTimes = new HashMap<>();
-        // Пакеты, для которых мы уже видели хотя бы одно событие в окне.
-        // Нужно, чтобы корректно учесть сессию, начавшуюся ДО начала периода
-        // (первое событие пакета — PAUSE/STOP без предшествующего RESUME).
-        Set<String> seenPkg = new HashSet<>();
-        UsageEvents.Event event = new UsageEvents.Event();
+        Map<String, UsageStats> aggregated = usm.queryAndAggregateUsageStats(start, end);
+        if (aggregated == null) return results;
 
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event);
-            if (event.getPackageName() == null) continue;
+        for (Map.Entry<String, UsageStats> entry : aggregated.entrySet()) {
+            UsageStats stats = entry.getValue();
+            if (stats == null) continue;
 
-            String pkg = stripWhitespace(event.getPackageName());
-            int type = event.getEventType();
-
-            boolean firstForPkg = !seenPkg.contains(pkg);
-            seenPkg.add(pkg);
-
-            if (type == UsageEvents.Event.ACTIVITY_RESUMED) {
-                // ВАЖНО: не перезаписываем уже открытую сессию. При переходах между
-                // активностями/экранами ОДНОГО приложения RESUMED приходит повторно
-                // без промежуточного PAUSED. Если перезаписать openTimes более поздним
-                // таймштампом — начало сессии теряется и время ЗАНИЖАЕТСЯ. Поэтому
-                // храним САМЫЙ РАННИЙ resume и закрываем сессию только по PAUSE/STOP.
-                if (!openTimes.containsKey(pkg)) {
-                    openTimes.put(pkg, event.getTimeStamp());
-                }
-            } else if (type == UsageEvents.Event.ACTIVITY_PAUSED ||
-                    type == UsageEvents.Event.ACTIVITY_STOPPED) {
-                if (openTimes.containsKey(pkg)) {
-                    long duration = event.getTimeStamp() - openTimes.get(pkg);
-                    if (duration > 0 && isValidAppCached(context, pkg, currentInstalledApps, launcherPkg, validityCache)) {
-                        Long current = results.get(pkg);
-                        results.put(pkg, (current == null ? 0L : current) + duration);
-                    }
-                    openTimes.remove(pkg);
-                } else if (firstForPkg) {
-                    // Первое событие пакета в окне — PAUSE/STOP, значит приложение было
-                    // на переднем плане ещё до начала периода. Считаем от начала окна.
-                    // Это убирает занижение за день и за неделю на стыке полуночи/границы.
-                    long duration = event.getTimeStamp() - start;
-                    if (duration > 0 && isValidAppCached(context, pkg, currentInstalledApps, launcherPkg, validityCache)) {
-                        Long current = results.get(pkg);
-                        results.put(pkg, (current == null ? 0L : current) + duration);
-                    }
-                }
-            }
-        }
-
-        long endToUse = Math.min(end, System.currentTimeMillis());
-        for (Map.Entry<String, Long> entry : openTimes.entrySet()) {
             String pkg = entry.getKey();
-            long duration = endToUse - entry.getValue();
-            if (duration > 0 && isValidAppCached(context, pkg, currentInstalledApps, launcherPkg, validityCache)) {
+            if (pkg == null) continue;
+            pkg = stripWhitespace(pkg);
+
+            long time = stats.getTotalTimeInForeground();
+            if (time > 0 && isValidAppCached(context, pkg, currentInstalledApps, launcherPkg, validityCache)) {
                 Long current = results.get(pkg);
-                results.put(pkg, (current == null ? 0L : current) + duration);
+                results.put(pkg, (current == null ? 0L : current) + time);
             }
         }
         return results;
     }
 
-    // === ИСПРАВЛЕНИЕ: УМНАЯ АГРЕГАЦИЯ БЕЗ ЗАВЫШЕНИЙ И БЕЗ ЗАНИЖЕНИЙ ===
+    // === Месяц и Год: системные корзины, собираемые вручную ===
     public static Map<String, Long> getFilteredStats(Context context, int interval, long start, long end) {
         long durationDays = (end - start) / (1000 * 60 * 60 * 24);
 
-        // 1. Для периодов до 8 дней (Неделя) используем ИДЕАЛЬНУЮ точность по миллисекундам!
-        // Android хранит события (Events) около 10-14 дней, поэтому мы можем полностью избежать "корзин".
+        // Для периодов до 8 дней (Неделя/день) — точный foreground за окно.
         if (durationDays <= 8) {
             return getFilteredExactTimes(context, start, end);
         }
 
-        // 2. Для Месяца и Года используем системные корзины, но собираем их ВРУЧНУЮ, отсеивая "мусор"
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
         if (usm == null) return results;
@@ -229,24 +178,19 @@ public class UsageMath {
         String launcherPkg = getDefaultLauncherCached(context);
         Map<String, Boolean> validityCache = new HashMap<>();
 
-        // ФИКС ГОДА (занижение в ~2.5 раза): INTERVAL_YEARLY давал перекрывающиеся
-        // раздутые корзины → завышение, а INTERVAL_MONTHLY — слишком грубый, система
-        // теряет в нём foreground-время → сильное занижение. Берём НЕДЕЛЬНЫЕ корзины,
-        // ровно как считается корректно работающий «Месяц»: они не перекрываются и
-        // достаточно мелкие, чтобы не терять время. Год выравнивается по месяцу.
+        // ГОД: годовые корзины (INTERVAL_YEARLY) — только они дают полную историю.
+        // Плата — завышение из-за rollup-корзин, копящих время вне окна. Ниже для
+        // года включается ОБРЕЗКА доли корзины, начавшейся раньше start.
+        // Месяц приходит как INTERVAL_WEEKLY — его не трогаем (он точен).
+        boolean isYear = (interval == UsageStatsManager.INTERVAL_YEARLY);
         int effectiveInterval = interval;
-        if (interval == UsageStatsManager.INTERVAL_YEARLY) {
-            effectiveInterval = UsageStatsManager.INTERVAL_WEEKLY;
-        }
 
-        // Получаем сырые корзины вместо кривого агрегатора
         List<UsageStats> statsList = usm.queryUsageStats(effectiveInterval, start, end);
         if (statsList != null) {
             for (UsageStats stats : statsList) {
                 if (stats == null) continue;
 
-                // ГЛАВНЫЙ ФИЛЬТР: Отсекаем корзины, если приложение в них фактически использовалось ДО начала нашего периода.
-                // Это убивает львиную долю погрешности на стыке месяцев/лет.
+                // Отсекаем корзины, не использованные после начала окна.
                 if (stats.getLastTimeUsed() < start) {
                     continue;
                 }
@@ -256,6 +200,20 @@ public class UsageMath {
                 pkg = stripWhitespace(pkg);
 
                 long time = stats.getTotalTimeInForeground();
+
+                // === ОБРЕЗКА ЗАВЫШЕНИЯ ГОДА (только INTERVAL_YEARLY) ===
+                if (isYear) {
+                    long bucketFirst = stats.getFirstTimeStamp();
+                    long bucketLast = stats.getLastTimeStamp();
+                    if (bucketLast > bucketFirst && bucketFirst < start) {
+                        long inWindow = bucketLast - start;
+                        long bucketSpan = bucketLast - bucketFirst;
+                        if (inWindow > 0 && inWindow < bucketSpan) {
+                            time = (long) (time * ((double) inWindow / (double) bucketSpan));
+                        }
+                    }
+                }
+
                 if (time > 0 && isValidAppCached(context, pkg, currentInstalledApps, launcherPkg, validityCache)) {
                     long current = results.containsKey(pkg) ? results.get(pkg) : 0L;
                     results.put(pkg, current + time);
@@ -308,7 +266,7 @@ public class UsageMath {
         return total;
     }
 
-    // === Быстрое удаление пробелов без regex (вызывается в горячем цикле событий) ===
+    // === Быстрое удаление пробелов без regex ===
     private static String stripWhitespace(String s) {
         if (s == null) return null;
         boolean has = false;
@@ -345,12 +303,10 @@ public class UsageMath {
         }
         String fresh = getDefaultLauncher(context);
         cachedLauncherPkg = fresh;
-        // appListCacheTime обновляется в getInstalledAppsCached; здесь не сбрасываем,
-        // чтобы оба значения старели согласованно.
         return fresh;
     }
 
-    // === Мемоизация isValidApp: каждый уникальный пакет проверяется один раз ===
+    // === Мемоизация isValidApp ===
     private static boolean isValidAppCached(Context context, String pkg, Set<String> installedApps, String launcherPkg, Map<String, Boolean> cache) {
         if (pkg == null) return false;
         Boolean cached = cache.get(pkg);
