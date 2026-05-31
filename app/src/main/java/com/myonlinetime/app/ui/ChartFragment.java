@@ -188,6 +188,13 @@ public class ChartFragment extends Fragment {
                 cal.set(Calendar.SECOND, 59); cal.set(Calendar.MILLISECOND, 999);
                 long dayEnd = cal.getTimeInMillis();
 
+                // === ЕДИНСТВЕННОЕ ИЗМЕНЕНИЕ ===
+                // Конец окна не должен уходить в будущее (для сегодняшнего дня
+                // 23:59:59.999 ещё не наступило). Иначе любая логика, докручивающая
+                // время "до конца окна", раздувает сегодня до ~суток. Режем по now.
+                long nowMs = System.currentTimeMillis();
+                if (dayEnd > nowMs) dayEnd = nowMs;
+
                 int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK) - 1;
                 String dayShort = daysArray[dayOfWeek];
                 int dayNum = cal.get(Calendar.DAY_OF_MONTH);
