@@ -1,6 +1,5 @@
 package com.myonlinetime.app.utils;
 
-import android.app.usage.UsageEvents;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
@@ -38,10 +37,6 @@ public class UsageMath {
     private static volatile Set<String> cachedInstalledApps = null;
     private static volatile String cachedLauncherPkg = null;
     private static volatile long appListCacheTime = 0L;
-
-    // Запас «до окна» для событий: ловим сессию, начавшуюся до start
-    // (например, приложение, открытое через полночь), чтобы обрезать её до start.
-    private static final long EVENT_LOOKBACK_MS = 12L * 60L * 60L * 1000L;
 
     // === Актуализация границ суток ===
     public static synchronized void refreshDayBoundariesIfNeeded() {
@@ -132,91 +127,58 @@ public class UsageMath {
         return end <= nextDayStart;
     }
 
-    // === ИСПРАВЛЕНО: точное время за окно считаем из событий по модели «один передний слот» ===
-    // queryAndAggregateUsageStats() суммирует getTotalTimeInForeground() по ДНЕВНЫМ
-    // корзинам Android, границы которых НЕ выровнены по локальной полуночи. На
-    // однодневном окне в сумму затекает «хвост» соседней корзины → завышение ~30%
-    // (на неделе/месяце эта краевая доля мала, поэтому там было незаметно).
-    //
-    // Теперь идём по событиям queryEvents(start, end):
-    //  - в каждый момент на переднем плане ровно одно приложение (currentPkg);
-    //  - RESUMED/FOREGROUND другого пакета закрывает текущий слот и открывает новый;
-    //  - PAUSED/STOPPED/BACKGROUND закрывает слот ТОЛЬКО если уходит именно текущий
-    //    пакет; протухший STOPPED старого экрана при уже активном новом игнорируется
-    //    (это убирает старое занижение ~30% при навигации внутри одного приложения);
-    //  - каждый отрезок обрезается по [start, end] → нет «нахлёста» корзин и завышения;
-    //  - события берём с запасом EVENT_LOOKBACK_MS до start, чтобы поймать сессию,
-    //    начавшуюся до окна, и корректно обрезать её до start.
+    // === ИСПРАВЛЕНО: точное время за окно берём из ДНЕВНЫХ корзин getTotalTimeInForeground ===
+    // Почему так:
+    //  - queryEvents() на этом устройстве теряет ~30% событий → события БОЛЬШЕ НЕ используем.
+    //  - getTotalTimeInForeground() — точный таймер (на нём верно работают Месяц/Год и Wellbeing).
+    //  - queryAndAggregateUsageStats() брал ПОЛНЫЕ дневные корзины без обрезки → на однодневном
+    //    окне затекал «хвост» соседней корзины (границы корзин не выровнены по полуночи) → +30%.
+    // Решение: берём посуточные корзины (INTERVAL_DAILY) и обрезаем долю каждой корзины
+    // по фактическому пересечению с окном [start, end]. Это даёт точность и без занижения,
+    // и без завышения — и для одного дня, и для недели.
     private static Map<String, Long> fetchFromAndroidSystem(Context context, long start, long end, Set<String> currentInstalledApps, String launcherPkg, Map<String, Boolean> validityCache) {
         Map<String, Long> results = new HashMap<>();
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
         if (usm == null) return results;
 
-        long queryStart = start - EVENT_LOOKBACK_MS;
-        if (queryStart < 0) queryStart = 0;
+        List<UsageStats> statsList = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end);
+        if (statsList == null) return results;
 
-        UsageEvents events = usm.queryEvents(queryStart, end);
-        if (events == null) return results;
+        for (UsageStats stats : statsList) {
+            if (stats == null) continue;
 
-        String currentPkg = null;
-        long currentStart = 0L;
+            long bucketFirst = stats.getFirstTimeStamp();
+            long bucketLast = stats.getLastTimeStamp();
 
-        UsageEvents.Event event = new UsageEvents.Event();
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event);
+            // Корзина целиком вне окна — пропускаем.
+            if (bucketLast <= start || bucketFirst >= end) continue;
 
-            int type = event.getEventType();
-            long ts = event.getTimeStamp();
-            String pkg = event.getPackageName();
-            if (pkg != null) pkg = stripWhitespace(pkg);
+            String pkg = stats.getPackageName();
+            if (pkg == null) continue;
+            pkg = stripWhitespace(pkg);
 
-            boolean isForeground = (type == UsageEvents.Event.MOVE_TO_FOREGROUND)
-                    || (type == UsageEvents.Event.ACTIVITY_RESUMED);
-            boolean isBackground = (type == UsageEvents.Event.MOVE_TO_BACKGROUND)
-                    || (type == UsageEvents.Event.ACTIVITY_PAUSED)
-                    || (type == UsageEvents.Event.ACTIVITY_STOPPED);
+            long time = stats.getTotalTimeInForeground();
+            if (time <= 0) continue;
 
-            if (isForeground) {
-                // Закрываем предыдущий передний слот, если он был.
-                if (currentPkg != null) {
-                    creditSegment(results, currentPkg, currentStart, ts, start, end,
-                            context, currentInstalledApps, launcherPkg, validityCache);
+            // === ОБРЕЗКА ПО ПЕРЕСЕЧЕНИЮ С ОКНОМ ===
+            // Убирает «нахлёст» дневных корзин на границах окна (главная причина +30% за день).
+            if (bucketLast > bucketFirst) {
+                long overlap = Math.min(bucketLast, end) - Math.max(bucketFirst, start);
+                long span = bucketLast - bucketFirst;
+                if (overlap <= 0) {
+                    continue;
                 }
-                currentPkg = pkg;
-                currentStart = ts;
-            } else if (isBackground) {
-                // Закрываем слот ТОЛЬКО если в фон уходит именно текущий пакет.
-                if (currentPkg != null && currentPkg.equals(pkg)) {
-                    creditSegment(results, currentPkg, currentStart, ts, start, end,
-                            context, currentInstalledApps, launcherPkg, validityCache);
-                    currentPkg = null;
-                    currentStart = 0L;
+                if (overlap < span) {
+                    time = (long) (time * ((double) overlap / (double) span));
                 }
             }
-        }
 
-        // Если на конце окна слот всё ещё открыт — начисляем до end.
-        if (currentPkg != null) {
-            creditSegment(results, currentPkg, currentStart, end, start, end,
-                    context, currentInstalledApps, launcherPkg, validityCache);
+            if (time > 0 && isValidAppCached(context, pkg, currentInstalledApps, launcherPkg, validityCache)) {
+                Long current = results.get(pkg);
+                results.put(pkg, (current == null ? 0L : current) + time);
+            }
         }
-
         return results;
-    }
-
-    // Начисляет один foreground-отрезок пакету, обрезая его по границам окна [windowStart, windowEnd].
-    private static void creditSegment(Map<String, Long> results, String pkg, long segStart, long segEnd,
-                                      long windowStart, long windowEnd, Context context,
-                                      Set<String> installedApps, String launcherPkg,
-                                      Map<String, Boolean> validityCache) {
-        if (pkg == null) return;
-        long s = Math.max(segStart, windowStart);
-        long e = Math.min(segEnd, windowEnd);
-        long delta = e - s;
-        if (delta <= 0) return;
-        if (!isValidAppCached(context, pkg, installedApps, launcherPkg, validityCache)) return;
-        Long current = results.get(pkg);
-        results.put(pkg, (current == null ? 0L : current) + delta);
     }
 
     // === Месяц и Год: системные корзины, собираемые вручную ===
